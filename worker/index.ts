@@ -1,6 +1,7 @@
 import { DAILY_REWARD, STYLE_COST, COLOR_COST, STYLES, COLORS, upgradeCost } from '../shared/types';
 import type { Building, Style, Color } from '../shared/types';
 import { seedDemo } from './demo';
+import { isLandPlot, VIEW_RADIUS } from '../shared/world';
 
 interface Env {
   DB: D1Database; NEIGHBORHOODS: DurableObjectNamespace; ASSETS: Fetcher;
@@ -125,6 +126,7 @@ async function join(env: Env, profile: { id: number; login: string; name?: strin
     for (let dx = -radius; dx <= radius; dx++) for (let dz = -radius; dz <= radius; dz++) {
       if (Math.max(Math.abs(dx), Math.abs(dz)) !== radius) continue;
       const x = invitation.x + dx, z = invitation.z + dz;
+      if (!isLandPlot(x,z)) continue;
       if (occupied.has(`${x},${z}`)) continue;
       // A guard table's UNIQUE(token) is represented by the conditional claim below plus
       // a NOT NULL assertion in the insert. A competing invite redemption rolls back the batch.
@@ -187,7 +189,7 @@ export default {
         // A bounded snapshot of the viewed neighborhood. Client requests another on pan.
         const centerX = Math.max(-1e6, Math.min(1e6, Number(url.searchParams.get('x')) || 0));
         const centerZ = Math.max(-1e6, Math.min(1e6, Number(url.searchParams.get('z')) || 0));
-        const rows = await env.DB.prepare(`${QUERY} WHERE b.x BETWEEN ? AND ? AND b.z BETWEEN ? AND ? ORDER BY b.z,b.x LIMIT 250`).bind(centerX - 8, centerX + 8, centerZ - 8, centerZ + 8).all<Building>();
+        const rows = await env.DB.prepare(`${QUERY} WHERE b.x BETWEEN ? AND ? AND b.z BETWEEN ? AND ? ORDER BY ((b.x-?)*(b.x-?)+(b.z-?)*(b.z-?)) LIMIT 250`).bind(centerX - VIEW_RADIUS, centerX + VIEW_RADIUS, centerZ - VIEW_RADIUS, centerZ + VIEW_RADIUS, centerX, centerX, centerZ, centerZ).all<Building>();
         if (user && !rows.results.find(b => b.id === user.id)) rows.results.push(await building(env, user.id));
         const claimed = user ? await env.DB.prepare('SELECT 1 FROM daily_claims WHERE user_id=? AND day=?').bind(user.id, DAY()).first() : null;
         return json({ buildings: rows.results, me: user?.id ?? null, demo: env.DEV_MODE === 'true', githubConfigured: authReady(env), claimedToday: Boolean(claimed), dailyReward: DAILY_REWARD, inviteRequired: true });
@@ -211,6 +213,7 @@ export default {
         for (let radius = 1; radius < 12; radius++) for (let dx = -radius; dx <= radius; dx++) for (let dz = -radius; dz <= radius; dz++) {
           if (Math.max(Math.abs(dx), Math.abs(dz)) !== radius) continue;
           const x = invitation.x + dx, z = invitation.z + dz;
+          if (!isLandPlot(x,z)) continue;
           if (taken.has(`${x},${z}`)) continue;
           try {
             await env.DB.batch([

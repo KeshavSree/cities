@@ -26,6 +26,7 @@ npm run preview     # Serve the built app through the local Worker on port 8787
 ## Controls
 
 - Drag to orbit, right-drag to pan, scroll or use the buttons to zoom.
+- Focus the city canvas with Tab and use arrow keys to pan with the keyboard.
 - Click a tower or use the searchable resident list to inspect it.
 - Select your tower to upgrade, change architecture, or change its facade color.
 - Switch between daytime and evening from the navigation bar.
@@ -76,7 +77,15 @@ Durable Object per 8×8 neighborhood
 Browsers viewing that neighborhood
 ```
 
-The initial view fetches up to 250 towers in a bounded area. Panning loads another snapshot. The browser connects to the nine neighborhood rooms surrounding its view; rendering frames never call the API. Broadcasts are ephemeral, and reconnecting loads a fresh database snapshot. A commit followed by a failed notification is recovered by snapshot reload, rather than rolling back the persisted action. Production reliability can be extended with a durable outbox if guaranteed delivery is needed.
+The initial view fetches up to 250 nearest towers within a bounded 64-plot radius. Panning loads another snapshot. The browser connects to nearby neighborhood rooms and the rooms containing loaded towers; rendering frames never call the API. Broadcasts are ephemeral, and reconnecting loads a fresh database snapshot. A commit followed by a failed notification is recovered by snapshot reload, rather than rolling back the persisted action. Production reliability can be extended with a durable outbox if guaranteed delivery is needed. A dense city will need viewport-aware database pagination and multiplexed live subscriptions before going beyond this initial 250-tower snapshot.
+
+### Continuous terrain and coastline
+
+The visible world uses a finite mesh window projected from the camera's four viewing lines onto the ground plane, with extra terrain beyond the view. The window is rebuilt on chunk boundaries as you pan or zoom. Land, its faint plot grid, and water fill the view without a board edge; terrain generation is entirely local and does not create empty database plots.
+
+`shared/world.ts` defines a fixed curved coast using a sum of waves sampled at globally anchored intervals. Straight segments connect those samples into a low-poly shoreline that extends in both directions. Its shape and location stay stable while the terrain window moves. The same function keeps server-created plots and their bordering streets inland of the beach.
+
+Road segments are deduplicated boundaries of occupied plots, so empty land has a plot grid but no prebuilt streets. The coastal buffer is reserved for sand and shallow water. Existing building coordinates remain unchanged.
 
 Daily rewards use a composite unique key and atomic D1 batches. Spending uses conditional SQL updates. Plot coordinates and identity are unique, and invitation allocation runs as an atomic batch that rejects used invitations and retries coordinate collisions. Changes require same-origin requests and authenticated sessions. A resident can issue at most five invitations per UTC day.
 
@@ -109,7 +118,7 @@ Static assets bypass the Worker except for `/api/*`. Use SQLite-backed Durable O
 
 - `src/`: React interface, styles, procedural Three.js city.
 - `worker/`: API, GitHub OAuth/sync, local-only demo fixtures, Durable Object.
-- `shared/`: typed building descriptors and progression rules.
+- `shared/`: typed building descriptors, progression rules, and shared coastline math.
 - `migrations/`: D1 schema.
 - `scripts/setup.mjs`: local configuration and migration setup.
 - `PLAN.md`: implementation plan and scope.

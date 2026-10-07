@@ -3,10 +3,12 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { COLORS, type Building } from '../shared/types';
+import { coastZ, PLOT_SPACING, VIEW_RADIUS } from '../shared/world';
+import { WorldTerrain } from './WorldTerrain';
 
 export interface SceneHandle { focus: (b: Building) => void; reset: () => void; zoom: (amount: number) => void; }
 interface Props { buildings: Building[]; selected: string | null; night: boolean; center: {x:number;z:number}; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
-const SPACING = 7;
+const SPACING = PLOT_SPACING;
 const heightOf = (level: number) => 2.3 + Math.sqrt(level) * 1.65;
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -17,7 +19,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
   const [unavailable, setUnavailable] = useState(false);
   useImperativeHandle(ref, () => ({
     focus(b) { if (engine.current) engine.current.focus = new THREE.Vector3(b.x * SPACING, 0, b.z * SPACING); },
-    reset() { const e = engine.current; if (!e) return; e.focus = new THREE.Vector3(0,0,0); e.camera.position.set(38, 36, 46).add(e.controls.target); e.camera.zoom = .83; e.camera.updateProjectionMatrix(); },
+    reset() { const e = engine.current; if (!e) return; e.focus = new THREE.Vector3(0,0,0); e.camera.position.set(38, 36, 46).multiplyScalar(4).add(e.controls.target); e.camera.zoom = .83; e.camera.updateProjectionMatrix(); },
     zoom(amount) { const e = engine.current; if (!e) return; e.camera.zoom = THREE.MathUtils.clamp(e.camera.zoom * amount, .4, 3.8); e.camera.updateProjectionMatrix(); },
   }), []);
 
@@ -31,14 +33,19 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.setClearColor(0x000000, 0);
     el.appendChild(renderer.domElement);
     renderer.domElement.setAttribute('aria-label', 'Interactive 3D city. Drag to orbit, scroll to zoom, or select a tower. Use the resident list for keyboard navigation.');
+    renderer.domElement.tabIndex = 0;
     const scene = new THREE.Scene();
+    const terrain = new WorldTerrain(); scene.add(terrain.group);
     const camera = new THREE.OrthographicCamera(-32,32,24,-24,.1,5000);
     camera.zoom = .83;
-    camera.position.set(38,36,46);
+    // Orthographic scale is independent of distance. Stay far enough above the ground
+    // that wide zoom and low-angle orbits cannot clip the foreground at the near plane.
+    camera.position.set(38,36,46).multiplyScalar(4);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0,0,0); controls.enableDamping = !reducedMotion(); controls.dampingFactor = .09;
     controls.minZoom = .4; controls.maxZoom = 3.8; controls.maxPolarAngle = Math.PI / 2.55; controls.minPolarAngle = .25;
     controls.enablePan = true; controls.screenSpacePanning = false;
+    controls.listenToKeyEvents(renderer.domElement);
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     const ambient = new THREE.HemisphereLight('#f2f7ff', '#93aa80', 2.8); scene.add(ambient);
     const sun = new THREE.DirectionalLight('#fff3df', 3.1); sun.position.set(-20,40,25);
@@ -74,8 +81,10 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
       const x = Math.round(controls.target.x / SPACING / 4) * 4, z = Math.round(controls.target.z / SPACING / 4) * 4;
       if (`${x},${z}` !== lastPan) { lastPan = `${x},${z}`; props.current.onPan(x,z); }
     };
+    const keyUp = (e: KeyboardEvent) => { if(e.key.startsWith('Arrow'))panEnd(); };
     renderer.domElement.addEventListener('pointerdown',pointerDown); renderer.domElement.addEventListener('pointerup',pointerUp);
     renderer.domElement.addEventListener('pointercancel',pointerCancel);
+    renderer.domElement.addEventListener('keyup',keyUp);
     renderer.domElement.addEventListener('pointermove', move); controls.addEventListener('end', panEnd);
     let frame: number;
     function animate() {
@@ -88,14 +97,15 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
         if (delta.length() < .03) { e.focus = null; panEnd(); }
       }
       ambient.intensity = e?.night ? 1.1 : 2.8; sun.intensity = e?.night ? .55 : 3.1;
-      controls.update(); renderer.render(scene,camera);
+      controls.update(); terrain.update(camera,Boolean(e?.night)); renderer.render(scene,camera);
     }
     animate();
     return () => {
       cancelAnimationFrame(frame); observer.disconnect(); controls.dispose();
       renderer.domElement.removeEventListener('pointerdown',pointerDown); renderer.domElement.removeEventListener('pointerup',pointerUp);
       renderer.domElement.removeEventListener('pointercancel',pointerCancel);
-      renderer.domElement.removeEventListener('pointermove',move); disposeGroup(city); disposeGroup(selection); renderer.dispose();
+      renderer.domElement.removeEventListener('keyup',keyUp);
+      renderer.domElement.removeEventListener('pointermove',move); terrain.dispose(); disposeGroup(city); disposeGroup(selection); renderer.dispose();
       renderer.domElement.remove(); engine.current = null;
     };
   }, []);
@@ -103,7 +113,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
   useEffect(() => {
     const e = engine.current; if (!e) return;
     e.night = night; disposeGroup(e.city);
-    buildCity(e.city,buildings.filter(b=>Math.abs(b.x-center.x)<=8&&Math.abs(b.z-center.z)<=8),night,center);
+    buildCity(e.city,buildings.filter(b=>Math.abs(b.x-center.x)<=VIEW_RADIUS&&Math.abs(b.z-center.z)<=VIEW_RADIUS),night);
   }, [buildings,night,center.x,center.z]);
   useEffect(() => {
     const e = engine.current; if (!e) return; disposeGroup(e.selection);
@@ -122,32 +132,33 @@ function disposeGroup(group: THREE.Group) {
   group.traverse(o=>{ if (o instanceof THREE.Mesh) { geometries.add(o.geometry); for (const m of Array.isArray(o.material)?o.material:[o.material]) materials.add(m); } });
   geometries.forEach(g=>g.dispose()); materials.forEach(m=>m.dispose()); group.clear();
 }
-function buildCity(group: THREE.Group, buildings: Building[], night: boolean,center:{x:number;z:number}) {
+function buildCity(group: THREE.Group, buildings: Building[], night: boolean) {
   const materials = new Map<string,THREE.MeshStandardMaterial>();
   const mat = (color: string) => { if (!materials.has(color)) materials.set(color,new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 1 })); return materials.get(color)!; };
   const box = (parent: THREE.Group, x:number,y:number,z:number,w:number,h:number,d:number,color:string,owner?:string) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color)); mesh.position.set(x,y,z); mesh.castShadow = h>.3; mesh.receiveShadow = true;
     if (owner) mesh.userData.owner = owner; parent.add(mesh); return mesh;
   };
-  const xs=buildings.map(b=>b.x), zs=buildings.map(b=>b.z);
-  const minX = Math.min(center.x-3,...xs)-1, maxX = Math.max(center.x+3,...xs)+1, minZ = Math.min(center.z-3,...zs)-1, maxZ = Math.max(center.z+3,...zs)+1;
-  const w=(maxX-minX+1)*SPACING,d=(maxZ-minZ+1)*SPACING,cx=(maxX+minX)*SPACING/2,cz=(maxZ+minZ)*SPACING/2;
-  box(group,cx,-1,cz,w+2,1.8,d+2,'#94ad91'); box(group,cx,-.12,cz,w,.18,d,night?'#5d776b':'#c2d4b0');
-  box(group,cx,-1.5,cz,w+6,.4,d+6,night?'#598a9b':'#a8cdd6');
-  for (let x=minX;x<=maxX;x++) {
-    box(group,x*SPACING+SPACING/2,-.015,cz,1.15,.08,d,'#b9c2be');
-    box(group,x*SPACING+SPACING/2,.035,cz,.69,.025,d,'#d9ded6');
-    for (let z=minZ;z<=maxZ;z++) {
-      box(group,x*SPACING,.005,z*SPACING+SPACING/2,SPACING,.08,1.15,'#b9c2be');
-      box(group,x*SPACING,.055,z*SPACING+SPACING/2,SPACING,.025,.69,'#d9ded6');
-    }
+  const roads = new Map<string,{x:number;z:number;horizontal:boolean}>();
+  for(const b of buildings){
+    for(const z of [b.z,b.z+1])roads.set(`h:${b.x},${z}`,{x:b.x*SPACING,z:(z-.5)*SPACING,horizontal:true});
+    for(const x of [b.x,b.x+1])roads.set(`v:${x},${b.z}`,{x:(x-.5)*SPACING,z:b.z*SPACING,horizontal:false});
+  }
+  for(const road of roads.values()){
+    const length=SPACING+1.15;
+    box(group,road.x,.015,road.z,road.horizontal?length:1.15,.055,road.horizontal?1.15:length,'#e1e5db');
+    box(group,road.x,.051,road.z,road.horizontal?length:.7,.024,road.horizontal?.7:length,'#b5c2bd');
   }
   const taken=new Set(buildings.map(b=>`${b.x},${b.z}`));
-  for(let x=minX;x<=maxX;x++)for(let z=minZ;z<=maxZ;z++){
+  const gardens=new Set<string>();
+  for(const b of buildings)for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++)gardens.add(`${b.x+dx},${b.z+dz}`);
+  for(const garden of gardens){
+    const [x,z]=garden.split(',').map(Number);
     if(taken.has(`${x},${z}`))continue;
+    if(z*SPACING+2.5>coastZ(x*SPACING)-2.5)continue;
     const treeCount = Math.abs(x*13+z*7)%3+1;
     for(let i=0;i<treeCount;i++) tree(group,x*SPACING+(i-1)*1.55,z*SPACING+Math.sin(x+z+i)*1.7,.8+Math.abs(Math.sin(x*3+z+i))*.5,box,mat);
-    if((x+z)%3===0) { box(group,x*SPACING,.2,z*SPACING+2.5,1.3,.25,.35,'#b49775'); box(group,x*SPACING,.48,z*SPACING+2.62,1.3,.36,.13,'#b49775'); }
+    if((x+z)%3===0&&buildings.some(b=>Math.abs(b.x-x)+Math.abs(b.z-z)<=1)) { box(group,x*SPACING,.2,z*SPACING+2.5,1.3,.25,.35,'#b49775'); box(group,x*SPACING,.48,z*SPACING+2.62,1.3,.36,.13,'#b49775'); }
   }
   for(const b of buildings){
     const plot=new THREE.Group(); plot.position.set(b.x*SPACING,0,b.z*SPACING); group.add(plot);
@@ -179,10 +190,12 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,cen
     // A simple rooftop garden instead of a texture or subdivided material face.
     if(b.style==='terrace') tree(plot,.48,-.25,.38,box,mat,h+.36);
   }
-  // Small plaza: the neighborhood's shared patch of green.
+  // Keep the plaza only next to inhabited plots, and leave its lot available for expansion.
+  if(!taken.has('3,0')&&buildings.some(b=>Math.abs(b.x-3)+Math.abs(b.z)<=1)){
   box(group,3*SPACING,.1,0,5.7,.12,5.7,'#b1c6a0');
   const fountain = new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.5,.25,8),mat('#e1e1d6')); fountain.position.set(3*SPACING,.25,0);group.add(fountain);
   const water=new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.1,.03,8),mat('#87bcc7')); water.position.set(3*SPACING,.39,0);group.add(water);
+  }
   // Merge meshes by material and owner, preserving pickable towers while reducing draw calls.
   group.updateMatrixWorld(true);
   const batches=new Map<string,{material:THREE.Material;owner?:string;geometries:THREE.BufferGeometry[]}>();

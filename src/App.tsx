@@ -3,6 +3,7 @@ import { ArrowUp, ArrowUpRight, Check, ChevronDown, Compass, Copy, Gift, Hammer,
 import type { SceneHandle } from './CityScene';
 import { api } from './api';
 import { COLORS, STYLES, COLOR_COST, STYLE_COST, upgradeCost, type Bootstrap, type Building, type Color, type Style } from '../shared/types';
+import { VIEW_RADIUS } from '../shared/world';
 
 type Modal = 'invite' | 'help' | 'login' | null;
 const CityScene = lazy(()=>import('./CityScene').then(m=>({default:m.CityScene})));
@@ -62,17 +63,21 @@ export default function App() {
     setSnapshot(prev=>{
       if(!prev)return prev;
       const exists=prev.buildings.some(b=>b.id===building.id);
-      if(!exists&&building.id!==prev.me&&(Math.abs(building.x-latestCenter.current.x)>8||Math.abs(building.z-latestCenter.current.z)>8))return prev;
+      if(!exists&&building.id!==prev.me&&(Math.abs(building.x-latestCenter.current.x)>VIEW_RADIUS||Math.abs(building.z-latestCenter.current.z)>VIEW_RADIUS))return prev;
       return {...prev,buildings:exists?prev.buildings.map(b=>b.id===building.id?building:b):[...prev.buildings,building]};
     });
   }, []);
   const ready = Boolean(snapshot);
+  const roomNames=new Set<string>();
+  const roomX=Math.floor(center.x/8),roomZ=Math.floor(center.z/8);
+  for(let x=roomX-1;x<=roomX+1;x++)for(let z=roomZ-1;z<=roomZ+1;z++)roomNames.add(`${x},${z}`);
+  for(const b of snapshot?.buildings||[])if(Math.abs(b.x-center.x)<=VIEW_RADIUS&&Math.abs(b.z-center.z)<=VIEW_RADIUS)roomNames.add(`${Math.floor(b.x/8)},${Math.floor(b.z/8)}`);
+  const roomKey=[...roomNames].sort().join(';');
   useEffect(()=>{
     if (!ready) return;
     let disposed=false, open=0;
     const sockets:WebSocket[]=[]; const timers:ReturnType<typeof setTimeout>[]=[];
-    // One room per 8x8 neighborhood, bounded to the 3x3 rooms covering this snapshot.
-    const roomX=Math.floor(center.x/8),roomZ=Math.floor(center.z/8);
+    // Keep nearby empty rooms and the rooms of loaded residents connected as the view expands.
     const connect=(room:string,attempt=0)=>{
       if(disposed)return;
       const ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/live?room=${room}`); sockets.push(ws);
@@ -82,9 +87,9 @@ export default function App() {
       ws.onclose=()=>{if(disposed)return;if(opened)open--;setLive(open>0);timers.push(setTimeout(()=>connect(room,opened?0:attempt+1),Math.min(30000,1000*2**Math.min(attempt,5))));};
       ws.onerror=()=>ws.close();
     };
-    for(let x=roomX-1;x<=roomX+1;x++)for(let z=roomZ-1;z<=roomZ+1;z++)connect(`${x},${z}`);
+    for(const room of roomKey.split(';'))connect(room);
     return()=>{disposed=true;timers.forEach(clearTimeout);sockets.forEach(ws=>ws.close());setLive(false);};
-  },[ready,center.x,center.z,load,update]);
+  },[ready,roomKey,load,update]);
   useEffect(()=>{
     if(!ready)return;
     const now=new Date(),midnight=Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()+1);
@@ -93,6 +98,7 @@ export default function App() {
   },[ready,snapshot?.claimedToday,load]);
 
   const buildings=snapshot?.buildings || [];
+  const visibleCount=buildings.filter(b=>Math.abs(b.x-center.x)<=VIEW_RADIUS&&Math.abs(b.z-center.z)<=VIEW_RADIUS).length;
   const tower=buildings.find(b=>b.id===selected);
   const me=buildings.find(b=>b.id===snapshot?.me);
   const own=tower?.id===snapshot?.me;
@@ -130,7 +136,7 @@ export default function App() {
         <div className="live-label"><span className={`status-dot ${live?'connected':''}`}/>{live?'A neighborhood, alive.':'Connecting the neighborhood…'}</div>
         <h1>Your work.<br/>A little taller.</h1>
         <p>A city of people who build things.<br/>Make yourself at home.</p>
-        <div className="city-count"><Users size={15}/><strong>{buildings.length}</strong> neighbors in view<span className="tiny-divider"/><Leaf size={14}/> room to grow</div>
+        <div className="city-count"><Users size={15}/><strong>{visibleCount}</strong> neighbors nearby<span className="tiny-divider"/><Leaf size={14}/> room to grow</div>
       </div>
 
       {searchOpen && <section className="resident-search" aria-label="Find a neighbor">

@@ -41,3 +41,10 @@ City-first layout with quiet white controls, pale blue sky, green terrain, viole
 - Reviewed upgrades, architecture changes, daily claim, invitation creation and redemption, and a live architectural update across two browser tabs.
 - GitHub OAuth remains credential-gated and has not been exercised with a real provider account. Cloudflare production resources have not been provisioned.
 - Deployment and local setup instructions are in README.md.
+
+## Continuous world update
+- Replace the visible island/board edge with a finite render window projected from the camera and recycled during pan and zoom.
+- Extend a fixed curved coast using globally anchored line segments. The coastline does not shift when the render window changes.
+- Continue the subtle plot grid over empty land; generate streets only around occupied plots.
+- Share coastline math with server plot allocation so new residents cannot be placed on the beach or in the ocean.
+- Reviewed the widest zoom and panning into empty land. Increased camera distance to keep the near plane from clipping the foreground. Vegetation stays tied to inhabited areas rather than moving with the terrain window.
