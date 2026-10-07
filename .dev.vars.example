@@ -1,0 +1,7 @@
+DEV_MODE=true
+APP_ORIGIN=http://127.0.0.1:5173
+# Optional for real GitHub OAuth locally. Register the callback below:
+# http://127.0.0.1:5173/api/auth/github/callback
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+FOUNDER_GITHUB_ID=
