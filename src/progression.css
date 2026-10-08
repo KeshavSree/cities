@@ -18,3 +18,5 @@
 @media(max-width:760px){.topbar .brand>span:last-child{display:none}.topbar .invite-button{font-size:0;gap:0;padding:8px}.topbar .invite-button svg{width:17px;height:17px}}
 
 .dev-shapes{margin-top:10px;border-top:1px solid #ece8f3;padding-top:8px}.dev-shapes summary{font-size:10px;color:#8d80a7;cursor:pointer}.dev-shapes p{font-family:ui-monospace,SFMono-Regular,monospace;border-bottom:1px solid #f0eef4;padding-bottom:5px}
+
+.segment-label select { display:block; width:100%; margin-top:8px; padding:10px; color:inherit; background:var(--surface, #fff); border:1px solid #dce3e4; border-radius:6px; font:inherit; }

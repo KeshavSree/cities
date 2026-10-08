@@ -21,11 +21,13 @@ export const tierStartLevel=(index:number)=>index*LEVELS_PER_TIER+1;
 export const tierForLevel=(level:number)=>TIERS[tierIndex(level)];
 export const segmentCount=(level:number)=>tierIndex(level)+1;
 export type SegmentStyle='classic'|'glass'|'balcony';
-export interface SegmentDesign{color:Color;style:SegmentStyle;}
+export const BUILDING_THEMES={contemporary:{label:'Terraced Contemporary',description:'Offset volumes, planted terraces, and continuous facade lines.'}} as const;
+export type BuildingTheme=keyof typeof BUILDING_THEMES;
+export interface SegmentDesign{color:Color;style:SegmentStyle;theme:BuildingTheme;}
 export const SEGMENT_STYLES:Record<SegmentStyle,string>={classic:'Classic windows',glass:'Glass facade',balcony:'Balconies'};
 export const SEGMENT_COST=20;
 export const REWARDS={commit:5,invite:200,like:50,construction:12,project:200,dailyXp:30,dailyBricks:30};
 export function segmentDesigns(building:Building):SegmentDesign[]{
-  let saved:(SegmentDesign|null)[]=[];try{saved=JSON.parse(building.segments);}catch{/* Legacy defaults. */}
-  return Array.from({length:segmentCount(building.level)},(_,i)=>saved[i]||{color:building.color,style:building.style==='modern'||tierIndex(building.level)>=6?'glass':'classic'});
+  let saved:(SegmentDesign|null)[]=[];try{const parsed=JSON.parse(building.segments);if(Array.isArray(parsed))saved=parsed;}catch{/* Legacy defaults. */}
+  return Array.from({length:segmentCount(building.level)},(_,i)=>({color:saved[i]?.color??building.color,style:saved[i]?.style??(building.style==='modern'||tierIndex(building.level)>=6?'glass':'classic'),theme:saved[i]?.theme&&Object.hasOwn(BUILDING_THEMES,saved[i]!.theme)?saved[i]!.theme:'contemporary'}));
 }

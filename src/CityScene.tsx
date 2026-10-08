@@ -450,45 +450,90 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       }
     }
     const parts=form.sections.map(section=>({...section,polygon:localOutline(section.outline),cap:localOutline(section.cornice)}));
-    const win=night?'#f3d795':'#627e8a',futureAccent=['#90d9d8','#bcb0e9','#a4d0ad','#99cfe4'][Math.max(0,form.tier-6)];
+    const win=night?'#f3d795':'#627e8a',concrete='#e3e2d7',metal='#708a89',timber='#b39a78';
+    const edgeBeam=(a:GroundPoint,end:GroundPoint,y:number,width:number,height:number,color:string,inset=0)=>{
+      const dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz);
+      const mesh=box(architecture,(a.x+end.x)/2-dz/length*inset,y,(a.z+end.z)/2+dx/length*inset,length,height,width,color,b.id);
+      mesh.rotation.y=-Math.atan2(dz,dx);return mesh;
+    };
     for(const p of parts){
-      const design=form.segments[p.segment];
-      prism(architecture,p.polygon,p.y,p.h,COLORS[design.color].hex,b.id);
-      const floors=Math.max(1,Math.min(6,Math.floor(p.h/.75)));
-      for(let i=0;i<floors;i++){
-        const y=p.y+p.h*(i+.5)/floors,windowHeight=Math.min(.29,p.h/floors*.42);
-        for(let edge=0;edge<p.polygon.length;edge++){
-          const a=p.polygon[edge],end=p.polygon[(edge+1)%p.polygon.length],dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz),nx=dz/length,nz=-dx/length;
-          const columns=Math.max(1,Math.floor(length/.95)),ww=Math.min(design.style==='glass'?.55:.36,length/columns*.65);
-          for(let column=0;column<columns;column++){
-            const t=(column+.5)/columns,x=a.x+dx*t,z=a.z+dz*t;
+      const design=form.segments[p.segment],bodyColor=mixGroundColor(COLORS[design.color].hex,concrete,form.tier>=3?.35:.08);
+      const loggiaHeight=p.loggia?Math.min(.65,p.h*.24):0;
+      const center={x:p.polygon.reduce((sum,v)=>sum+v.x,0)/p.polygon.length,z:p.polygon.reduce((sum,v)=>sum+v.z,0)/p.polygon.length};
+      if(p.loggia){
+        const recessed=p.polygon.map(v=>({x:center.x+(v.x-center.x)*.80,z:center.z+(v.z-center.z)*.80}));
+        prism(architecture,recessed,p.y,loggiaHeight,'#617f80',b.id);
+        // Slender perimeter columns make the shared garden floor legible and carry the rooms above.
+        for(const v of p.polygon){
+          const x=center.x+(v.x-center.x)*.93,z=center.z+(v.z-center.z)*.93;
+          box(architecture,x,p.y+loggiaHeight/2,z,.10,loggiaHeight,.10,concrete,b.id);
+        }
+        prism(architecture,p.polygon,p.y+loggiaHeight,.09,concrete,b.id);
+      }
+      prism(architecture,p.polygon,p.y+loggiaHeight,p.h-loggiaHeight,bodyColor,b.id);
+      const usable=p.h-loggiaHeight,floors=Math.max(1,Math.floor(usable/.78)),floorHeight=usable/floors;
+      for(let edge=0;edge<p.polygon.length;edge++){
+        const a=p.polygon[edge],end=p.polygon[(edge+1)%p.polygon.length],dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz),nx=dz/length,nz=-dx/length;
+        if(length<.14)continue;
+        // Anchor the facade bays to a building-wide datum so adjacent tiers
+        // share mullion lines even when one end of the wall steps back.
+        const tx=dx/length,tz=dz/length,start=a.x*tx+a.z*tz,bay=.62;
+        const bays:number[]=[];
+        for(let u=Math.ceil((start+.19)/bay)*bay;u<start+length-.19;u+=bay)bays.push(u-start);
+        for(let i=0;i<floors;i++){
+          const y=p.y+loggiaHeight+floorHeight*(i+.5),windowHeight=Math.min(.62,floorHeight*.73);
+          for(const u of bays){
+            const x=a.x+tx*u,z=a.z+tz*u;
             if(p.segment===0&&i===0&&nz>.9&&Math.abs(x)<.55)continue;
-            const window=box(architecture,x+nx*.024,y,z+nz*.024,ww,windowHeight,.04,win,b.id);
-            window.rotation.y=-Math.atan2(dz,dx);
+            const ww=form.tier<3?.32:design.style==='glass'?.55:.46;
+            const window=box(architecture,x+nx*.024,y,z+nz*.024,ww,windowHeight,.04,win,b.id);window.rotation.y=-Math.atan2(dz,dx);
+            if(form.tier>=3){
+              const mullion=box(architecture,x+tx*ww/2+nx*.05,y,z+tz*ww/2+nz*.05,.035,windowHeight+.04,.055,metal,b.id);mullion.rotation.y=window.rotation.y;
+            }
           }
-          if(design.style==='balcony'&&length>.8){
-            const balcony=box(architecture,(a.x+end.x)/2+nx*.12,y-windowHeight/2-.055,(a.z+end.z)/2+nz*.12,length*.7,.06,.28,'#deded2',b.id);
-            balcony.rotation.y=-Math.atan2(dz,dx);
-            const rail=box(architecture,(a.x+end.x)/2+nx*.245,y-windowHeight/2+.09,(a.z+end.z)/2+nz*.245,length*.7,.22,.035,'#9bb2ae',b.id);
-            rail.rotation.y=balcony.rotation.y;
+          if(form.tier>=3){
+            // Recessed glazing, a continuous sill, and a quiet slab edge read as inhabited floors.
+            edgeBeam(a,end,p.y+loggiaHeight+floorHeight*i+.08,.08,.055,concrete,-.025);
+          }
+          if(design.style==='balcony'&&length>1.2){
+            const insetA={x:a.x+dx*.13,z:a.z+dz*.13},insetB={x:end.x-dx*.13,z:end.z-dz*.13};
+            edgeBeam(insetA,insetB,y-windowHeight/2-.05,.28,.065,concrete,-.14);
+            edgeBeam(insetA,insetB,y-windowHeight/2+.17,.035,.19,'#91aaa4',-.26);
           }
         }
+        // A narrow timber bay gives each volume a warm end and a shared material language.
+        if(form.tier>=3&&edge===0&&length>1.1)for(let strip=0;strip<3;strip++){
+          const u=.15+strip*.10,x=a.x+tx*u,z=a.z+tz*u;
+          const slat=box(architecture,x+nx*.052,p.y+loggiaHeight+usable/2,z+nz*.052,.045,usable-.12,.07,timber,b.id);slat.rotation.y=-Math.atan2(dz,dx);
+        }
       }
-      prism(architecture,p.cap,p.y+p.h+.006,.07,form.tier>=6?futureAccent:'#ece4d5',b.id);
-      if(b.style==='modern'||form.tier>=6)for(let i=0;i<p.polygon.length;i++){
-        const a=p.polygon[i],end=p.polygon[(i+1)%p.polygon.length],dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz);
-        const trim=box(architecture,a.x+dx*.15+dz/length*.028,p.y+p.h/2,a.z+dz*.15-dx/length*.028,.07,p.h,.06,form.tier>=6?futureAccent:'#e8e9df',b.id);
-        trim.rotation.y=-Math.atan2(dz,dx);
-      }
-      // Terrace furniture must fit the roof left outside the next supporting shape.
-      if(b.style==='terrace'||form.tier===8){
-        const above=parts[p.segment+1]?.polygon,center={x:p.polygon.reduce((sum,v)=>sum+v.x,0)/p.polygon.length,z:p.polygon.reduce((sum,v)=>sum+v.z,0)/p.polygon.length};
-        for(let i=0;i<p.polygon.length;i++){
-          const a=p.polygon[i],end=p.polygon[(i+1)%p.polygon.length],x=center.x+((a.x+end.x)/2-center.x)*.84,z=center.z+((a.z+end.z)/2-center.z)*.84;
-          if(above&&inRoadObstacle({x,z},[above],.25))continue;
-          if(Math.hypot(x-center.x,z-center.z)<.3)continue;
-          box(architecture,x,p.y+p.h+.13,z,.32,.18,.32,'#7f9d76',b.id);
-          if(form.tier===8)tree(architecture,x,z,.22,box,mat,p.y+p.h+.15);
+      // Only meaningful setbacks get a projecting roof slab. Flush tiers join visually.
+      if(p.terrace)prism(architecture,p.cap,p.y+p.h+.004,.065,concrete,b.id);
+      const above=parts[p.segment+1]?.polygon,roofY=p.y+p.h+.07;
+      const fitsRoof=(x:number,z:number,margin=.17)=>{
+        const inside=p.polygon.every((a,i)=>{const end=p.polygon[(i+1)%p.polygon.length];return ((end.x-a.x)*(z-a.z)-(end.z-a.z)*(x-a.x))/Math.hypot(end.x-a.x,end.z-a.z)>margin;});
+        return inside&&!(above&&inRoadObstacle({x,z},[above],margin+.08));
+      };
+      if(p.terrace&&form.tier>=3){
+        for(let edge=0;edge<p.polygon.length;edge++){
+          const a=p.polygon[edge],end=p.polygon[(edge+1)%p.polygon.length],dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz),nx=-dz/length,nz=dx/length;
+          const steps=Math.max(1,Math.floor(length/.6));
+          for(let i=0;i<steps;i++){
+            const t=(i+.5)/steps,x=a.x+dx*t+nx*.29,z=a.z+dz*t+nz*.29;
+            if(!fitsRoof(x,z,.19))continue;
+            const planter=box(architecture,x,roofY+.12,z,length/steps*.73,.22,.25,concrete,b.id);planter.rotation.y=-Math.atan2(dz,dx);
+            const foliage=box(architecture,x,roofY+.25,z,length/steps*.66,.16,.21,'#799971',b.id);foliage.rotation.y=planter.rotation.y;
+            const railA={x:a.x+dx*i/steps+nx*.065,z:a.z+dz*i/steps+nz*.065},railB={x:a.x+dx*(i+1)/steps+nx*.065,z:a.z+dz*(i+1)/steps+nz*.065};
+            edgeBeam(railA,railB,roofY+.37,.03,.035,metal);
+            box(architecture,railA.x,roofY+.20,railA.z,.035,.35,.035,metal,b.id);
+          }
+        }
+        // A tree is placed only where an entire planter fits on a genuine terrace.
+        for(const v of p.polygon){
+          const x=center.x+(v.x-center.x)*.64,z=center.z+(v.z-center.z)*.64;
+          if(!fitsRoof(x,z,.38))continue;
+          box(architecture,x,roofY+.12,z,.48,.23,.48,timber,b.id);
+          tree(architecture,x,z,.30,box,mat,roofY+.23);break;
         }
       }
     }
@@ -498,17 +543,19 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     if(form.tier===0){
       const roof=box(architecture,topCenter.x,roofY+.12,topCenter.z,roofW+.16,.13,roofD+.16,'#9b8970',b.id);roof.rotation.x=.09;
       for(const sign of [-1,1])box(architecture,sign*footprint.w*.28,baseY+h/2,footprint.d/2+.03,.075,h,.055,'#b6a186',b.id);
-    }else if(form.tier<=2||b.style==='spire'&&form.tier<6){
-      const roofHeight=form.tier<=2?.7:1.5;
-      const roof=new THREE.Mesh(new THREE.ConeGeometry(1,roofHeight,4),mat(form.tier<=2?'#b98e77':color));
+    }else if(form.tier<=2){
+      const roof=new THREE.Mesh(new THREE.ConeGeometry(1,.7,4),mat('#b98e77'));
       roof.geometry.rotateY(Math.PI/4);roof.scale.set((roofW+.1)/Math.SQRT2,1,(roofD+.1)/Math.SQRT2);
-      roof.position.set(topCenter.x,roofY+roofHeight/2+.075,topCenter.z);roof.userData.owner=b.id;roof.castShadow=true;architecture.add(roof);
-    }else if(form.tier>=6){
-      const crown=top.polygon.map(p=>({x:topCenter.x+(p.x-topCenter.x)*.75,z:topCenter.z+(p.z-topCenter.z)*.75}));
-      prism(architecture,crown,roofY+.08,form.tier===9?.9:.35,futureAccent,b.id);
-      const mast=box(architecture,topCenter.x,roofY+(form.tier===9?1.65:.95),topCenter.z,.075,form.tier===9?1.6:1.3,.075,'#718a9a',b.id);
-      if(form.tier===6||form.tier===9)box(architecture,mast.position.x,mast.position.y+.75,mast.position.z,.16,.13,.16,futureAccent,b.id);
-    }else if(b.style==='modern')box(architecture,topCenter.x,roofY+.25,topCenter.z,.45,.35,.45,'#8a969b',b.id);
+      roof.position.set(topCenter.x,roofY+.425,topCenter.z);roof.userData.owner=b.id;roof.castShadow=true;architecture.add(roof);
+    }else{
+      // A small inhabited pavilion finishes the composition, leaving a roof garden around it.
+      const pavilion=top.polygon.map(p=>({x:topCenter.x+(p.x-topCenter.x)*.48,z:topCenter.z+(p.z-topCenter.z)*.48}));
+      const pavilionHeight=b.style==='spire'?.95:.65;
+      prism(architecture,pavilion,roofY+.08,pavilionHeight,'#627e8a',b.id);
+      const canopy=pavilion.map(p=>({x:topCenter.x+(p.x-topCenter.x)*1.14,z:topCenter.z+(p.z-topCenter.z)*1.14}));
+      prism(architecture,canopy,roofY+.09+pavilionHeight,.09,concrete,b.id);
+      for(const v of pavilion)box(architecture,v.x,roofY+.08+pavilionHeight/2,v.z,.055,pavilionHeight,.055,timber,b.id);
+    }
     const front=podium?Math.max(...podium.map(p=>p.z)):footprint.d/2;
     box(architecture,0,baseY+.4,front+.024,.6,.8,.04,'#647b80',b.id);
     const fixture=night?'#f0daab':'#d8d8c7';

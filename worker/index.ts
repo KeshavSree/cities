@@ -4,7 +4,7 @@ import { seedDemo, ensureDemoConnections } from './demo';
 import { VIEW_RADIUS } from '../shared/world';
 import { availablePlotPlans } from '../shared/plots';
 import { reward, projects, processConstruction } from './economy';
-import { REWARDS, MAX_LEVEL, TIERS, SEGMENT_COST, SEGMENT_STYLES, tierStartLevel, xpAtLevel } from '../shared/progression';
+import { REWARDS, MAX_LEVEL, TIERS, SEGMENT_COST, SEGMENT_STYLES, BUILDING_THEMES, tierStartLevel, xpAtLevel } from '../shared/progression';
 import { PROJECT_RADIUS } from '../shared/projects';
 import { plotPosition } from '../shared/world';
 
@@ -324,10 +324,14 @@ export default {
       if(path==='/api/segments'&&req.method==='POST'){
         const data=await body(req),index=Number(data.segment);
         if(!Number.isInteger(index)||index<0||index>=TIERS.length||typeof data.color!=='string'||!Object.hasOwn(COLORS,data.color)||typeof data.style!=='string'||!Object.hasOwn(SEGMENT_STYLES,data.style))throw new ApiError('Choose a valid segment design.');
-        const design=JSON.stringify({color:data.color,style:data.style});
+        const theme=data.theme??'contemporary';
+        if(typeof theme!=='string'||!Object.hasOwn(BUILDING_THEMES,theme))throw new ApiError('Choose an available architectural theme.');
+        const design=JSON.stringify({color:data.color,style:data.style,theme});
         const result=await env.DB.prepare(`UPDATE buildings SET segments=json_set(segments,?,json(?)),bricks=bricks-?,updated_at=datetime('now')
-          WHERE user_id=? AND bricks>=? AND level>=? AND COALESCE(json_extract(segments,?), '')<>? RETURNING user_id`)
-          .bind(`$[${index}]`,design,SEGMENT_COST,user.id,SEGMENT_COST,tierStartLevel(index),`$[${index}]`,design).first();
+          WHERE user_id=? AND bricks>=? AND level>=? AND (COALESCE(json_extract(segments,?),color)<>?
+            OR COALESCE(json_extract(segments,?),CASE WHEN style='modern' OR level>=19 THEN 'glass' ELSE 'classic' END)<>?
+            OR COALESCE(json_extract(segments,?),'contemporary')<>?) RETURNING user_id`)
+          .bind(`$[${index}]`,design,SEGMENT_COST,user.id,SEGMENT_COST,tierStartLevel(index),`$[${index}].color`,data.color,`$[${index}].style`,data.style,`$[${index}].theme`,theme).first();
         if(!result)throw new ApiError('That segment is locked, you need more bricks, or that design is already selected.',409);
         return json({building:await changed(env,user.id,ctx)});
       }
