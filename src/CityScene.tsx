@@ -14,6 +14,7 @@ import type { CityLighting } from './lighting';
 import { neighborhoodDensity, neighborhoodScores, settlementType, streetNetwork, streetDensity, roadWidth, roadShoulder, roadColor, shoulderColor, lotPolygon, projectPolygon, mixGroundColor, SETTLEMENT_THRESHOLDS, type GroundPoint } from './neighborhood';
 import { CameraKeyboard } from './CameraKeyboard';
 import { buildingForm } from './buildingForm';
+import { clearRoadSurface, inRoadObstacle, roadObstacles } from './roadClearance';
 import { plotPlan } from '../shared/plots';
 import type { PlotPreview } from './plotPreview';
 import { tierForLevel, tierIndex } from '../shared/progression';
@@ -269,6 +270,7 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
   };
   const taken=new Set(buildings.map(b=>`${b.x},${b.z}`));
   const {roads,junctions}=streetNetwork(buildings,densityAt);
+  const obstacles=roadObstacles(buildings,densityAt);
   const surface=(parent:THREE.Group,points:GroundPoint[],height:number,color:string,concave=false)=>{
     if(points.length<3)return;
     const vertices:number[]=[];
@@ -284,8 +286,9 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
   };
   const strip=(a:GroundPoint,b:GroundPoint,startWidth:number,endWidth:number,height:number,color:string)=>{
     const dx=b.x-a.x,dz=b.z-a.z,length=Math.hypot(dx,dz),nx=-dz/length,nz=dx/length;
-    surface(group,[{x:a.x+nx*startWidth/2,z:a.z+nz*startWidth/2},{x:a.x-nx*startWidth/2,z:a.z-nz*startWidth/2},
-      {x:b.x-nx*endWidth/2,z:b.z-nz*endWidth/2},{x:b.x+nx*endWidth/2,z:b.z+nz*endWidth/2}],height,color);
+    const polygon=[{x:a.x+nx*startWidth/2,z:a.z+nz*startWidth/2},{x:a.x-nx*startWidth/2,z:a.z-nz*startWidth/2},
+      {x:b.x-nx*endWidth/2,z:b.z-nz*endWidth/2},{x:b.x+nx*endWidth/2,z:b.z+nz*endWidth/2}];
+    for(const piece of clearRoadSurface(polygon,obstacles))surface(group,piece,height,color);
   };
   for(const road of roads.values()){
     const [a,b]=road.points,dx=b.x-a.x,dz=b.z-a.z,length=Math.hypot(dx,dz);
@@ -301,18 +304,23 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       const angle=-Math.atan2(dz,dx),nx=-dz/length,nz=dx/length;
       const stripe=box(group,middle.x,.085,middle.z,.7,.008,.035,'#e4dfc5');stripe.rotation.y=angle;
       const sx=middle.x+nx*(width/2+.15),sz=middle.z+nz*(width/2+.15);
-      box(group,sx,.8,sz,.07,1.5,.07,'#667e81');
-      box(group,sx,1.58,sz,.23,.17,.23,night?'#f0daab':'#d8d8c7');
-      if(worldHash(road.x,road.z+(road.horizontal?0:13))>.72){
+      if(!inRoadObstacle({x:sx,z:sz},obstacles,.16)){
+        box(group,sx,.8,sz,.07,1.5,.07,'#667e81');
+        box(group,sx,1.58,sz,.23,.17,.23,night?'#f0daab':'#d8d8c7');
+      }
+      if(worldHash(road.x,road.z+(road.horizontal?0:13))>.72&&!inRoadObstacle(middle,obstacles,.5)){
         const car=box(group,middle.x,.24,middle.z,.9,.27,.43,'#8b9cac');car.rotation.y=angle;
         const top=box(group,middle.x,.42,middle.z,.43,.17,.35,'#c0ced1');top.rotation.y=angle;
       }
     }
   }
   for(const {position,density} of junctions.values()){
-    const cap=(radius:number,height:number,color:string)=>surface(group,Array.from({length:12},(_,i)=>({
+    const cap=(radius:number,height:number,color:string)=>{
+      const polygon=Array.from({length:12},(_,i)=>({
       x:position.x+Math.cos(i/12*Math.PI*2)*radius,z:position.z+Math.sin(i/12*Math.PI*2)*radius,
-    })),height,color);
+      }));
+      for(const piece of clearRoadSurface(polygon,obstacles))surface(group,piece,height,color);
+    };
     cap((roadWidth(density)+roadShoulder(density))/2+.035,.0555,shoulderColor(density));
     cap(roadWidth(density)/2+.025,.079,roadColor(density));
   }
@@ -350,8 +358,22 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     // Rotate the rectangular building independently of its irregular ground lot.
     const soilStone=mixGroundColor(form.definition.stone,paving,urban*.2);
     const foundationColor=mixGroundColor(soilStone,color,b.style==='modern'?.12:.07);
-    const padding=.15+urban*.22+Math.min(.16,Math.sqrt(b.level)*.035);
+    const padding=form.foundationPadding;
     box(architecture,0,.085+foundationHeight/2,0,footprint.w+padding*2,foundationHeight,footprint.d+padding*2,foundationColor,b.id);
+    // Only furnish the ground that remains between the growing podium and the lot edge.
+    const groundSpace=(x:number,z:number,w:number,d:number,aligned=false)=>{
+      const c=Math.cos(plan.rotation),s=Math.sin(plan.rotation);
+      const points=[[-w/2,-d/2],[w/2,-d/2],[w/2,d/2],[-w/2,d/2]].map(([dx,dz])=>{
+        const px=x+dx,pz=z+dz;return aligned?{x:px*c+pz*s,z:-px*s+pz*c}:{x:px,z:pz};
+      });
+      const local=points.map(p=>({x:p.x*c-p.z*s,z:p.x*s+p.z*c}));
+      if(Math.max(...local.map(p=>p.x))>-footprint.w/2-padding&&Math.min(...local.map(p=>p.x))<footprint.w/2+padding&&
+        Math.max(...local.map(p=>p.z))>-footprint.d/2-padding&&Math.min(...local.map(p=>p.z))<footprint.d/2+padding)return false;
+      return points.every(p=>lot.every((a,i)=>{const b=lot[(i+1)%lot.length];return (b.x-a.x)*(p.z-a.z)-(b.z-a.z)*(p.x-a.x)>=0;}));
+    };
+    const groundBox=(parent:THREE.Group,x:number,y:number,z:number,w:number,height:number,d:number,color:string)=>{
+      if(groundSpace(x,z,w,d,parent===architecture))box(parent,x,y,z,w,height,d,color);
+    };
     if(kind==='rural'){
       const facing={x:Math.sin(plan.rotation),z:Math.cos(plan.rotation)};
       const frontEdge=lot.map((a,i)=>{const b=lot[(i+1)%lot.length];return ((a.x+b.x)*facing.x+(a.z+b.z)*facing.z)/2;});
@@ -369,34 +391,34 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
           fence(a,at(.5-gap));fence(at(.5+gap),b);
         }else fence(a,b);
       }
-      box(plot,1.9,.15,-1.7,.6,.12,1.2,'#8ba374');
+      groundBox(plot,1.9,.15,-1.7,.6,.12,1.2,'#8ba374');
     }
     if(b.style==='terrace'){
-      box(architecture,-footprint.w/2-.22,.18,1,.28,.18,.85,mixGroundColor('#a7b98c','#c6c7b6',urban));
-      box(architecture,-footprint.w/2-.22,.28,1,.22,.09,.74,'#87a875');
+      groundBox(architecture,-footprint.w/2-padding-.2,.18,1,.28,.18,.85,mixGroundColor('#a7b98c','#c6c7b6',urban));
+      groundBox(architecture,-footprint.w/2-padding-.2,.28,1,.22,.09,.74,'#87a875');
     }else if(b.style==='modern'&&kind!=='rural'){
-      box(architecture,footprint.w/2+.27,.22,-.9,.32,.25,.95,foundationColor);
-      box(architecture,footprint.w/2+.27,.38,-.9,.25,.08,.82,'#87a875');
+      groundBox(architecture,footprint.w/2+padding+.22,.22,-.9,.32,.25,.95,foundationColor);
+      groundBox(architecture,footprint.w/2+padding+.22,.38,-.9,.25,.08,.82,'#87a875');
     }
     if(form.tier===1){
-      box(architecture,0,.11,-footprint.d/2-.45,2.2,.045,.65,'#c8a991');
-      for(const side of [-1,1])box(plot,side*2.25,.25,-.4,.35,.3,1.8,'#8fab80');
+      groundBox(architecture,0,.11,-footprint.d/2-padding-.4,2.2,.045,.65,'#c8a991');
+      for(const side of [-1,1])groundBox(plot,side*2.25,.25,-.4,.35,.3,1.8,'#8fab80');
     }else if(form.tier===2){
-      box(plot,-2.15,.24,.9,.35,.26,1.3,'#b99c7e');box(plot,-2.15,.48,.9,.1,.28,1.3,'#b99c7e');
-      box(plot,2.15,.21,-1,.45,.23,1,'#c3c6b8');box(plot,2.15,.36,-1,.36,.1,.88,'#8fab80');
+      groundBox(plot,-2.15,.24,.9,.35,.26,1.3,'#b99c7e');groundBox(plot,-2.15,.48,.9,.1,.28,1.3,'#b99c7e');
+      groundBox(plot,2.15,.21,-1,.45,.23,1,'#c3c6b8');groundBox(plot,2.15,.36,-1,.36,.1,.88,'#8fab80');
     }else if(form.tier===3){
-      for(const x of [-2.25,2.25])box(plot,x,.096,0,.06,.015,4.4,'#9dadad');
-      box(plot,-2.25,1,-1.8,.07,1.8,.07,'#738b8d');box(plot,-2.25,1.94,-1.8,.25,.12,.25,night?'#f0daab':'#d8d8c7');
+      for(const x of [-2.25,2.25])groundBox(plot,x,.096,0,.06,.015,4.4,'#9dadad');
+      groundBox(plot,-2.25,1,-1.8,.07,1.8,.07,'#738b8d');groundBox(plot,-2.25,1.94,-1.8,.25,.12,.25,night?'#f0daab':'#d8d8c7');
     }else if(form.tier===4){
       for(const x of [-2.25,2.25]){
-        box(plot,x,.18,0,.4,.2,3.7,'#afbfc1');box(plot,x,.32,0,.3,.12,3.5,'#8fab80');
-        box(plot,x,.45,-1.65,.16,.16,.16,night?'#f0daab':'#d8d8c7');
+        groundBox(plot,x,.18,0,.4,.2,3.7,'#afbfc1');groundBox(plot,x,.32,0,.3,.12,3.5,'#8fab80');
+        groundBox(plot,x,.45,-1.65,.16,.16,.16,night?'#f0daab':'#d8d8c7');
       }
     }
     const parts: {w:number;d:number;h:number;y:number}[] = form.tier<=1?[{...footprint,h,y:baseY}]
-      :form.tier===2?[{...footprint,h:h*.72,y:baseY},{w:3,d:2.6,h:h*.28,y:baseY+h*.72}]
-      :form.tier===3?[{...footprint,h:h*.22,y:baseY},{w:2.6,d:2.5,h:h*.78,y:baseY+h*.22}]
-      :[{...footprint,h:h*.15,y:baseY},{w:2.6,d:2.6,h:h*.7,y:baseY+h*.15},{w:2.15,d:2.15,h:h*.15,y:baseY+h*.85}];
+      :form.tier===2?[{...footprint,h:h*.72,y:baseY},{w:footprint.w*.87,d:footprint.d*.85,h:h*.28,y:baseY+h*.72}]
+      :form.tier===3?[{...footprint,h:h*.22,y:baseY},{w:footprint.w*.81,d:footprint.d*.83,h:h*.78,y:baseY+h*.22}]
+      :[{...footprint,h:h*.15,y:baseY},{w:footprint.w*.76,d:footprint.d*.76,h:h*.7,y:baseY+h*.15},{w:footprint.w*.62,d:footprint.d*.62,h:h*.15,y:baseY+h*.85}];
     const win=night?'#f3d795':'#627e8a';
     for(const p of parts){
       for(let segment=0;segment<form.segments.length;segment++){
@@ -432,7 +454,8 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     if(form.tier<=1||b.style==='spire'){
       const rural=form.tier<=1,roofHeight=rural?.8:1.5;
       const roof=new THREE.Mesh(new THREE.ConeGeometry(1,roofHeight,4),mat(rural?'#b98e77':color));
-      roof.geometry.rotateY(Math.PI/4);roof.scale.set((footprint.w+.15)/Math.SQRT2,1,(footprint.d+.15)/Math.SQRT2);
+      const top=parts[parts.length-1];
+      roof.geometry.rotateY(Math.PI/4);roof.scale.set((top.w+.15)/Math.SQRT2,1,(top.d+.15)/Math.SQRT2);
       roof.position.y=h+baseY+roofHeight/2+.01;roof.userData.owner=b.id; roof.castShadow=true;architecture.add(roof);
       if(rural)box(architecture,-.85,h+baseY+.85,-.5,.32,.5,.32,'#c5b5a0',b.id);
       else box(architecture,0,h+baseY+1.76,0,.07,1,.07,'#6d8188',b.id);
@@ -454,14 +477,16 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     const [a,boundary]=frontageRoad.points,dx=boundary.x-a.x,dz=boundary.z-a.z;
     const roadT=Math.max(0,Math.min(1,((position.x-a.x)*dx+(position.z-a.z)*dz)/(dx*dx+dz*dz)));
     const frontageDensity=streetDensity(frontageRoad,roadT);
-    const pathEnd=Math.max(front+.45,plan.frontage.distance-(roadWidth(frontageDensity)+roadShoulder(frontageDensity))/2);
-    if(kind==='rural'){
+    const pathEnd=plan.frontage.distance-(roadWidth(frontageDensity)+roadShoulder(frontageDensity))/2;
+    if(kind==='rural'&&pathEnd>front+.25){
       const count=Math.max(2,Math.ceil((pathEnd-front)/.45));
       for(let i=0;i<count;i++)box(architecture,0,.115,front+.18+(pathEnd-front-.3)*i/(count-1),.66,.05,.25,pathColor);
     }
-    else box(architecture,0,.12,(front+pathEnd)/2,b.style==='modern'?1.05:.78,.07,pathEnd-front,pathColor);
-    if(b.style==='spire')box(architecture,0,baseY-.02,front+.24,.83,.06,.42,foundationColor);
-    if(form.tier<3){tree(plot,-2.25,-1.8,.75,box,mat);tree(plot,2.15,1.6,.55,box,mat);}else tree(plot,2.1,1.8,.45,box,mat);
+    else if(pathEnd>front)box(architecture,0,.12,(front+pathEnd)/2,b.style==='modern'?1.05:.78,.07,pathEnd-front,pathColor);
+    if(b.style==='spire'&&form.tier<4)box(architecture,0,baseY-.02,front+.24,.83,.06,.42,foundationColor);
+    for(const [x,z,size] of form.tier<3?[[-2.25,-1.8,.75],[2.15,1.6,.55]]:[[2.1,1.8,.45]]){
+      if(groundSpace(x,z,size*1.5,size*1.5))tree(plot,x,z,size,box,mat);
+    }
     // A simple rooftop garden instead of a texture or subdivided material face.
     if(b.style==='terrace'&&kind!=='rural') tree(architecture,.48,-.25,.38,box,mat,h+baseY+.12);
   }

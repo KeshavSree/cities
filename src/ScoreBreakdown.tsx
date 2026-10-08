@@ -2,11 +2,14 @@ import { SETTLEMENT_WEIGHTS, settlementType, type SettlementScore } from './neig
 import type { Building } from '../shared/types';
 import { AREA_CAPACITY, plotPlan } from '../shared/plots';
 import { TIERS, REWARDS, tierForLevel, tierIndex, segmentCount, xpAtLevel } from '../shared/progression';
+import { buildingForm } from './buildingForm';
 export function ScoreBreakdown({score,building,editable,busy,onDev}:{score:SettlementScore;building:Building;editable:boolean;busy:boolean;onDev:(data:{level?:number;source?:string})=>void}){
   const plan=plotPlan(building.x,building.z),facing=['south','east','north','west'][(Math.round(plan.rotation/(Math.PI/2))+4)%4],tier=tierForLevel(building.level);
+  const form=buildingForm(building,score.total);
   return <section className="score-breakdown" aria-label="Development diagnostics">
     <div className="score-heading"><h3>Development diagnostics</h3><strong>T{tierIndex(building.level)+1}</strong></div>
     <p>{tier.name} · Level {building.level}/20 · {building.xp} XP{building.bricks!==null&&` · ${building.bricks} bricks`}<br/>{tier.ground} · {segmentCount(building.level)} segment{segmentCount(building.level)===1?'':'s'}</p>
+    <p>Footprint {form.footprint.w.toFixed(2)} × {form.footprint.d.toFixed(2)}<br/>{form.tier===4?'Tier 5 podium narrows the adjacent road':'Front wall to road center: '+(plan.frontage.distance-form.footprint.d/2).toFixed(2)}</p>
     <div className="score-contribution"><span>Road occupancy</span><span>{score.density.toFixed(3)} × {Math.round(SETTLEMENT_WEIGHTS.density*100)}%</span><strong>+{score.densityContribution.toFixed(3)}</strong></div>
     <div className="score-contribution"><span>Nearby levels</span><span>{score.levels.toFixed(3)} × {Math.round(SETTLEMENT_WEIGHTS.levels*100)}%</span><strong>+{score.levelContribution.toFixed(3)}</strong></div>
     <p>Road score {score.total.toFixed(3)} · {settlementType(score.total)}<br/>Weighted mean level {score.averageLevel.toFixed(1)} · {score.nearbyResidents} nearby residents<br/>Planned area {plan.area} · {AREA_CAPACITY} slots · {plan.axis} alignment · Entrance {facing}</p>
