@@ -1,5 +1,5 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowUp, ArrowUpRight, Check, Compass, Copy, Gift, Hammer, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, MapPin, Minus, Plus, Search, Sparkles, Users, X } from 'lucide-react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ArrowUp, ArrowUpRight, Bug, Check, Compass, Copy, Gift, Hammer, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, MapPin, Minus, Plus, Search, Sparkles, Users, X } from 'lucide-react';
 import type { SceneHandle } from './CityScene';
 import { api } from './api';
 import { COLORS, STYLES, COLOR_COST, STYLE_COST, upgradeCost, type Bootstrap, type Building, type Color, type Style } from '../shared/types';
@@ -7,6 +7,8 @@ import { VIEW_RADIUS } from '../shared/world';
 import { lightingAt } from './lighting';
 import { TowerDrawer } from './TowerDrawer';
 import { CityMap } from './CityMap';
+import { ScoreBreakdown } from './ScoreBreakdown';
+import { neighborhoodScores } from './neighborhood';
 
 type Modal = 'invite' | 'help' | 'login' | null;
 const CityScene = lazy(()=>import('./CityScene').then(m=>({default:m.CityScene})));
@@ -38,6 +40,7 @@ export default function App() {
   const [center, setCenter] = useState({ x: 0, z: 0 });
   const [invites, setInvites] = useState<Invite[]>([]);
   const [copied, setCopied] = useState('');
+  const [debugScores,setDebugScores]=useState(()=>{try{return localStorage.getItem('cities-dev-scores')==='true';}catch{return false;}});
   const [drawerOpen, setDrawerOpen] = useState(()=>window.innerWidth>760);
   const scene = useRef<SceneHandle>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -106,7 +109,11 @@ export default function App() {
     return()=>clearTimeout(timer);
   },[ready,snapshot?.claimedToday,load]);
 
-  const buildings=snapshot?.buildings || [];
+  const buildings=useMemo(()=>snapshot?.buildings||[],[snapshot?.buildings]);
+  const canDebug=import.meta.env.DEV||snapshot?.demo===true;
+  const showScores=canDebug&&debugScores;
+  const scoreAt=useMemo(()=>neighborhoodScores(buildings),[buildings]);
+  const toggleScores=()=>{const next=!debugScores;setDebugScores(next);try{localStorage.setItem('cities-dev-scores',String(next));}catch{/* Dev scores work without storage. */}};
   const tower=buildings.find(b=>b.id===selected);
   const me=buildings.find(b=>b.id===snapshot?.me);
   const own=tower?.id===snapshot?.me;
@@ -129,6 +136,7 @@ export default function App() {
         <span className="brand-mark"><i/><i/><i/></span><span>c.i.t.i.e.s<span className="brand-period">.</span></span>
       </button>
       <nav aria-label="City controls">
+        {canDebug && <button className="debug-toggle" aria-pressed={showScores} onClick={toggleScores} title="Show building connectivity scores and contributions"><Bug size={14}/>Dev scores</button>}
         <button className={`icon-button search-toggle ${searchOpen?'active':''}`} title="Find a neighbor" aria-label="Find a neighbor" aria-expanded={searchOpen} onClick={()=>setSearchOpen(!searchOpen)}><Search size={19}/></button>
         <span className="nav-divider"/>
         <button className="invite-button" onClick={showInvites}><Plus size={16}/> Invite a friend</button>
@@ -137,7 +145,7 @@ export default function App() {
     </header>
 
     <main>
-      <Suspense fallback={<div className="scene-loading"><LoaderCircle className="spin" size={24}/><span>Drawing your little city…</span></div>}><CityScene ref={scene} buildings={buildings} selected={selected} lighting={lighting} center={center} onSelect={id=>{const b=buildings.find(b=>b.id===id);if(b)select(b);}} onPan={(x,z)=>setCenter({x,z})}/></Suspense>
+      <Suspense fallback={<div className="scene-loading"><LoaderCircle className="spin" size={24}/><span>Drawing your little city…</span></div>}><CityScene ref={scene} buildings={buildings} selected={selected} lighting={lighting} center={center} debugScores={showScores} onSelect={id=>{const b=buildings.find(b=>b.id===id);if(b)select(b);}} onPan={(x,z)=>setCenter({x,z})}/></Suspense>
       {searchOpen && <section className="resident-search" aria-label="Find a neighbor">
         <div className="search-input"><Search size={17}/><input autoFocus placeholder="Find a name or username" value={query} onChange={e=>setQuery(e.target.value)} aria-label="Search residents"/><button className="icon-button" aria-label="Close search" onClick={()=>setSearchOpen(false)}><X size={16}/></button></div>
         <div className="resident-results">{filtered.length?filtered.map(b=><button key={b.id} className="resident-result" onClick={()=>select(b)}><span className="avatar small" style={{background:COLORS[b.color].hex}}>{initials(b.name)}</span><span><strong>{b.name}</strong><small>@{b.username}</small></span><span className="level-label">Lv. {b.level}</span></button>):<p className="empty-search">No neighbors match that name.</p>}</div>
@@ -156,6 +164,7 @@ export default function App() {
           {tower.website && <a href={tower.website} target="_blank" rel="noreferrer">Website<ArrowUpRight size={12}/></a>}
           <span className={`verification ${tower.is_demo?'demo':''}`}>{tower.is_demo?<Sparkles size={12}/>:<Check size={12}/>} {tower.is_demo?'Demo resident':'GitHub connected'}</span>
         </div>
+        {showScores && <ScoreBreakdown score={scoreAt(tower.x,tower.z)}/>}
         <div className="tower-stat"><div><span className="stat-icon"><Layers size={19}/></span><div><span>Tower level</span><strong>{tower.level}<small> and growing</small></strong></div></div><div className="tower-silhouette" style={{'--tower-color':COLORS[tower.color].hex} as React.CSSProperties}><i/><i/><i/></div></div>
         <div className="inspector-tabs" role="tablist" aria-label="Tower information" onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const next=tab==='overview'?'design':'overview';setTab(next);document.getElementById(`tab-${next}`)?.focus();}}}>
           <button role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected={tab==='overview'} onClick={()=>setTab('overview')}>Overview</button>

@@ -28,6 +28,7 @@ npm run preview     # Serve the built app through the local Worker on port 8787
 - Drag to orbit, right-drag to pan, scroll or use the buttons to zoom.
 - Click the city canvas or focus it with Tab. Hold WASD to move relative to the camera, Q/E to rotate, Space to rise, and Shift to descend. Arrow keys also pan. Movement pauses while an input, button, or dialog has focus, and clears when the tab loses focus.
 - Click a tower or use the searchable resident list to inspect it.
+- In local development, toggle **Dev scores** in the header to show each tower’s combined connectivity score overhead. The selected tower’s drawer shows raw proximity and invitation scores, their 60%/40% contributions, invitation degree, nearby resident count, and settlement cutoffs. Labels track the camera and live city updates. The toggle persists locally and is hidden in production.
 - Select your tower to upgrade, change architecture, or change its facade color.
 - Lighting follows the viewer's actual local clock, refreshing automatically and when the tab becomes visible. Dawn and dusk are approximate clock-based transitions, not location-based sunrise calculations. There is no day/night toggle or district selector.
 - Orbit down to about 2.6 degrees above the ground. The camera and terrain adapt to keep the foreground continuous at low angles.

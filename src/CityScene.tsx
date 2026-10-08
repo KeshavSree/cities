@@ -6,22 +6,23 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { COLORS, type Building } from '../shared/types';
 import { coastZ, plotPosition, worldHash, PLOT_SPACING, VIEW_RADIUS } from '../shared/world';
 import { WorldTerrain } from './WorldTerrain';
 import type { CityLighting } from './lighting';
-import { neighborhoodDensity, settlementType, streetNetwork, streetDensity, roadWidth, roadShoulder, roadColor, shoulderColor, lotPolygon, mixGroundColor, SETTLEMENT_THRESHOLDS, type GroundPoint } from './neighborhood';
+import { neighborhoodDensity, neighborhoodScores, settlementType, streetNetwork, streetDensity, roadWidth, roadShoulder, roadColor, shoulderColor, lotPolygon, mixGroundColor, SETTLEMENT_THRESHOLDS, type GroundPoint } from './neighborhood';
 import { CameraKeyboard } from './CameraKeyboard';
 
 export interface SceneHandle { focus: (b: Building) => void; reset: () => void; zoom: (amount: number) => void; }
-interface Props { buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
+interface Props { buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; debugScores:boolean; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
 const SPACING = PLOT_SPACING;
 const heightOf = (level: number) => 2.3 + Math.sqrt(level) * 1.65;
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ buildings, selected, lighting, center, onSelect, onPan }, ref) {
+export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ buildings, selected, lighting, center, debugScores, onSelect, onPan }, ref) {
   const host = useRef<HTMLDivElement>(null);
-  const engine = useRef<{ scene: THREE.Scene; renderer: THREE.WebGLRenderer; camera: THREE.OrthographicCamera; controls: OrbitControls; city: THREE.Group; selection: THREE.Group; outline:OutlinePass; focus: THREE.Vector3 | null; night: boolean; resize: () => void } | null>(null);
+  const engine = useRef<{ scene: THREE.Scene; renderer: THREE.WebGLRenderer; camera: THREE.OrthographicCamera; controls: OrbitControls; city: THREE.Group; selection: THREE.Group; labels:THREE.Group; outline:OutlinePass; focus: THREE.Vector3 | null; night: boolean; resize: () => void } | null>(null);
   const props = useRef({ buildings, selected, lighting, onSelect, onPan }); props.current = { buildings, selected, lighting, onSelect, onPan };
   const night=lighting.night;
   const [unavailable, setUnavailable] = useState(false);
@@ -60,7 +61,9 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     sun.castShadow = true; sun.shadow.mapSize.set(2048,2048);
     Object.assign(sun.shadow.camera, { left: -50, right: 50, top: 50, bottom: -50, near: 1, far: 120 });
     sun.shadow.bias = -.001; sun.shadow.normalBias = .06; scene.add(sun);
-    const city = new THREE.Group(); const selection = new THREE.Group(); scene.add(city, selection);
+    const city = new THREE.Group(); const selection = new THREE.Group(); const labels=new THREE.Group(); scene.add(city, selection, labels);
+    const labelRenderer=new CSS2DRenderer();labelRenderer.domElement.className='score-label-layer';
+    el.appendChild(labelRenderer.domElement);
     const composer=new EffectComposer(renderer,new THREE.WebGLRenderTarget(el.clientWidth,el.clientHeight,{samples:4}));
     composer.addPass(new RenderPass(scene,camera));
     const outline=new OutlinePass(new THREE.Vector2(el.clientWidth,el.clientHeight),scene,camera);
@@ -71,9 +74,9 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     function resize() {
       const w = el.clientWidth, h = el.clientHeight; const view = window.innerWidth < 700 ? 23 : 26;
       camera.left = -view * w / h; camera.right = view * w / h; camera.top = view; camera.bottom = -view;
-      camera.updateProjectionMatrix(); renderer.setSize(w,h);composer.setSize(w,h);
+      camera.updateProjectionMatrix(); renderer.setSize(w,h);composer.setSize(w,h);labelRenderer.setSize(w,h);
     }
-    engine.current = { scene, renderer, camera, controls, city, selection, outline, focus: null, night: false, resize };
+    engine.current = { scene, renderer, camera, controls, city, selection, labels, outline, focus: null, night: false, resize };
     resize(); const observer = new ResizeObserver(resize); observer.observe(el);
     const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2();
     let down = { x: 0, y: 0 }; let lastPan = '0,0'; let pointerActive = false;
@@ -140,6 +143,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
       sun.position.set(ground.x+Math.cos(light.sunPhase)*34,12+light.daylight*38,ground.z+25);
       if(navigating&&now-lastKeyboardPan>=250){panEnd();lastKeyboardPan=now;}
       terrain.update(camera,light.night);composer.render(seconds);
+      if(labels.children.length)labelRenderer.render(scene,camera);
     }
     animate();
     return () => {
@@ -149,6 +153,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
       renderer.domElement.removeEventListener('keyup',keyUp);
       renderer.domElement.removeEventListener('pointermove',move); terrain.dispose(); disposeGroup(city); disposeGroup(selection);
       outline.dispose();output.dispose();composer.dispose();renderer.dispose();
+      labels.clear();labelRenderer.domElement.remove();
       renderer.domElement.remove(); engine.current = null;
     };
   }, []);
@@ -156,9 +161,25 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
   useEffect(() => {
     const e = engine.current; if (!e) return;
     e.night = night; disposeGroup(e.city);
-    buildCity(e.city,buildings.filter(b=>Math.abs(b.x-center.x)<=VIEW_RADIUS&&Math.abs(b.z-center.z)<=VIEW_RADIUS),night);
+    buildCity(e.city,buildings.filter(b=>Math.abs(b.x-center.x)<=VIEW_RADIUS&&Math.abs(b.z-center.z)<=VIEW_RADIUS),night,neighborhoodDensity(buildings));
     e.outline.selectedObjects=e.city.children.filter(mesh=>mesh.userData.owner===props.current.selected);
   }, [buildings,night,center.x,center.z]);
+  useEffect(()=>{
+    const e=engine.current;if(!e)return;e.labels.clear();
+    if(!debugScores)return;
+    const scoreAt=neighborhoodScores(buildings);
+    for(const b of buildings){
+      if(Math.abs(b.x-center.x)>VIEW_RADIUS||Math.abs(b.z-center.z)>VIEW_RADIUS)continue;
+      const score=scoreAt(b.x,b.z),element=document.createElement('div');
+      element.className=`building-score ${b.id===selected?'is-selected':''}`;
+      element.dataset.settlement=settlementType(score.total);
+      element.textContent=score.total.toFixed(3);
+      element.setAttribute('aria-label',`${b.name}: connectivity score ${score.total.toFixed(3)}, ${settlementType(score.total)}`);
+      const label=new CSS2DObject(element),position=plotPosition(b.x,b.z);
+      label.position.set(position.x,heightOf(b.level)+(b.style==='spire'?3.1:1.3),position.z);
+      e.labels.add(label);
+    }
+  },[buildings,selected,debugScores,center.x,center.z]);
   useEffect(() => {
     const e = engine.current; if (!e) return; disposeGroup(e.selection);
     e.outline.selectedObjects=e.city.children.filter(mesh=>mesh.userData.owner===selected);
@@ -185,7 +206,7 @@ function disposeGroup(group: THREE.Group) {
   group.traverse(o=>{ if (o instanceof THREE.Mesh) { geometries.add(o.geometry); for (const m of Array.isArray(o.material)?o.material:[o.material]) materials.add(m); } });
   geometries.forEach(g=>g.dispose()); materials.forEach(m=>m.dispose()); group.clear();
 }
-function buildCity(group: THREE.Group, buildings: Building[], night: boolean) {
+function buildCity(group: THREE.Group, buildings: Building[], night: boolean,densityAt:(x:number,z:number)=>number) {
   const materials = new Map<string,THREE.MeshStandardMaterial>();
   const mat = (color: string) => {
     if (!materials.has(color)) materials.set(color,new THREE.MeshStandardMaterial({
@@ -198,7 +219,6 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color)); mesh.position.set(x,y,z); mesh.castShadow = h>.3; mesh.receiveShadow = true;
     if (owner) mesh.userData.owner = owner; parent.add(mesh); return mesh;
   };
-  const densityAt=neighborhoodDensity(buildings);
   const taken=new Set(buildings.map(b=>`${b.x},${b.z}`));
   const {roads,junctions}=streetNetwork(buildings,densityAt);
   const surface=(parent:THREE.Group,points:GroundPoint[],height:number,color:string)=>{
