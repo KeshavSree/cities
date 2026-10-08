@@ -23,6 +23,33 @@ const people = [
   ['demo-kai', 'kaimori', 'Kai Mori', 'Tools that help other people make things.', -1, -2, 7, 'spire', 'coral', 331, 37, 30],
 ] as const;
 
+// Sample invitation tree: every resident except the founder has an inviter.
+// These are demo fixtures, never inferred relationships between real accounts.
+const demoConnections:Record<string,string>={
+  'demo-maya':'demo-you','demo-jules':'demo-you','demo-sam':'demo-you',
+  'demo-nora':'demo-you','demo-asha':'demo-you','demo-leo':'demo-you','demo-zoe':'demo-you',
+  'demo-eli':'demo-maya','demo-ben':'demo-maya','demo-ruby':'demo-maya',
+  'demo-ida':'demo-jules','demo-finn':'demo-jules',
+  'demo-omar':'demo-sam','demo-lena':'demo-sam','demo-ari':'demo-asha',
+  'demo-theo':'demo-nora','demo-ava':'demo-nora','demo-kai':'demo-nora',
+  'demo-iris':'demo-leo','demo-noah':'demo-zoe',
+};
+
+/** Backfill older local demos once; preserve all existing invitation history. */
+export async function ensureDemoConnections(db:D1Database){
+  const children=Object.keys(demoConnections);
+  const missing=await db.prepare(`SELECT u.id FROM users u
+    WHERE u.is_demo=1 AND u.id IN (${children.map(()=>'?').join(',')})
+    AND NOT EXISTS(SELECT 1 FROM invitations i WHERE i.used_by=u.id)`)
+    .bind(...children).all<{id:string}>();
+  if(!missing.results.length)return;
+  await db.batch(missing.results.map(({id})=>db.prepare(`INSERT OR IGNORE INTO invitations(token,inviter_id,used_by,created_at)
+    SELECT ?,parent.id,child.id,'2000-01-01 00:00:00' FROM users parent JOIN users child ON child.id=?
+    WHERE parent.id=? AND parent.is_demo=1 AND child.is_demo=1
+    AND NOT EXISTS(SELECT 1 FROM invitations i WHERE i.used_by=child.id)`)
+    .bind(`demo-seed-${id}`,id,demoConnections[id])));
+}
+
 export async function seedDemo(db: D1Database) {
   const stmts: D1PreparedStatement[] = [];
   for (const [id, username, name, bio, x, z, level, style, color, commits, prs, reviews] of people) {

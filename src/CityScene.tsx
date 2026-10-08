@@ -13,11 +13,11 @@ import { WorldTerrain } from './WorldTerrain';
 import type { CityLighting } from './lighting';
 import { neighborhoodDensity, neighborhoodScores, settlementType, streetNetwork, streetDensity, roadWidth, roadShoulder, roadColor, shoulderColor, lotPolygon, mixGroundColor, SETTLEMENT_THRESHOLDS, type GroundPoint } from './neighborhood';
 import { CameraKeyboard } from './CameraKeyboard';
+import { buildingForm } from './buildingForm';
 
 export interface SceneHandle { focus: (b: Building) => void; reset: () => void; zoom: (amount: number) => void; }
 interface Props { buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; debugScores:boolean; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
 const SPACING = PLOT_SPACING;
-const heightOf = (level: number) => 2.3 + Math.sqrt(level) * 1.65;
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ buildings, selected, lighting, center, debugScores, onSelect, onPan }, ref) {
@@ -176,7 +176,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
       element.textContent=score.total.toFixed(3);
       element.setAttribute('aria-label',`${b.name}: connectivity score ${score.total.toFixed(3)}, ${settlementType(score.total)}`);
       const label=new CSS2DObject(element),position=plotPosition(b.x,b.z);
-      label.position.set(position.x,heightOf(b.level)+(b.style==='spire'?3.1:1.3),position.z);
+      label.position.set(position.x,buildingForm(b,score.total).topY+.55,position.z);
       e.labels.add(label);
     }
   },[buildings,selected,debugScores,center.x,center.z]);
@@ -185,12 +185,13 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     e.outline.selectedObjects=e.city.children.filter(mesh=>mesh.userData.owner===selected);
     const b = buildings.find(b=>b.id===selected); if (!b) return;
     const loaded=new Map(buildings.map(tower=>[tower.id,tower]));
+    const scoreAt=neighborhoodScores(buildings);
     for(const child of buildings){
       const parent=child.invited_by?loaded.get(child.invited_by):null;
       if(!parent)continue;
       const a=plotPosition(parent.x,parent.z),end=plotPosition(child.x,child.z);
-      const start=new THREE.Vector3(a.x,heightOf(parent.level)+1,a.z);
-      const finish=new THREE.Vector3(end.x,heightOf(child.level)+1,end.z);
+      const start=new THREE.Vector3(a.x,buildingForm(parent,scoreAt(parent.x,parent.z).total).topY+.15,a.z);
+      const finish=new THREE.Vector3(end.x,buildingForm(child,scoreAt(child.x,child.z).total).topY+.15,end.z);
       const control=start.clone().add(finish).multiplyScalar(.5);control.y=Math.max(start.y,finish.y)+2;
       const connected=child.id===selected||parent.id===selected;
       const curve=new THREE.QuadraticBezierCurve3(start,control,finish);
@@ -283,10 +284,9 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
   }
   for(const b of buildings){
     const plot=new THREE.Group(),position=plotPosition(b.x,b.z);
-    const density=densityAt(b.x,b.z),kind=settlementType(density);
+    const density=densityAt(b.x,b.z),form=buildingForm(b,density),{kind,footprint,foundationHeight,baseY}=form;
     plot.position.set(position.x,0,position.z);group.add(plot);
-    const color=COLORS[b.color]?.hex || COLORS.sand.hex; const h=heightOf(b.level);
-    const footprint=b.style==='terrace'?{w:3.35,d:3.1}:b.style==='modern'?{w:2.9,d:2.9}:{w:2.5,d:2.5};
+    const color=COLORS[b.color]?.hex || COLORS.sand.hex; const h=form.height;
     const urban=Math.min(1,density/SETTLEMENT_THRESHOLDS.urban),coastal=Math.max(0,1-(coastZ(position.x)-position.z)/15);
     const grass=mixGroundColor(night?'#637e6c':'#bfd2ae',night?'#969078':'#d4c39a',coastal*.45);
     const paving=b.style==='modern'?'#cbd2ce':b.style==='terrace'?'#d4d1bf':'#ccc7bc';
@@ -297,8 +297,6 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     const soilStone=mixGroundColor('#c5b38f',paving,urban);
     const foundationColor=mixGroundColor(soilStone,color,b.style==='modern'?.12:.07);
     const padding=.15+urban*.22+Math.min(.16,Math.sqrt(b.level)*.035);
-    const foundationHeight=.09+urban*(b.style==='modern'?.13:b.style==='spire'?.11:.08);
-    const baseY=.085+foundationHeight;
     box(plot,0,.085+foundationHeight/2,0,footprint.w+padding*2,foundationHeight,footprint.d+padding*2,foundationColor,b.id);
     if(kind==='rural'){
       box(plot,-2.4,.36,0,.08,.55,4.6,'#c6b996');box(plot,0,.36,-2.4,4.6,.55,.08,'#c6b996');
@@ -311,13 +309,13 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       box(plot,footprint.w/2+.27,.22,-.9,.32,.25,.95,foundationColor);
       box(plot,footprint.w/2+.27,.38,-.9,.25,.08,.82,'#87a875');
     }
-    const parts: {w:number;d:number;h:number;y:number}[] = b.style==='terrace'
+    const parts: {w:number;d:number;h:number;y:number}[] = b.style==='terrace'&&kind!=='rural'
       ? [{w:footprint.w,d:footprint.d,h:h*.48,y:baseY},{w:2.65,d:2.5,h:h*.32,y:baseY+h*.48},{w:1.85,d:1.85,h:h*.2,y:baseY+h*.8}]
       : [{...footprint,h,y:baseY}];
     const win=night?'#f3d795':'#627e8a';
     for(const p of parts){
       box(plot,0,p.y+p.h/2,0,p.w,p.h,p.d,color,b.id);
-      const floors=Math.max(1,Math.min(8,Math.floor(p.h/.65)));
+      const floors=Math.max(1,Math.min(8,Math.floor(p.h/(kind==='rural'?1.1:.65))));
       for(let i=0;i<floors;i++)for(let column=-1;column<=1;column++){
         const y=p.y+.38+i*(p.h-.5)/floors;
         box(plot,column*p.w*.26,y,p.d/2+.018,.36,.29,.04,win,b.id);
@@ -326,20 +324,33 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       box(plot,0,p.y+p.h+.06,0,p.w+.14,.12,p.d+.14,'#ece4d5',b.id);
       if(b.style==='terrace')box(plot,-p.w*.3,p.y+p.h+.18,p.d*.27,.4,.25,.48,'#7f9d76');
     }
-    if(b.style==='modern') { box(plot,-1.35,h/2+baseY,0,.18,h,3.05,'#e8e9df',b.id); box(plot,.9,h+baseY+.36,.6,.7,.6,.8,'#8a969b',b.id); }
+    if(b.style==='modern') {
+      box(plot,-footprint.w/2+.1,h/2+baseY,0,.18,h,footprint.d+.15,'#e8e9df',b.id);
+      if(kind==='rural')box(plot,.85,h+baseY+.18,-.5,.5,.2,.6,'#8a969b',b.id);
+      else box(plot,.9,h+baseY+.36,.6,.7,.6,.8,'#8a969b',b.id);
+    }
     if(b.style==='spire'){
-      const roof=new THREE.Mesh(new THREE.ConeGeometry(1.82,1.5,4),mat(color)); roof.rotation.y=Math.PI/4;roof.position.y=h+baseY+.76;roof.userData.owner=b.id; roof.castShadow=true;plot.add(roof);
-      box(plot,0,h+baseY+1.76,0,.07,1,.07,'#6d8188',b.id);
+      const rural=kind==='rural',roofHeight=rural?.8:1.5;
+      const roof=new THREE.Mesh(new THREE.ConeGeometry(1,roofHeight,4),mat(rural?'#b98e77':color));
+      roof.geometry.rotateY(Math.PI/4);roof.scale.set((footprint.w+.15)/Math.SQRT2,1,(footprint.d+.15)/Math.SQRT2);
+      roof.position.y=h+baseY+roofHeight/2+.01;roof.userData.owner=b.id; roof.castShadow=true;plot.add(roof);
+      if(rural)box(plot,-.85,h+baseY+.85,-.5,.32,.5,.32,'#c5b5a0',b.id);
+      else box(plot,0,h+baseY+1.76,0,.07,1,.07,'#6d8188',b.id);
     }
     const front=footprint.d/2;
     box(plot,0,baseY+.4,front+.024,.6,.8,.04,'#647b80',b.id);
+    if(kind==='rural'){
+      box(plot,0,baseY+.06,front+.35,1.25,.12,.7,foundationColor,b.id);
+      box(plot,0,baseY+.98,front+.3,1.3,.1,.7,'#ece4d5',b.id);
+      for(const x of [-.55,.55])box(plot,x,baseY+.52,front+.53,.07,.92,.07,'#c6b996',b.id);
+    }
     const pathColor=mixGroundColor('#c7bc9e',paving,urban);
     if(kind==='rural')for(let i=0;i<3;i++)box(plot,0,.115,front+.45+i*.46,.66,.05,.32,pathColor);
     else box(plot,0,.12,(front+3.05)/2,b.style==='modern'?1.05:.78,.07,3.05-front,pathColor);
     if(b.style==='spire')box(plot,0,baseY-.03,front+.24,.83,.06,.42,foundationColor);
     tree(plot,-2.25,-1.8,.75,box,mat); tree(plot,2.15,1.6,.55,box,mat);
     // A simple rooftop garden instead of a texture or subdivided material face.
-    if(b.style==='terrace') tree(plot,.48,-.25,.38,box,mat,h+baseY+.12);
+    if(b.style==='terrace'&&kind!=='rural') tree(plot,.48,-.25,.38,box,mat,h+baseY+.12);
   }
   // Keep the plaza only next to inhabited plots, and leave its lot available for expansion.
   if(!taken.has('3,0')&&buildings.some(b=>Math.abs(b.x-3)+Math.abs(b.z)<=1)){

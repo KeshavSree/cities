@@ -2,13 +2,13 @@ import type { Building } from '../shared/types';
 import { plotPosition, PLOT_SPACING } from '../shared/world';
 
 export const SETTLEMENT_THRESHOLDS={suburban:.25,urban:.72};
-export const SETTLEMENT_WEIGHTS={proximity:.1,invitations:.9};
-export const INVITATION_DEGREE_SCALE=8;
+export const SETTLEMENT_WEIGHTS={proximity:.1,connections:.9};
+export const CONNECTION_DEGREE_SCALE=8;
 
 export interface SettlementScore {
-  total:number;proximity:number;invitations:number;
-  proximityContribution:number;invitationContribution:number;
-  invitationDegree:number;nearbyResidents:number;
+  total:number;proximity:number;connections:number;
+  proximityContribution:number;connectionContribution:number;
+  connectionDegree:number;nearbyResidents:number;
 }
 
 /** One calculation supplies both the rendered world and its dev score breakdown. */
@@ -35,11 +35,11 @@ export function neighborhoodScores(buildings:Building[]) {
       weight+=importance;
     }
     const resident=occupied.get(key);
-    const invitationDegree=resident?Math.max(resident.invite_degree??0,degrees.get(resident.id)||0):0;
-    const proximity=weight/total,invitations=Math.min(1,invitationDegree/INVITATION_DEGREE_SCALE);
-    const proximityContribution=SETTLEMENT_WEIGHTS.proximity*proximity,invitationContribution=SETTLEMENT_WEIGHTS.invitations*invitations;
-    const score={total:proximityContribution+invitationContribution,proximity,invitations,proximityContribution,invitationContribution,
-      invitationDegree,nearbyResidents};
+    const connectionDegree=resident?Math.max(resident.connection_degree??0,degrees.get(resident.id)||0):0;
+    const proximity=weight/total,connections=Math.min(1,connectionDegree/CONNECTION_DEGREE_SCALE);
+    const proximityContribution=SETTLEMENT_WEIGHTS.proximity*proximity,connectionContribution=SETTLEMENT_WEIGHTS.connections*connections;
+    const score={total:proximityContribution+connectionContribution,proximity,connections,proximityContribution,connectionContribution,
+      connectionDegree,nearbyResidents};
     cache.set(key,score);return score;
   };
 }

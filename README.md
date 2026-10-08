@@ -1,6 +1,6 @@
 # C.I.T.I.E.S
 
-A little city of people who build things. Every resident gets a low-poly tower; GitHub contributions and daily participation earn resources to grow and customize it. New residents arrive through invitations and receive plots near their inviter.
+A little city of people who build things. Every resident gets a low-poly building; GitHub contributions and daily participation earn resources to grow and customize it. New residents arrive through invitations and receive plots near their inviter.
 
 ## Run locally
 
@@ -136,17 +136,21 @@ Plot allocation uses integer keys internally, while a deterministic world projec
 Settlement classification uses **both geography and the invitation graph**, calculated over a 7 × 7 plot neighborhood (three plot keys in each direction). Spatial weights use the actual rendered world distance, in plot-spacing units: `w = exp(-distance² / 3.2)`.
 
 - `P`: occupied-neighbor weight divided by the weight of all 49 possible plots.
-- Invitation degree: the resident's inviter, if any, plus successfully invited residents. Unused invitations do not count. The server returns the total degree, including connections outside the loaded view.
-- `G`: this building's own `min(invitation_degree / 8, 1)`. Neighboring residents' invitations do not contribute to this component; a degree of zero produces exactly zero. Unoccupied plots have no invitation contribution.
+- Connection degree: the resident's inviter, if any, plus successfully invited residents. Unused invitations do not count. The server returns the total degree, including connections outside the loaded view.
+- `G`: this building's own `min(connection_degree / 8, 1)`. Neighboring residents' connections do not contribute to this component; a degree of zero produces exactly zero. Unoccupied plots have no connection contribution.
 - Settlement score: `0.1 × P + 0.9 × G`.
 - **Rural:** score below **0.25**.
 - **Suburban:** score from **0.25** up to, but excluding, **0.72**.
 - **Urban:** score **0.72 or higher**.
 
-The previous urban cutoff was 0.54 using occupancy alone. With the current weights and the 0.72 urban threshold, an area with no invitation edges scores at most 0.1 and stays rural even when fully occupied. At this connection-heavy setting, an isolated resident with a high invitation degree can qualify as urban. Dividing invitation degree by eight is a tunable normalization choice: one connection contributes 0.125, four contribute 0.5, and eight or more contribute 1. Scores reflect loaded nearby residents; dense scenes beyond the 250-resident snapshot limit need additional spatial paging.
+The previous urban cutoff was 0.54 using occupancy alone. With the current weights and the 0.72 urban threshold, an area with no invitation edges scores at most 0.1 and stays rural even when fully occupied. At this connection-heavy setting, an isolated resident with a high connection degree can qualify as urban. Dividing connection degree by eight is a tunable normalization choice: one connection contributes 0.125, four contribute 0.5, and eight or more contribute 1. Scores reflect loaded nearby residents; dense scenes beyond the 250-resident snapshot limit need additional spatial paging.
 
-Urban areas gain asphalt, pavement, markings, lamps, cars, and pocket parks; suburban areas have narrower roads and more gardens; rural towers get gravel lanes, fences, and woodland. The shared street network tapers width and blends solid-color surface sections into common junctions. The minimap uses the same street network and score.
+Building silhouettes follow the same classification: rural homes use `0.95 + 0.25 × sqrt(level)` body height, suburban buildings use `1.7 + 0.75 × sqrt(level)`, and urban towers use `2.3 + 1.65 × sqrt(level)`. Levels and resources are preserved, and all three height curves grow without a cap. Rural architecture uses porches, cottage roofs or flat residential roofs rather than tower massing. Score labels and connection arcs follow the actual roof height.
+
+Urban areas gain asphalt, pavement, markings, lamps, cars, and pocket parks; suburban areas have narrower roads and more gardens; rural homes get gravel lanes, fences, and woodland. The shared street network tapers width and blends solid-color surface sections into common junctions. The minimap uses the same street network and score.
 
 Each lot is clipped against its actual road shoulders. Its ground surface responds to local grass, coastal soil, and settlement score. The tower foundation also responds to architecture, footprint, level, and facade color: modern towers have cooler raised plinths, terraced towers have warmer stone and planted borders, and spires have stone entry steps. Buildings stay rectangular while the surrounding ground fills the irregular lot.
 
 Clicking a tower selects its meshes for a white silhouette outline. Invitation connections remain violet and are only drawn for actual used invitations between loaded residents. New arrivals broadcast updates for both the neighbor and inviter so their graph degrees and surrounding land adapt live.
+
+The local demo includes a sample invitation tree. Every non-founder resident has an inviter connection; older local databases are backfilled without replacing existing invitations. Noah is invited by Zoe and remains rural with one connection. Invited real residents already receive this connection during joining. The founding account is the only account that can exist before any connections.

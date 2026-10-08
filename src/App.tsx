@@ -8,7 +8,7 @@ import { lightingAt } from './lighting';
 import { TowerDrawer } from './TowerDrawer';
 import { CityMap } from './CityMap';
 import { ScoreBreakdown } from './ScoreBreakdown';
-import { neighborhoodScores } from './neighborhood';
+import { neighborhoodScores, settlementType } from './neighborhood';
 
 type Modal = 'invite' | 'help' | 'login' | null;
 const CityScene = lazy(()=>import('./CityScene').then(m=>({default:m.CityScene})));
@@ -165,7 +165,7 @@ export default function App() {
           <span className={`verification ${tower.is_demo?'demo':''}`}>{tower.is_demo?<Sparkles size={12}/>:<Check size={12}/>} {tower.is_demo?'Demo resident':'GitHub connected'}</span>
         </div>
         {showScores && <ScoreBreakdown score={scoreAt(tower.x,tower.z)}/>}
-        <div className="tower-stat"><div><span className="stat-icon"><Layers size={19}/></span><div><span>Tower level</span><strong>{tower.level}<small> and growing</small></strong></div></div><div className="tower-silhouette" style={{'--tower-color':COLORS[tower.color].hex} as React.CSSProperties}><i/><i/><i/></div></div>
+        <div className="tower-stat"><div><span className="stat-icon"><Layers size={19}/></span><div><span>Building level</span><strong>{tower.level}<small> and growing</small></strong></div></div><div className="tower-silhouette" style={{'--tower-color':COLORS[tower.color].hex} as React.CSSProperties}><i/><i/><i/></div></div>
         <div className="inspector-tabs" role="tablist" aria-label="Tower information" onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const next=tab==='overview'?'design':'overview';setTab(next);document.getElementById(`tab-${next}`)?.focus();}}}>
           <button role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected={tab==='overview'} onClick={()=>setTab('overview')}>Overview</button>
           <button role="tab" id="tab-design" aria-controls="panel-design" aria-selected={tab==='design'} onClick={()=>setTab('design')}>Architecture{!own && <span className="tab-view">View</span>}</button>
@@ -191,7 +191,7 @@ export default function App() {
           <div className="design-note"><Leaf size={17}/><p>A shape that feels like you.<br/>Your work makes it grow.</p></div>
           {own && <div className="resource-row"><span><Sparkles size={16}/> Available resources</span><strong>{tower.resources.toLocaleString()}</strong></div>}
         </div>}
-        <footer className="inspector-footer"><MapPin size={13}/>Plot {tower.x}, {tower.z}<span>{STYLES[tower.style].label} tower</span>{own && <button className="account-link" onClick={()=>setModal('login')}>Account</button>}</footer>
+        <footer className="inspector-footer"><MapPin size={13}/>Plot {tower.x}, {tower.z}<span>{STYLES[tower.style].label} {settlementType(scoreAt(tower.x,tower.z).total)==='rural'?'home':settlementType(scoreAt(tower.x,tower.z).total)==='suburban'?'building':'tower'}</span>{own && <button className="account-link" onClick={()=>setModal('login')}>Account</button>}</footer>
       </aside></TowerDrawer>}
 
       {me && <button className={`daily-card ${snapshot?.claimedToday?'collected':''}`} disabled={Boolean(busy)||snapshot?.claimedToday} onClick={daily}>
