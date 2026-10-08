@@ -268,6 +268,23 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color)); mesh.position.set(x,y,z); mesh.castShadow = h>.3; mesh.receiveShadow = true;
     if (owner) mesh.userData.owner = owner; parent.add(mesh); return mesh;
   };
+  const prism=(parent:THREE.Group,points:GroundPoint[],bottom:number,height:number,color:string,owner:string)=>{
+    const vertices:number[]=[],top=bottom+height;
+    const vertex=(p:GroundPoint,y:number)=>vertices.push(p.x,y,p.z);
+    for(let i=1;i<points.length-1;i++){
+      vertex(points[0],top);vertex(points[i+1],top);vertex(points[i],top);
+      vertex(points[0],bottom);vertex(points[i],bottom);vertex(points[i+1],bottom);
+    }
+    for(let i=0;i<points.length;i++){
+      const a=points[i],b=points[(i+1)%points.length];
+      vertex(a,bottom);vertex(b,top);vertex(b,bottom);
+      vertex(a,bottom);vertex(a,top);vertex(b,top);
+    }
+    const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+    // Match the box mesh attributes so podiums and upper walls can share a batch.
+    geometry.setAttribute('uv',new THREE.Float32BufferAttribute(new Float32Array(vertices.length/3*2),2));geometry.computeVertexNormals();
+    const mesh=new THREE.Mesh(geometry,mat(color));mesh.castShadow=true;mesh.receiveShadow=true;mesh.userData.owner=owner;parent.add(mesh);
+  };
   const taken=new Set(buildings.map(b=>`${b.x},${b.z}`));
   const {roads,junctions}=streetNetwork(buildings,densityAt);
   const obstacles=roadObstacles(buildings,densityAt);
@@ -359,7 +376,13 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     const soilStone=mixGroundColor(form.definition.stone,paving,urban*.2);
     const foundationColor=mixGroundColor(soilStone,color,b.style==='modern'?.12:.07);
     const padding=form.foundationPadding;
-    box(architecture,0,.085+foundationHeight/2,0,footprint.w+padding*2,foundationHeight,footprint.d+padding*2,foundationColor,b.id);
+    const localOutline=(outline:GroundPoint[])=>outline.map(p=>{
+      const x=p.x-position.x,z=p.z-position.z,c=Math.cos(plan.rotation),s=Math.sin(plan.rotation);
+      return {x:x*c-z*s,z:x*s+z*c};
+    });
+    const podium=form.podium?localOutline(form.podium):null;
+    if(form.podiumFoundation)prism(plot,form.podiumFoundation.map(p=>({x:p.x-position.x,z:p.z-position.z})),.085,foundationHeight,foundationColor,b.id);
+    else box(architecture,0,.085+foundationHeight/2,0,footprint.w+padding*2,foundationHeight,footprint.d+padding*2,foundationColor,b.id);
     // Only furnish the ground that remains between the growing podium and the lot edge.
     const groundSpace=(x:number,z:number,w:number,d:number,aligned=false)=>{
       const c=Math.cos(plan.rotation),s=Math.sin(plan.rotation);
@@ -367,8 +390,9 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
         const px=x+dx,pz=z+dz;return aligned?{x:px*c+pz*s,z:-px*s+pz*c}:{x:px,z:pz};
       });
       const local=points.map(p=>({x:p.x*c-p.z*s,z:p.x*s+p.z*c}));
-      if(Math.max(...local.map(p=>p.x))>-footprint.w/2-padding&&Math.min(...local.map(p=>p.x))<footprint.w/2+padding&&
-        Math.max(...local.map(p=>p.z))>-footprint.d/2-padding&&Math.min(...local.map(p=>p.z))<footprint.d/2+padding)return false;
+      const body=podium||[{x:-footprint.w/2,z:-footprint.d/2},{x:footprint.w/2,z:footprint.d/2}];
+      if(Math.max(...local.map(p=>p.x))>Math.min(...body.map(p=>p.x))-padding&&Math.min(...local.map(p=>p.x))<Math.max(...body.map(p=>p.x))+padding&&
+        Math.max(...local.map(p=>p.z))>Math.min(...body.map(p=>p.z))-padding&&Math.min(...local.map(p=>p.z))<Math.max(...body.map(p=>p.z))+padding)return false;
       return points.every(p=>lot.every((a,i)=>{const b=lot[(i+1)%lot.length];return (b.x-a.x)*(p.z-a.z)-(b.z-a.z)*(p.x-a.x)>=0;}));
     };
     const groundBox=(parent:THREE.Group,x:number,y:number,z:number,w:number,height:number,d:number,color:string)=>{
@@ -415,21 +439,42 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
         groundBox(plot,x,.45,-1.65,.16,.16,.16,night?'#f0daab':'#d8d8c7');
       }
     }
-    const parts: {w:number;d:number;h:number;y:number}[] = form.tier<=1?[{...footprint,h,y:baseY}]
-      :form.tier===2?[{...footprint,h:h*.72,y:baseY},{w:footprint.w*.87,d:footprint.d*.85,h:h*.28,y:baseY+h*.72}]
-      :form.tier===3?[{...footprint,h:h*.22,y:baseY},{w:footprint.w*.81,d:footprint.d*.83,h:h*.78,y:baseY+h*.22}]
-      :[{...footprint,h:h*.15,y:baseY},{w:footprint.w*.76,d:footprint.d*.76,h:h*.7,y:baseY+h*.15},{w:footprint.w*.62,d:footprint.d*.62,h:h*.15,y:baseY+h*.85}];
+    const parts: {w:number;d:number;h:number;y:number;polygon?:GroundPoint[]}[] = form.tier<=1?[{...footprint,h,y:baseY}]
+      :form.tier===2?[{...footprint,h:h/3,y:baseY,polygon:podium!},{w:footprint.w*.87,d:footprint.d*.85,h:h*2/3,y:baseY+h/3}]
+      :form.tier===3?[{...footprint,h:h*.25,y:baseY,polygon:podium!},{w:footprint.w*.81,d:footprint.d*.83,h:h*.75,y:baseY+h*.25}]
+      :[{...footprint,h:h*.2,y:baseY,polygon:podium!},{w:footprint.w*.76,d:footprint.d*.76,h:h*.65,y:baseY+h*.2},{w:footprint.w*.62,d:footprint.d*.62,h:h*.15,y:baseY+h*.85}];
     const win=night?'#f3d795':'#627e8a';
     for(const p of parts){
       for(let segment=0;segment<form.segments.length;segment++){
         const low=Math.max(p.y,baseY+h*segment/form.segments.length),high=Math.min(p.y+p.h,baseY+h*(segment+1)/form.segments.length);
         if(high<=low)continue;
-        box(architecture,0,(low+high)/2,0,p.w,high-low,p.d,COLORS[form.segments[segment].color].hex,b.id);
+        if(p.polygon)prism(architecture,p.polygon,low,high-low,COLORS[form.segments[segment].color].hex,b.id);
+        else box(architecture,0,(low+high)/2,0,p.w,high-low,p.d,COLORS[form.segments[segment].color].hex,b.id);
       }
       const floors=Math.max(1,Math.min(10,Math.floor(p.h/(form.tier<=1?1:.75))));
       for(let i=0;i<floors;i++){
         const y=p.y+.38+i*(p.h-.5)/floors;
         const design=form.segments[Math.min(form.segments.length-1,Math.floor((y-baseY)/h*form.segments.length))],ww=design.style==='glass'?.55:.36;
+        if(p.polygon){
+          for(let edge=0;edge<p.polygon.length;edge++){
+            const a=p.polygon[edge],end=p.polygon[(edge+1)%p.polygon.length],dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz),nx=dz/length,nz=-dx/length;
+            const columns=Math.max(2,Math.floor(length/.95));
+            for(let column=0;column<columns;column++){
+              const t=(column+.5)/columns,x=a.x+dx*t,z=a.z+dz*t;
+              // Leave the center of the frontage wall free for its entrance.
+              if(i===0&&nz>.9&&Math.abs(x)<.55)continue;
+              const window=box(architecture,x+nx*.024,y,z+nz*.024,ww,.29,.04,win,b.id);
+              window.rotation.y=-Math.atan2(dz,dx);
+            }
+            if(design.style==='balcony'){
+              const balcony=box(architecture,(a.x+end.x)/2+nx*.12,y-.2,(a.z+end.z)/2+nz*.12,length*.7,.06,.28,'#deded2',b.id);
+              balcony.rotation.y=-Math.atan2(dz,dx);
+              const rail=box(architecture,(a.x+end.x)/2+nx*.245,y-.05,(a.z+end.z)/2+nz*.245,length*.7,.22,.035,'#9bb2ae',b.id);
+              rail.rotation.y=balcony.rotation.y;
+            }
+          }
+          continue;
+        }
         for(let column=-1;column<=1;column++){
           if(!(i===0&&column===0&&p.y===baseY))box(architecture,column*p.w*.26,y,p.d/2+.018,ww,.29,.04,win,b.id);
           box(architecture,p.w/2+.018,y,column*p.d*.26,.04,.29,ww,win,b.id);
@@ -442,12 +487,21 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
           box(architecture,sign*(p.w/2+.12),y-.2,0,.3,.06,p.d*.72,'#deded2',b.id);
         }
       }
-      box(architecture,0,p.y+p.h+.06,0,p.w+.14,.12,p.d+.14,'#ece4d5',b.id);
+      if(p.polygon)prism(architecture,localOutline(form.podiumCornice!),p.y+p.h+.01,.12,'#ece4d5',b.id);
+      else box(architecture,0,p.y+p.h+.06,0,p.w+.14,.12,p.d+.14,'#ece4d5',b.id);
       if(b.style==='terrace')box(architecture,-p.w*.3,p.y+p.h+.18,p.d*.27,.4,.25,.48,'#7f9d76');
     }
     if(b.style==='modern') {
       // Project the trim beyond the wall instead of leaving its outer face coplanar.
-      for(const p of parts)box(architecture,-p.w/2+.06,p.y+p.h/2,0,.16,p.h,p.d+.05,'#e8e9df',b.id);
+      for(const p of parts){
+        if(p.polygon){
+          for(let i=0;i<p.polygon.length;i++){
+            const a=p.polygon[i],end=p.polygon[(i+1)%p.polygon.length],dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz);
+            const trim=box(architecture,(a.x+end.x)/2+dz/length*.025,p.y+p.h/2,(a.z+end.z)/2-dx/length*.025,.12,p.h,.06,'#e8e9df',b.id);
+            trim.rotation.y=-Math.atan2(dz,dx);
+          }
+        }else box(architecture,-p.w/2+.06,p.y+p.h/2,0,.16,p.h,p.d+.05,'#e8e9df',b.id);
+      }
       if(kind==='rural')box(architecture,.85,h+baseY+.18,-.5,.5,.2,.6,'#8a969b',b.id);
       else box(architecture,.55,h+baseY+.36,.3,.6,.6,.65,'#8a969b',b.id);
     }
@@ -460,10 +514,14 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       if(rural)box(architecture,-.85,h+baseY+.85,-.5,.32,.5,.32,'#c5b5a0',b.id);
       else box(architecture,0,h+baseY+1.76,0,.07,1,.07,'#6d8188',b.id);
     }
-    const front=footprint.d/2;
+    const front=podium?Math.max(...podium.map(p=>p.z)):footprint.d/2;
     box(architecture,0,baseY+.4,front+.024,.6,.8,.04,'#647b80',b.id);
     const fixture=night?'#f0daab':'#d8d8c7';
-    for(const side of [-1,1]){
+    if(podium)for(let i=0;i<podium.length;i++){
+      const a=podium[i],end=podium[(i+1)%podium.length],dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz);
+      const light=box(architecture,a.x+dx*.3+dz/length*.055,baseY+.82,a.z+dz*.3-dx/length*.055,.13,.18,.08,fixture,b.id);
+      light.rotation.y=-Math.atan2(dz,dx);
+    }else for(const side of [-1,1]){
       box(architecture,-footprint.w*.3,baseY+.82,side*(front+.055),.13,.18,.08,fixture,b.id);
       box(architecture,side*(footprint.w/2+.055),baseY+.82,-footprint.d*.3,.08,.18,.13,fixture,b.id);
     }

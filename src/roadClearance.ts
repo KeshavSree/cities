@@ -1,15 +1,13 @@
 import type { Building } from '../shared/types';
 import { plotPlan } from '../shared/plots';
-import { buildingForm } from './buildingForm';
+import { buildingForm, insetPlotPolygon } from './buildingForm';
 import type { GroundPoint } from './neighborhood';
 
 /** Tier five podiums claim the road edge, while leaving the street center open. */
 export function roadObstacles(buildings:Building[],densityAt:(x:number,z:number)=>number){
   return buildings.filter(b=>b.level>=17).map(b=>{
     const plan=plotPlan(b.x,b.z),form=buildingForm(b,densityAt(b.x,b.z));
-    const w=form.footprint.w/2+form.foundationPadding+.025,d=form.footprint.d/2+form.foundationPadding+.025;
-    const c=Math.cos(plan.rotation),s=Math.sin(plan.rotation);
-    return [[-w,-d],[w,-d],[w,d],[-w,d]].map(([x,z])=>({x:plan.position.x+x*c+z*s,z:plan.position.z-x*s+z*c}));
+    return insetPlotPolygon(plan,.4-form.foundationPadding-.025);
   });
 }
 
@@ -25,7 +23,7 @@ function clip(polygon:GroundPoint[],a:GroundPoint,b:GroundPoint,inside:boolean){
 }
 const bounds=(p:GroundPoint[])=>({minX:Math.min(...p.map(v=>v.x)),maxX:Math.max(...p.map(v=>v.x)),minZ:Math.min(...p.map(v=>v.z)),maxZ:Math.max(...p.map(v=>v.z))});
 
-/** Subtract rectangular podiums from convex street polygons, retaining straight edges. */
+/** Subtract convex podiums from street polygons, retaining straight edges. */
 export function clearRoadSurface(polygon:GroundPoint[],obstacles:GroundPoint[][]){
   let pieces=[polygon];
   for(const obstacle of obstacles){

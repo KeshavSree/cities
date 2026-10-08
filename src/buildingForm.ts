@@ -1,6 +1,23 @@
 import type { Building } from '../shared/types';
 import { segmentDesigns, tierForLevel, tierIndex } from '../shared/progression';
-import { plotPlan } from '../shared/plots';
+import { plotPlan, type PlotPlan } from '../shared/plots';
+
+/** Offset each parcel edge inward, keeping its original street angle. */
+export function insetPlotPolygon(plan:PlotPlan,margin:number){
+  let polygon=plan.corners.map(p=>({...p}));
+  for(let i=0;i<plan.corners.length;i++){
+    const a=plan.corners[i],b=plan.corners[(i+1)%plan.corners.length],dx=b.x-a.x,dz=b.z-a.z,length=Math.hypot(dx,dz);
+    const distance=(p:{x:number;z:number})=>(dx*(p.z-a.z)-dz*(p.x-a.x))/length-margin;
+    const clipped:{x:number;z:number}[]=[];
+    for(let j=0;j<polygon.length;j++){
+      const p=polygon[j],q=polygon[(j+1)%polygon.length],dp=distance(p),dq=distance(q);
+      if(dp>=0)clipped.push(p);
+      if((dp>=0)!==(dq>=0)){const t=dp/(dp-dq);clipped.push({x:p.x+(q.x-p.x)*t,z:p.z+(q.z-p.z)*t});}
+    }
+    polygon=clipped;
+  }
+  return polygon;
+}
 
 /** Fit a rectangle to the angled plot, reserving a passage along every street centerline. */
 function plotFootprint(building:Building,tier:number,padding:number){
@@ -31,7 +48,11 @@ export function buildingForm(building:Building,roadScore=0){
   const foundationPadding=tier===4?.1:.12+Math.min(1,roadScore/.72)*.08;
   // Use the same fit at all tiers so each successive footprint is strictly larger.
   const footprint=plotFootprint(building,tier,.1);
+  const plan=plotPlan(building.x,building.z),podiumSetback=[0,0,1.2,.8,.4][tier];
+  const podium=tier>=2?insetPlotPolygon(plan,podiumSetback):null;
+  const podiumFoundation=tier>=2?insetPlotPolygon(plan,podiumSetback-foundationPadding):null;
+  const podiumCornice=tier>=2?insetPlotPolygon(plan,podiumSetback-.065):null;
   const foundationHeight=[.09,.13,.19,.25,.34][tier],baseY=.085+foundationHeight;
   const roofHeight=tier===0||tier===1?1.12:building.style==='spire'?2.26:building.style==='terrace'?.9:.66;
-  return {kind:definition.kind,tier,definition,height,footprint,foundationPadding,foundationHeight,baseY,topY:baseY+height+roofHeight,segments:segmentDesigns(building)};
+  return {kind:definition.kind,tier,definition,height,footprint,podium,podiumFoundation,podiumCornice,foundationPadding,foundationHeight,baseY,topY:baseY+height+roofHeight,segments:segmentDesigns(building)};
 }
