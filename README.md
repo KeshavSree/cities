@@ -136,13 +136,13 @@ Settlement classification uses **both geography and the invitation graph**, calc
 
 - `P`: occupied-neighbor weight divided by the weight of all 49 possible plots.
 - Invitation degree: the resident's inviter, if any, plus successfully invited residents. Unused invitations do not count. The server returns the total degree, including connections outside the loaded view.
-- `G`: the weighted average of `min(invitation_degree / 4, 1)` across nearby residents.
+- `G`: the weighted average of `min(invitation_degree / 8, 1)` across nearby residents.
 - Settlement score: `0.6 × P + 0.4 × G`.
 - **Rural:** score below **0.25**.
 - **Suburban:** score from **0.25** up to, but excluding, **0.72**.
 - **Urban:** score **0.72 or higher**.
 
-The previous urban cutoff was 0.54 using occupancy alone. With the current weights and the 0.72 urban threshold, an area with no invitation edges scores at most 0.6 and stays suburban even when fully occupied. Isolated well-connected residents cannot create an urban area alone. Dividing invitation degree by four is a tunable normalization choice: one connection contributes 0.25, while four or more contributes 1. Scores reflect loaded nearby residents; dense scenes beyond the 250-resident snapshot limit need additional spatial paging.
+The previous urban cutoff was 0.54 using occupancy alone. With the current weights and the 0.72 urban threshold, an area with no invitation edges scores at most 0.6 and stays suburban even when fully occupied. Isolated well-connected residents cannot create an urban area alone. Dividing invitation degree by eight is a tunable normalization choice: one connection contributes 0.125, four contribute 0.5, and eight or more contribute 1. Scores reflect loaded nearby residents; dense scenes beyond the 250-resident snapshot limit need additional spatial paging.
 
 Urban areas gain asphalt, pavement, markings, lamps, cars, and pocket parks; suburban areas have narrower roads and more gardens; rural towers get gravel lanes, fences, and woodland. The shared street network tapers width and blends solid-color surface sections into common junctions. The minimap uses the same street network and score.
 

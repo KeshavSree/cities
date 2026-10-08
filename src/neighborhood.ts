@@ -3,7 +3,7 @@ import { plotPosition, PLOT_SPACING } from '../shared/world';
 
 export const SETTLEMENT_THRESHOLDS={suburban:.25,urban:.72};
 export const SETTLEMENT_WEIGHTS={proximity:.6,invitations:.4};
-export const INVITATION_DEGREE_SCALE=4;
+export const INVITATION_DEGREE_SCALE=8;
 
 /** Combine nearby occupancy (60%) with local invitation graph degree (40%). */
 export function neighborhoodDensity(buildings:Building[]) {
