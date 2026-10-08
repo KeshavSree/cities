@@ -7,7 +7,7 @@ export function ScoreBreakdown({score}:{score:SettlementScore}){
     <div className="score-contribution"><span>Proximity</span><span title={String(score.proximity)}>{format(score.proximity)} × {SETTLEMENT_WEIGHTS.proximity*100}%</span><strong title={String(score.proximityContribution)}>+{format(score.proximityContribution)}</strong></div>
     <div className="score-contribution"><span>Invitations</span><span title={String(score.invitations)}>{format(score.invitations)} × {SETTLEMENT_WEIGHTS.invitations*100}%</span><strong title={String(score.invitationContribution)}>+{format(score.invitationContribution)}</strong></div>
     <p>Invite degree: <strong>{score.invitationDegree}</strong> · Nearby residents: <strong>{score.nearbyResidents}</strong></p>
-    <p>Invitation score averages nearby people’s degree ÷ {INVITATION_DEGREE_SCALE}, capped at 1.</p>
+    <p>Invitation score uses this building’s degree ÷ {INVITATION_DEGREE_SCALE}, capped at 1. Zero connections contributes zero.</p>
     <div className="score-thresholds">Rural &lt; {SETTLEMENT_THRESHOLDS.suburban} · Suburban &lt; {SETTLEMENT_THRESHOLDS.urban} · Urban ≥ {SETTLEMENT_THRESHOLDS.urban}</div>
   </section>;
 }

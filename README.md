@@ -137,7 +137,7 @@ Settlement classification uses **both geography and the invitation graph**, calc
 
 - `P`: occupied-neighbor weight divided by the weight of all 49 possible plots.
 - Invitation degree: the resident's inviter, if any, plus successfully invited residents. Unused invitations do not count. The server returns the total degree, including connections outside the loaded view.
-- `G`: the weighted average of `min(invitation_degree / 8, 1)` across nearby residents.
+- `G`: this building's own `min(invitation_degree / 8, 1)`. Neighboring residents' invitations do not contribute to this component; a degree of zero produces exactly zero. Unoccupied plots have no invitation contribution.
 - Settlement score: `0.1 × P + 0.9 × G`.
 - **Rural:** score below **0.25**.
 - **Suburban:** score from **0.25** up to, but excluding, **0.72**.

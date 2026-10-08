@@ -25,20 +25,21 @@ export function neighborhoodScores(buildings:Building[]) {
     const key=`${x},${z}`;
     if(cache.has(key))return cache.get(key)!;
     const center=positionAt(x,z);
-    let weight=0,connections=0,total=0,nearbyResidents=0;
+    let weight=0,total=0,nearbyResidents=0;
     for(const k of kernel){
       const neighbor=positionAt(x+k.x,z+k.z);
       const distanceSquared=((neighbor.x-center.x)**2+(neighbor.z-center.z)**2)/PLOT_SPACING**2;
       const importance=Math.exp(-distanceSquared/3.2);total+=importance;
       const b=occupied.get(`${x+k.x},${z+k.z}`);if(!b)continue;
       nearbyResidents++;
-      weight+=importance;connections+=importance*Math.min(1,Math.max(b.invite_degree??0,degrees.get(b.id)||0)/INVITATION_DEGREE_SCALE);
+      weight+=importance;
     }
-    const proximity=weight/total,invitations=weight?connections/weight:0;
-    const proximityContribution=SETTLEMENT_WEIGHTS.proximity*proximity,invitationContribution=SETTLEMENT_WEIGHTS.invitations*invitations;
     const resident=occupied.get(key);
+    const invitationDegree=resident?Math.max(resident.invite_degree??0,degrees.get(resident.id)||0):0;
+    const proximity=weight/total,invitations=Math.min(1,invitationDegree/INVITATION_DEGREE_SCALE);
+    const proximityContribution=SETTLEMENT_WEIGHTS.proximity*proximity,invitationContribution=SETTLEMENT_WEIGHTS.invitations*invitations;
     const score={total:proximityContribution+invitationContribution,proximity,invitations,proximityContribution,invitationContribution,
-      invitationDegree:resident?Math.max(resident.invite_degree??0,degrees.get(resident.id)||0):0,nearbyResidents};
+      invitationDegree,nearbyResidents};
     cache.set(key,score);return score;
   };
 }
