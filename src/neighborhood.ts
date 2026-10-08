@@ -3,13 +3,13 @@ import { plotPosition, PLOT_SPACING } from '../shared/world';
 import { plotPlan } from '../shared/plots';
 
 export const SETTLEMENT_THRESHOLDS={suburban:.25,urban:.72};
-export const SETTLEMENT_WEIGHTS={proximity:.1,connections:.9};
-export const CONNECTION_DEGREE_SCALE=8;
+export const SETTLEMENT_WEIGHTS={proximity:.3,invites:.7};
+export const INVITE_DEGREE_SCALE=8;
 
 export interface SettlementScore {
-  total:number;proximity:number;connections:number;
-  proximityContribution:number;connectionContribution:number;
-  connectionDegree:number;nearbyResidents:number;
+  total:number;proximity:number;invites:number;
+  proximityContribution:number;inviteContribution:number;
+  inviteDegree:number;nearbyResidents:number;
 }
 
 /** One calculation supplies both the rendered world and its dev score breakdown. */
@@ -36,11 +36,11 @@ export function neighborhoodScores(buildings:Building[]) {
       weight+=importance;
     }
     const resident=occupied.get(key);
-    const connectionDegree=resident?Math.max(resident.connection_degree??0,degrees.get(resident.id)||0):0;
-    const proximity=weight/total,connections=Math.min(1,connectionDegree/CONNECTION_DEGREE_SCALE);
-    const proximityContribution=SETTLEMENT_WEIGHTS.proximity*proximity,connectionContribution=SETTLEMENT_WEIGHTS.connections*connections;
-    const score={total:proximityContribution+connectionContribution,proximity,connections,proximityContribution,connectionContribution,
-      connectionDegree,nearbyResidents};
+    const inviteDegree=resident?Math.max(resident.invite_degree??0,degrees.get(resident.id)||0):0;
+    const proximity=weight/total,invites=Math.min(1,inviteDegree/INVITE_DEGREE_SCALE);
+    const proximityContribution=SETTLEMENT_WEIGHTS.proximity*proximity,inviteContribution=SETTLEMENT_WEIGHTS.invites*invites;
+    const score={total:proximityContribution+inviteContribution,proximity,invites,proximityContribution,inviteContribution,
+      inviteDegree,nearbyResidents};
     cache.set(key,score);return score;
   };
 }

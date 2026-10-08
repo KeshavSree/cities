@@ -28,7 +28,7 @@ npm run preview     # Serve the built app through the local Worker on port 8787
 - Drag to orbit, right-drag to pan, scroll or use the buttons to zoom.
 - Click the city canvas or focus it with Tab. Hold WASD to move relative to the camera, Q/E to rotate, Space to rise, and Shift to descend. Arrow keys also pan. Movement pauses while an input, button, or dialog has focus, and clears when the tab loses focus.
 - Click a tower or use the searchable resident list to inspect it.
-- In local development, toggle **Dev scores** in the header to show each tower’s combined connectivity score overhead. The selected tower’s drawer shows raw proximity and invitation scores, their 10%/90% contributions, invitation degree, nearby resident count, and settlement cutoffs. Labels track the camera and live city updates. The toggle persists locally and is hidden in production.
+- In local development, toggle **Dev scores** in the header to show each tower’s combined connectivity score overhead. The selected tower’s drawer shows raw proximity and invitation scores, their 30%/70% contributions, invitation degree, nearby resident count, and settlement cutoffs. Labels track the camera and live city updates. The toggle persists locally and is hidden in production.
 - Select your tower to upgrade, change architecture, or change its facade color.
 - Lighting follows the viewer's actual local clock, refreshing automatically and when the tab becomes visible. Dawn and dusk are approximate clock-based transitions, not location-based sunrise calculations. There is no day/night toggle or district selector.
 - Orbit down to about 2.6 degrees above the ground. The camera and terrain adapt to keep the foreground continuous at low angles.
@@ -136,14 +136,14 @@ Plot allocation uses integer keys internally, while a deterministic world projec
 Settlement classification uses **both geography and the invitation graph**, calculated over a 7 × 7 plot neighborhood (three plot keys in each direction). Spatial weights use the actual rendered world distance, in plot-spacing units: `w = exp(-distance² / 3.2)`.
 
 - `P`: occupied-neighbor weight divided by the weight of all 49 possible plots.
-- Connection degree: the resident's inviter, if any, plus successfully invited residents. Unused invitations do not count. The server returns the total degree, including connections outside the loaded view.
-- `G`: this building's own `min(connection_degree / 8, 1)`. Neighboring residents' connections do not contribute to this component; a degree of zero produces exactly zero. Unoccupied plots have no connection contribution.
-- Settlement score: `0.1 × P + 0.9 × G`.
+- Invite degree: the resident's inviter, if any, plus successfully invited residents. Unused invitations do not count. The server returns the total degree, including connections outside the loaded view.
+- `G`: this building's own `min(invite_degree / 8, 1)`. Neighboring residents' connections do not contribute to this component; a degree of zero produces exactly zero. Unoccupied plots have no invite contribution.
+- Settlement score: `0.3 × P + 0.7 × G`.
 - **Rural:** score below **0.25**.
 - **Suburban:** score from **0.25** up to, but excluding, **0.72**.
 - **Urban:** score **0.72 or higher**.
 
-The previous urban cutoff was 0.54 using occupancy alone. With the current weights and the 0.72 urban threshold, an area with no invitation edges scores at most 0.1 and stays rural even when fully occupied. At this connection-heavy setting, an isolated resident with a high connection degree can qualify as urban. Dividing connection degree by eight is a tunable normalization choice: one connection contributes 0.125, four contribute 0.5, and eight or more contribute 1. Scores reflect loaded nearby residents; dense scenes beyond the 250-resident snapshot limit need additional spatial paging.
+The previous urban cutoff was 0.54 using occupancy alone. With the current weights and the 0.72 urban threshold, an area with no invitation edges scores at most 0.3: it can be rural or suburban, but cannot become urban from proximity alone. An isolated resident with a high invite degree can still qualify as urban. Dividing invite degree by eight is a tunable normalization choice: one invitation relationship gives a raw invite score of 0.125, four give 0.5, and eight or more give 1. This includes the inviter and successfully invited residents; unused invites do not count. Scores reflect loaded nearby residents; dense scenes beyond the 250-resident snapshot limit need additional spatial paging.
 
 Building silhouettes follow the same classification: rural homes use `0.95 + 0.25 × sqrt(level)` body height, suburban buildings use `1.7 + 0.75 × sqrt(level)`, and urban towers use `2.3 + 1.65 × sqrt(level)`. Levels and resources are preserved, and all three height curves grow without a cap. Rural architecture uses porches, cottage roofs or flat residential roofs rather than tower massing. Score labels and connection arcs follow the actual roof height.
 

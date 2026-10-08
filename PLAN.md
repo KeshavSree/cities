@@ -69,7 +69,7 @@ City-first layout with quiet white controls, pale blue sky, green terrain, viole
 ## Ground, roads, graph density, and selection
 - Clip independent lot polygons to actual road shoulders; choose ground and foundation treatments from terrain, coast distance, settlement score, tower footprint, style, level, and color.
 - Share street geometry between the 3D view and minimap. Taper widths and blend solid-color road sections into shared junction surfaces.
-- Use a 10% spatial occupancy / 90% individual invitation-degree score. A building's own degree is normalized by eight; zero degree contributes exactly zero. Rural <0.25, suburban 0.25–<0.72, urban ≥0.72. Read total invitation degrees from the server and update both endpoints on arrivals.
+- Use a 30% spatial occupancy / 70% individual invitation-degree score. A building's own degree is normalized by eight; zero degree contributes exactly zero. Rural <0.25, suburban 0.25–<0.72, urban ≥0.72. Read total invitation degrees from the server and update both endpoints on arrivals.
 - Highlight selected building silhouettes in white with a selection outline render pass.
 
 ## Dev score inspection

@@ -7,12 +7,12 @@ import { buildingForm } from './buildingForm';
 export function upcomingPlotPreviews(buildings:Building[],inviter:Building,available:{x:number;z:number}[]){
   const occupied=new Set(buildings.map(b=>`${b.x},${b.z}`));
   const slots=available.filter(p=>!occupied.has(`${p.x},${p.z}`)).map(p=>plotPlan(p.x,p.z));
-  const currentDegree=neighborhoodScores(buildings)(inviter.x,inviter.z).connectionDegree;
-  const parent={...inviter,connection_degree:currentDegree+1};
+  const currentDegree=neighborhoodScores(buildings)(inviter.x,inviter.z).inviteDegree;
+  const parent={...inviter,invite_degree:currentDegree+1};
   return slots.map(plan=>{
     const resident:Building={...inviter,id:`preview:${plan.x},${plan.z}`,name:'Next resident',username:'preview',
       x:plan.x,z:plan.z,level:1,resources:0,style:'terrace',color:'sand',commits:0,prs:0,reviews:0,
-      invited_by:inviter.id,connection_degree:1};
+      invited_by:inviter.id,invite_degree:1};
     const hypothetical=[...buildings.map(b=>b.id===inviter.id?parent:b),resident];
     const score=neighborhoodScores(hypothetical)(plan.x,plan.z);
     return {plan,resident,score,form:buildingForm(resident,score.total)};
