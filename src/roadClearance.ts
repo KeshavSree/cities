@@ -1,13 +1,14 @@
 import type { Building } from '../shared/types';
 import { plotPlan } from '../shared/plots';
-import { buildingForm, insetPlotPolygon } from './buildingForm';
+import { buildingForm, insetPlotPolygon, MODEL_SETBACKS } from './buildingForm';
+import { tierIndex } from '../shared/progression';
 import type { GroundPoint } from './neighborhood';
 
-/** Tier five podiums claim the road edge, while leaving the street center open. */
+/** Skyscrapers and later models claim the road edge, leaving its center open. */
 export function roadObstacles(buildings:Building[],densityAt:(x:number,z:number)=>number){
-  return buildings.filter(b=>b.level>=17).map(b=>{
+  return buildings.filter(b=>tierIndex(b.level)>=5).map(b=>{
     const plan=plotPlan(b.x,b.z),form=buildingForm(b,densityAt(b.x,b.z));
-    return insetPlotPolygon(plan,.4-form.foundationPadding-.025);
+    return insetPlotPolygon(plan,MODEL_SETBACKS[form.tier]-form.foundationPadding-.025);
   });
 }
 

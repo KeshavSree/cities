@@ -1,6 +1,6 @@
 # C.I.T.I.E.S
 
-A little city of people who build things. Every resident gets a low-poly building; Verified activity earns permanent XP to level up through five model tiers. Spend bricks on segment designs, finishes, and nearby public projects. New residents arrive through invitations and receive plots near their inviter.
+A little city of people who build things. Every resident gets a low-poly building; Verified activity earns permanent XP to level up through ten model tiers. Spend bricks on segment designs, finishes, and nearby public projects. New residents arrive through invitations and receive plots near their inviter.
 
 ## Run locally
 
@@ -28,7 +28,7 @@ npm run preview     # Serve the built app through the local Worker on port 8787
 - Drag to orbit, right-drag to pan, scroll or use the buttons to zoom.
 - Click the city canvas or focus it with Tab. Hold WASD to move relative to the camera, Q/E to rotate, Space to rise, and Shift to descend. Arrow keys also pan. Movement pauses while an input, button, or dialog has focus, and clears when the tab loses focus.
 - Click a tower or use the searchable resident list to inspect it.
-- In local development, toggle **Dev mode** to show level, model tier, and XP above each building. The drawer explains the road score, nearby mean level, and planned frontage. Local demo controls preview any level from 1–20 and simulate rewards, clearly labeled in the XP ledger. Dev edits cannot target real residents, and dev routes are disabled in production.
+- In local development, toggle **Dev mode** to show level, model tier, and XP above each building. The drawer explains the road score, nearby mean level, planned frontage, each segment’s side count, and the segment supporting it. Local demo controls preview any level from 1–30 and simulate rewards, clearly labeled in the XP ledger. Dev edits cannot target real residents, and dev routes are disabled in production.
 - Select your tower to inspect XP, bricks, and recent rewards. Architecture lets you customize the segments unlocked by your tier or change the overall finish. Levels unlock automatically.
 - Lighting follows the viewer's actual local clock, refreshing automatically and when the tab becomes visible. Dawn and dusk are approximate clock-based transitions, not location-based sunrise calculations. There is no day/night toggle or district selector.
 - Orbit down to about 2.6 degrees above the ground. The camera and terrain adapt to keep the foreground continuous at low angles.
@@ -49,7 +49,7 @@ GitHub OAuth uses state validation, PKCE, and server-only credentials. Session c
 
 ## Progression
 
-XP is permanent and levels unlock automatically. The current version has **20 levels and five model tiers**. Going from level `L` to `L+1` requires `100 + 50 × (L−1)` XP. Cumulative thresholds are shared by the UI and the database migration; XP never pays for cosmetics. XP can continue accumulating at level 20.
+XP is permanent and levels unlock automatically. The current version has **30 levels and ten model tiers**. Going from level `L` to `L+1` requires `100 + 50 × (L−1)` XP. Cumulative thresholds are shared by the UI and the database migration; XP never pays for cosmetics. XP can continue accumulating at level 30.
 
 | Action | XP | Bricks |
 | --- | ---: | ---: |
@@ -64,19 +64,26 @@ XP is permanent and levels unlock automatically. The current version has **20 le
 
 GitHub rewards are commit-only; pull requests and reviews do not earn XP or bricks. Updated rates apply to future rewards, preserving earned XP and credited commit counts. `0003_reward_rates.sql` updates the public-project completion trigger to 200 XP.
 
-Likes are permanent, limited to one per account per tower, and cannot target yourself. Production liking requires a GitHub-connected account; local demo likes stay between demo residents. Invites only award after successful joining. Nearby construction is an event, not passive proximity income: the eight closest other residents within three plot spacings receive XP when a building is created or crosses levels 5, 9, 13, or 17. Coordinate-keyed, distance-weighted occupancy still shapes roads; it no longer determines an individual tower's model.
+Likes are permanent, limited to one per account per tower, and cannot target yourself. Production liking requires a GitHub-connected account; local demo likes stay between demo residents. Invites only award after successful joining. Nearby construction is an event, not passive proximity income: the eight closest other residents within three plot spacings receive XP when a building is created or crosses levels 4, 7, 10, 13, 16, 19, 22, 25, or 28. Coordinate-keyed, distance-weighted occupancy still shapes roads; it no longer determines an individual tower's model.
 
 | Levels | Model | Ground |
 | --- | --- | --- |
-| 1–4 | Cottage | Grass garden, fences, stepping stones |
-| 5–8 | Townhouse | Lawn, brick patio, hedges |
-| 9–12 | Apartments | Shared paved courtyard, planters, bench |
-| 13–16 | High-rise | Stone plaza, inlaid paving, lamp |
-| 17–20 | Skyscraper | Raised plinth, civic terrace, linear planted borders |
+| 1–3 | Shack | Wild clearing, timber foundation |
+| 4–6 | Cottage | Meadow garden, fences, stepping stones |
+| 7–9 | Townhouse | Lawn, brick patio, hedges |
+| 10–12 | Apartments | Shared paved courtyard |
+| 13–15 | High-rise | Stone plaza |
+| 16–18 | Skyscraper | Raised civic terrace |
+| 19–21 | Neon tower | Illuminated plaza, cyan base band |
+| 22–24 | Prism spire | Faceted transit court, violet platform |
+| 25–27 | Sky garden | Biosphere terrace, green base band and roof planting |
+| 28–30 | Arcology | Civic energy platform, blue base band |
 
-Each tier has a different massing and height curve; all four levels within it add height. Each tier unlocks one segment, from a single segment at levels 1–4 to five at levels 17–20. Persistent segment slots independently support colors and classic windows, glass facades, or balconies. The server only accepts edits for unlocked segments. Facade details are rendered on all four sides. Separate lot polygons fill irregular street-bounded land.
+Every three levels unlock a model tier and one editable segment: one at levels 1–3, up to ten at levels 28–30. Each level within a tier increases height. Segment colors and classic windows, glass facades, or balconies persist independently. The server accepts edits only for unlocked segments; ten storage slots are initialized on creation.
 
-`0002_progression.sql` preserves existing levels, initializes corresponding cumulative XP, and converts legacy resource balances to bricks. Selected illustrative demo neighbors show the full five-tier range. The old `resources` column is retained only for migration compatibility and is no longer used for progression or spending.
+Apartments and higher models have parcel-following bases. Every upper segment proposes an outline, then scales and positions it inside the convex outline immediately below, leaving a structural setback. Ordinary towers can clip a corner into a pentagon. Neon towers use beveled eight-sided cores; prism spires use triangles; sky gardens use pentagons; arcologies use hexagons. The later shapes turn slightly as they rise, while their corners stay supported. Facade details follow every generated wall. Terrace planting checks the roof space remaining outside the next segment. Skyscrapers and higher models narrow bordering street surfaces using their actual podium contours.
+
+`0004_ten_tiers.sql` extends cumulative XP thresholds through level 30, recalculates levels from existing earned XP, preserves saved segment designs while padding storage to ten slots, and changes construction milestones to every third level. XP and brick balances are preserved. Fresh demo fixtures cover all ten tiers; existing demo residents retain their progress and can use the dev tier previews. The old `resources` column remains for migration compatibility.
 
 GitHub account control and provider counts are verifiable. Provider data comes from the past-year contribution collection; credited high-water marks prevent repeated refresh awards. This conservative version may under-credit activity when old contributions leave the rolling year. Permanent provider event IDs remain a future improvement. School email, website ownership, LinkedIn, and package release verification are not integrated yet.
 
@@ -164,7 +171,7 @@ The straight road segments, shared angled junctions, tapering widths, and solid-
 
 - `D`: occupied weight divided by all possible plot weight.
 - `M`: distance-weighted mean level of occupied nearby buildings.
-- `L`: `(M−1)/19`, or zero when there are no occupied neighbors.
+- `L`: `(M−1)/29`, or zero when there are no occupied neighbors.
 - Road score: **`0.45 × D + 0.55 × L`**.
 - Rural roads below 0.25; suburban from 0.25 to below 0.72; urban at 0.72 or above.
 
@@ -174,6 +181,6 @@ Roads correlate with neighboring development, while individual building models a
 
 `shared/plots.ts` precomputes 4 × 3 areas (12 slots). Even sums of area coordinates align buildings with horizontal roads; odd sums use the angled side-road family. Adjacent areas switch families. Every slot independently chooses one of the two facing directions on its chosen family. Plans are cached in bounded chunks; occupancy never rotates existing buildings.
 
-Every occupied plot creates its planned entrance road. The rectangular model, foundation, porch, and path align to that frontage. Separate ground polygons are clipped to road shoulders; fences leave an entrance gap.
+Every occupied plot creates its planned entrance road. Small rectangular models and their entrances align to that frontage; larger bases follow parcel edges and upper sections fit their supporting shapes. Separate ground polygons are clipped to road shoulders; fences leave an entrance gap.
 
-The server returns 24 available slots around the signed-in resident using occupancy independent of the render limit, excluding public zones. Dev mode shows level-one cottage outlines, entrance arrows, and an initial road prediction. Each candidate is simulated individually; simultaneous joins can take a previewed slot before redemption. Ground gardens are cleared when a real building occupies the plot.
+The server returns 24 available slots around the signed-in resident using occupancy independent of the render limit, excluding public zones. Dev mode shows level-one shack outlines, entrance arrows, and an initial road prediction. Each candidate is simulated individually; simultaneous joins can take a previewed slot before redemption. Ground gardens are cleared when a real building occupies the plot.

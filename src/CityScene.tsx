@@ -20,7 +20,7 @@ import type { PlotPreview } from './plotPreview';
 import { tierForLevel, tierIndex } from '../shared/progression';
 import { isReservedPlot } from '../shared/projects';
 
-export interface SceneHandle { focus: (b: {x:number;z:number}) => void; reset: () => void; zoom: (amount: number) => void; }
+export interface SceneHandle { focus: (b: {x:number;z:number;level?:number}) => void; reset: () => void; zoom: (amount: number) => void; }
 interface Props { buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; debugScores:boolean; previews:PlotPreview[]; projects:PublicProject[]; onProject:(id:string)=>void; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
 const SPACING = PLOT_SPACING;
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -32,7 +32,13 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
   const night=lighting.night;
   const [unavailable, setUnavailable] = useState(false);
   useImperativeHandle(ref, () => ({
-    focus(b) { if (engine.current) engine.current.focus = new THREE.Vector3(plotPosition(b.x,b.z).x, 0, plotPosition(b.x,b.z).z); },
+    focus(b) {
+      const e=engine.current;if(!e)return;
+      const resident=props.current.buildings.find(t=>t.x===b.x&&t.z===b.z),position=plotPosition(b.x,b.z);
+      const height=resident?buildingForm({...resident,level:b.level??resident.level}).topY:0;
+      e.focus=new THREE.Vector3(position.x,height>12?height*.42:0,position.z);
+      if(height>22){e.camera.zoom=Math.min(e.camera.zoom,.9);e.camera.updateProjectionMatrix();}
+    },
     reset() { const e = engine.current; if (!e) return; e.focus = new THREE.Vector3(0,0,0); e.camera.position.set(38, 36, 46).multiplyScalar(4).add(e.controls.target); e.camera.zoom = .83; e.camera.updateProjectionMatrix(); },
     zoom(amount) { const e = engine.current; if (!e) return; e.camera.zoom = THREE.MathUtils.clamp(e.camera.zoom * amount, .4, 3.8); e.camera.updateProjectionMatrix(); },
   }), []);
@@ -62,9 +68,9 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     controls.listenToKeyEvents(renderer.domElement);
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     const ambient = new THREE.HemisphereLight('#f2f7ff', '#93aa80', 2.8); scene.add(ambient);
-    const sun = new THREE.DirectionalLight('#fff3df', 3.1); sun.position.set(-20,40,25);
+    const sun = new THREE.DirectionalLight('#fff3df', 3.1); sun.position.set(-35,85,40);
     sun.castShadow = true; sun.shadow.mapSize.set(2048,2048);
-    Object.assign(sun.shadow.camera, { left: -50, right: 50, top: 50, bottom: -50, near: 1, far: 120 });
+    Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 65, bottom: -55, near: 1, far: 200 });
     sun.shadow.bias = -.001; sun.shadow.normalBias = .06; scene.add(sun);
     const city = new THREE.Group(); const selection = new THREE.Group(); const planned=new THREE.Group(); const labels=new THREE.Group(); scene.add(city, selection, planned, labels);
     const labelRenderer=new CSS2DRenderer();labelRenderer.domElement.className='score-label-layer';
@@ -146,7 +152,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
       if(Math.abs(camera.far-far)>.1){camera.far=far;camera.updateProjectionMatrix();}
       const ground=viewedGround();
       sun.target.position.set(ground.x,0,ground.z);sun.target.updateMatrixWorld();
-      sun.position.set(ground.x+Math.cos(light.sunPhase)*34,12+light.daylight*38,ground.z+25);
+      sun.position.set(ground.x+Math.cos(light.sunPhase)*45,30+light.daylight*55,ground.z+40);
       if(navigating&&now-lastKeyboardPan>=250){panEnd();lastKeyboardPan=now;}
       terrain.update(camera,light.night);composer.render(seconds);
       if(labels.children.length)labelRenderer.render(scene,camera);
@@ -199,7 +205,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     const next=previews[0];
     if(next){
       const element=document.createElement('div');element.className='building-score plot-preview-label';
-      element.textContent=`Next plot · L1 Cottage`;
+      element.textContent=`Next plot · L1 ${tierForLevel(1).name}`;
       element.setAttribute('aria-label',`Next available plot ${next.plan.x}, ${next.plan.z}, ${next.plan.axis} frontage, predicted score ${next.score.total.toFixed(3)}`);
       const label=new CSS2DObject(element);label.position.set(next.plan.position.x,next.form.topY+.6,next.plan.position.z);e.labels.add(label);
     }
@@ -260,7 +266,7 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
   const mat = (color: string) => {
     if (!materials.has(color)) materials.set(color,new THREE.MeshStandardMaterial({
       color,flatShading:true,roughness:1,
-      emissive:night&&(color==='#f3d795'||color==='#f0daab')?color:'#000000',emissiveIntensity:.55,
+      emissive:night&&['#f3d795','#f0daab','#90d9d8','#bcb0e9','#a4d0ad','#99cfe4'].includes(color)?color:'#000000',emissiveIntensity:.55,
     }));
     return materials.get(color)!;
   };
@@ -381,7 +387,11 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       return {x:x*c-z*s,z:x*s+z*c};
     });
     const podium=form.podium?localOutline(form.podium):null;
-    if(form.podiumFoundation)prism(plot,form.podiumFoundation.map(p=>({x:p.x-position.x,z:p.z-position.z})),.085,foundationHeight,foundationColor,b.id);
+    if(form.podiumFoundation){
+      const outline=form.podiumFoundation.map(p=>({x:p.x-position.x,z:p.z-position.z})),band=form.tier>=6?.07:0;
+      if(band)prism(plot,outline,.085,band,['#90d9d8','#bcb0e9','#a4d0ad','#99cfe4'][form.tier-6],b.id);
+      prism(plot,outline,.085+band,foundationHeight-band,foundationColor,b.id);
+    }
     else box(architecture,0,.085+foundationHeight/2,0,footprint.w+padding*2,foundationHeight,footprint.d+padding*2,foundationColor,b.id);
     // Only furnish the ground that remains between the growing podium and the lot edge.
     const groundSpace=(x:number,z:number,w:number,d:number,aligned=false)=>{
@@ -398,7 +408,7 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     const groundBox=(parent:THREE.Group,x:number,y:number,z:number,w:number,height:number,d:number,color:string)=>{
       if(groundSpace(x,z,w,d,parent===architecture))box(parent,x,y,z,w,height,d,color);
     };
-    if(kind==='rural'){
+    if(kind==='rural'&&form.tier>0){
       const facing={x:Math.sin(plan.rotation),z:Math.cos(plan.rotation)};
       const frontEdge=lot.map((a,i)=>{const b=lot[(i+1)%lot.length];return ((a.x+b.x)*facing.x+(a.z+b.z)*facing.z)/2;});
       const frontage=frontEdge.indexOf(Math.max(...frontEdge));
@@ -424,96 +434,81 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       groundBox(architecture,footprint.w/2+padding+.22,.22,-.9,.32,.25,.95,foundationColor);
       groundBox(architecture,footprint.w/2+padding+.22,.38,-.9,.25,.08,.82,'#87a875');
     }
-    if(form.tier===1){
+    if(form.tier===2){
       groundBox(architecture,0,.11,-footprint.d/2-padding-.4,2.2,.045,.65,'#c8a991');
       for(const side of [-1,1])groundBox(plot,side*2.25,.25,-.4,.35,.3,1.8,'#8fab80');
-    }else if(form.tier===2){
+    }else if(form.tier===3){
       groundBox(plot,-2.15,.24,.9,.35,.26,1.3,'#b99c7e');groundBox(plot,-2.15,.48,.9,.1,.28,1.3,'#b99c7e');
       groundBox(plot,2.15,.21,-1,.45,.23,1,'#c3c6b8');groundBox(plot,2.15,.36,-1,.36,.1,.88,'#8fab80');
-    }else if(form.tier===3){
+    }else if(form.tier===4){
       for(const x of [-2.25,2.25])groundBox(plot,x,.096,0,.06,.015,4.4,'#9dadad');
       groundBox(plot,-2.25,1,-1.8,.07,1.8,.07,'#738b8d');groundBox(plot,-2.25,1.94,-1.8,.25,.12,.25,night?'#f0daab':'#d8d8c7');
-    }else if(form.tier===4){
+    }else if(form.tier===5){
       for(const x of [-2.25,2.25]){
         groundBox(plot,x,.18,0,.4,.2,3.7,'#afbfc1');groundBox(plot,x,.32,0,.3,.12,3.5,'#8fab80');
         groundBox(plot,x,.45,-1.65,.16,.16,.16,night?'#f0daab':'#d8d8c7');
       }
     }
-    const parts: {w:number;d:number;h:number;y:number;polygon?:GroundPoint[]}[] = form.tier<=1?[{...footprint,h,y:baseY}]
-      :form.tier===2?[{...footprint,h:h/3,y:baseY,polygon:podium!},{w:footprint.w*.87,d:footprint.d*.85,h:h*2/3,y:baseY+h/3}]
-      :form.tier===3?[{...footprint,h:h*.25,y:baseY,polygon:podium!},{w:footprint.w*.81,d:footprint.d*.83,h:h*.75,y:baseY+h*.25}]
-      :[{...footprint,h:h*.2,y:baseY,polygon:podium!},{w:footprint.w*.76,d:footprint.d*.76,h:h*.65,y:baseY+h*.2},{w:footprint.w*.62,d:footprint.d*.62,h:h*.15,y:baseY+h*.85}];
-    const win=night?'#f3d795':'#627e8a';
+    const parts=form.sections.map(section=>({...section,polygon:localOutline(section.outline),cap:localOutline(section.cornice)}));
+    const win=night?'#f3d795':'#627e8a',futureAccent=['#90d9d8','#bcb0e9','#a4d0ad','#99cfe4'][Math.max(0,form.tier-6)];
     for(const p of parts){
-      for(let segment=0;segment<form.segments.length;segment++){
-        const low=Math.max(p.y,baseY+h*segment/form.segments.length),high=Math.min(p.y+p.h,baseY+h*(segment+1)/form.segments.length);
-        if(high<=low)continue;
-        if(p.polygon)prism(architecture,p.polygon,low,high-low,COLORS[form.segments[segment].color].hex,b.id);
-        else box(architecture,0,(low+high)/2,0,p.w,high-low,p.d,COLORS[form.segments[segment].color].hex,b.id);
-      }
-      const floors=Math.max(1,Math.min(10,Math.floor(p.h/(form.tier<=1?1:.75))));
+      const design=form.segments[p.segment];
+      prism(architecture,p.polygon,p.y,p.h,COLORS[design.color].hex,b.id);
+      const floors=Math.max(1,Math.min(6,Math.floor(p.h/.75)));
       for(let i=0;i<floors;i++){
-        const y=p.y+.38+i*(p.h-.5)/floors;
-        const design=form.segments[Math.min(form.segments.length-1,Math.floor((y-baseY)/h*form.segments.length))],ww=design.style==='glass'?.55:.36;
-        if(p.polygon){
-          for(let edge=0;edge<p.polygon.length;edge++){
-            const a=p.polygon[edge],end=p.polygon[(edge+1)%p.polygon.length],dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz),nx=dz/length,nz=-dx/length;
-            const columns=Math.max(2,Math.floor(length/.95));
-            for(let column=0;column<columns;column++){
-              const t=(column+.5)/columns,x=a.x+dx*t,z=a.z+dz*t;
-              // Leave the center of the frontage wall free for its entrance.
-              if(i===0&&nz>.9&&Math.abs(x)<.55)continue;
-              const window=box(architecture,x+nx*.024,y,z+nz*.024,ww,.29,.04,win,b.id);
-              window.rotation.y=-Math.atan2(dz,dx);
-            }
-            if(design.style==='balcony'){
-              const balcony=box(architecture,(a.x+end.x)/2+nx*.12,y-.2,(a.z+end.z)/2+nz*.12,length*.7,.06,.28,'#deded2',b.id);
-              balcony.rotation.y=-Math.atan2(dz,dx);
-              const rail=box(architecture,(a.x+end.x)/2+nx*.245,y-.05,(a.z+end.z)/2+nz*.245,length*.7,.22,.035,'#9bb2ae',b.id);
-              rail.rotation.y=balcony.rotation.y;
-            }
+        const y=p.y+p.h*(i+.5)/floors,windowHeight=Math.min(.29,p.h/floors*.42);
+        for(let edge=0;edge<p.polygon.length;edge++){
+          const a=p.polygon[edge],end=p.polygon[(edge+1)%p.polygon.length],dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz),nx=dz/length,nz=-dx/length;
+          const columns=Math.max(1,Math.floor(length/.95)),ww=Math.min(design.style==='glass'?.55:.36,length/columns*.65);
+          for(let column=0;column<columns;column++){
+            const t=(column+.5)/columns,x=a.x+dx*t,z=a.z+dz*t;
+            if(p.segment===0&&i===0&&nz>.9&&Math.abs(x)<.55)continue;
+            const window=box(architecture,x+nx*.024,y,z+nz*.024,ww,windowHeight,.04,win,b.id);
+            window.rotation.y=-Math.atan2(dz,dx);
           }
-          continue;
-        }
-        for(let column=-1;column<=1;column++){
-          if(!(i===0&&column===0&&p.y===baseY))box(architecture,column*p.w*.26,y,p.d/2+.018,ww,.29,.04,win,b.id);
-          box(architecture,p.w/2+.018,y,column*p.d*.26,.04,.29,ww,win,b.id);
-          box(architecture,column*p.w*.26,y,-p.d/2-.018,ww,.29,.04,win,b.id);
-          box(architecture,-p.w/2-.018,y,column*p.d*.26,.04,.29,ww,win,b.id);
-        }
-        if(design.style==='balcony')for(const sign of [-1,1]){
-          box(architecture,0,y-.2,sign*(p.d/2+.12),p.w*.72,.06,.3,'#deded2',b.id);
-          box(architecture,0,y-.05,sign*(p.d/2+.25),p.w*.72,.22,.035,'#9bb2ae',b.id);
-          box(architecture,sign*(p.w/2+.12),y-.2,0,.3,.06,p.d*.72,'#deded2',b.id);
+          if(design.style==='balcony'&&length>.8){
+            const balcony=box(architecture,(a.x+end.x)/2+nx*.12,y-windowHeight/2-.055,(a.z+end.z)/2+nz*.12,length*.7,.06,.28,'#deded2',b.id);
+            balcony.rotation.y=-Math.atan2(dz,dx);
+            const rail=box(architecture,(a.x+end.x)/2+nx*.245,y-windowHeight/2+.09,(a.z+end.z)/2+nz*.245,length*.7,.22,.035,'#9bb2ae',b.id);
+            rail.rotation.y=balcony.rotation.y;
+          }
         }
       }
-      if(p.polygon)prism(architecture,localOutline(form.podiumCornice!),p.y+p.h+.01,.12,'#ece4d5',b.id);
-      else box(architecture,0,p.y+p.h+.06,0,p.w+.14,.12,p.d+.14,'#ece4d5',b.id);
-      if(b.style==='terrace')box(architecture,-p.w*.3,p.y+p.h+.18,p.d*.27,.4,.25,.48,'#7f9d76');
-    }
-    if(b.style==='modern') {
-      // Project the trim beyond the wall instead of leaving its outer face coplanar.
-      for(const p of parts){
-        if(p.polygon){
-          for(let i=0;i<p.polygon.length;i++){
-            const a=p.polygon[i],end=p.polygon[(i+1)%p.polygon.length],dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz);
-            const trim=box(architecture,(a.x+end.x)/2+dz/length*.025,p.y+p.h/2,(a.z+end.z)/2-dx/length*.025,.12,p.h,.06,'#e8e9df',b.id);
-            trim.rotation.y=-Math.atan2(dz,dx);
-          }
-        }else box(architecture,-p.w/2+.06,p.y+p.h/2,0,.16,p.h,p.d+.05,'#e8e9df',b.id);
+      prism(architecture,p.cap,p.y+p.h+.006,.07,form.tier>=6?futureAccent:'#ece4d5',b.id);
+      if(b.style==='modern'||form.tier>=6)for(let i=0;i<p.polygon.length;i++){
+        const a=p.polygon[i],end=p.polygon[(i+1)%p.polygon.length],dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz);
+        const trim=box(architecture,a.x+dx*.15+dz/length*.028,p.y+p.h/2,a.z+dz*.15-dx/length*.028,.07,p.h,.06,form.tier>=6?futureAccent:'#e8e9df',b.id);
+        trim.rotation.y=-Math.atan2(dz,dx);
       }
-      if(kind==='rural')box(architecture,.85,h+baseY+.18,-.5,.5,.2,.6,'#8a969b',b.id);
-      else box(architecture,.55,h+baseY+.36,.3,.6,.6,.65,'#8a969b',b.id);
+      // Terrace furniture must fit the roof left outside the next supporting shape.
+      if(b.style==='terrace'||form.tier===8){
+        const above=parts[p.segment+1]?.polygon,center={x:p.polygon.reduce((sum,v)=>sum+v.x,0)/p.polygon.length,z:p.polygon.reduce((sum,v)=>sum+v.z,0)/p.polygon.length};
+        for(let i=0;i<p.polygon.length;i++){
+          const a=p.polygon[i],end=p.polygon[(i+1)%p.polygon.length],x=center.x+((a.x+end.x)/2-center.x)*.84,z=center.z+((a.z+end.z)/2-center.z)*.84;
+          if(above&&inRoadObstacle({x,z},[above],.25))continue;
+          if(Math.hypot(x-center.x,z-center.z)<.3)continue;
+          box(architecture,x,p.y+p.h+.13,z,.32,.18,.32,'#7f9d76',b.id);
+          if(form.tier===8)tree(architecture,x,z,.22,box,mat,p.y+p.h+.15);
+        }
+      }
     }
-    if(form.tier<=1||b.style==='spire'){
-      const rural=form.tier<=1,roofHeight=rural?.8:1.5;
-      const roof=new THREE.Mesh(new THREE.ConeGeometry(1,roofHeight,4),mat(rural?'#b98e77':color));
-      const top=parts[parts.length-1];
-      roof.geometry.rotateY(Math.PI/4);roof.scale.set((top.w+.15)/Math.SQRT2,1,(top.d+.15)/Math.SQRT2);
-      roof.position.y=h+baseY+roofHeight/2+.01;roof.userData.owner=b.id; roof.castShadow=true;architecture.add(roof);
-      if(rural)box(architecture,-.85,h+baseY+.85,-.5,.32,.5,.32,'#c5b5a0',b.id);
-      else box(architecture,0,h+baseY+1.76,0,.07,1,.07,'#6d8188',b.id);
-    }
+    const top=parts[parts.length-1],roofY=baseY+h;
+    const topCenter={x:top.polygon.reduce((sum,p)=>sum+p.x,0)/top.polygon.length,z:top.polygon.reduce((sum,p)=>sum+p.z,0)/top.polygon.length};
+    const roofW=Math.max(...top.polygon.map(p=>p.x))-Math.min(...top.polygon.map(p=>p.x)),roofD=Math.max(...top.polygon.map(p=>p.z))-Math.min(...top.polygon.map(p=>p.z));
+    if(form.tier===0){
+      const roof=box(architecture,topCenter.x,roofY+.12,topCenter.z,roofW+.16,.13,roofD+.16,'#9b8970',b.id);roof.rotation.x=.09;
+      for(const sign of [-1,1])box(architecture,sign*footprint.w*.28,baseY+h/2,footprint.d/2+.03,.075,h,.055,'#b6a186',b.id);
+    }else if(form.tier<=2||b.style==='spire'&&form.tier<6){
+      const roofHeight=form.tier<=2?.7:1.5;
+      const roof=new THREE.Mesh(new THREE.ConeGeometry(1,roofHeight,4),mat(form.tier<=2?'#b98e77':color));
+      roof.geometry.rotateY(Math.PI/4);roof.scale.set((roofW+.1)/Math.SQRT2,1,(roofD+.1)/Math.SQRT2);
+      roof.position.set(topCenter.x,roofY+roofHeight/2+.075,topCenter.z);roof.userData.owner=b.id;roof.castShadow=true;architecture.add(roof);
+    }else if(form.tier>=6){
+      const crown=top.polygon.map(p=>({x:topCenter.x+(p.x-topCenter.x)*.75,z:topCenter.z+(p.z-topCenter.z)*.75}));
+      prism(architecture,crown,roofY+.08,form.tier===9?.9:.35,futureAccent,b.id);
+      const mast=box(architecture,topCenter.x,roofY+(form.tier===9?1.65:.95),topCenter.z,.075,form.tier===9?1.6:1.3,.075,'#718a9a',b.id);
+      if(form.tier===6||form.tier===9)box(architecture,mast.position.x,mast.position.y+.75,mast.position.z,.16,.13,.16,futureAccent,b.id);
+    }else if(b.style==='modern')box(architecture,topCenter.x,roofY+.25,topCenter.z,.45,.35,.45,'#8a969b',b.id);
     const front=podium?Math.max(...podium.map(p=>p.z)):footprint.d/2;
     box(architecture,0,baseY+.4,front+.024,.6,.8,.04,'#647b80',b.id);
     const fixture=night?'#f0daab':'#d8d8c7';
@@ -525,7 +520,7 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       box(architecture,-footprint.w*.3,baseY+.82,side*(front+.055),.13,.18,.08,fixture,b.id);
       box(architecture,side*(footprint.w/2+.055),baseY+.82,-footprint.d*.3,.08,.18,.13,fixture,b.id);
     }
-    if(kind==='rural'){
+    if(kind==='rural'&&form.tier>0){
       box(architecture,0,baseY+.06,front+.35,1.25,.12,.7,foundationColor,b.id);
       box(architecture,0,baseY+.98,front+.3,1.3,.1,.7,'#ece4d5',b.id);
       for(const x of [-.55,.55])box(architecture,x,baseY+.52,front+.53,.07,.92,.07,'#c6b996',b.id);
@@ -541,12 +536,12 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       for(let i=0;i<count;i++)box(architecture,0,.115,front+.18+(pathEnd-front-.3)*i/(count-1),.66,.05,.25,pathColor);
     }
     else if(pathEnd>front)box(architecture,0,.12,(front+pathEnd)/2,b.style==='modern'?1.05:.78,.07,pathEnd-front,pathColor);
-    if(b.style==='spire'&&form.tier<4)box(architecture,0,baseY-.02,front+.24,.83,.06,.42,foundationColor);
-    for(const [x,z,size] of form.tier<3?[[-2.25,-1.8,.75],[2.15,1.6,.55]]:[[2.1,1.8,.45]]){
+    if(b.style==='spire'&&form.tier<5)box(architecture,0,baseY-.02,front+.24,.83,.06,.42,foundationColor);
+    for(const [x,z,size] of form.tier<4?[[-2.25,-1.8,.75],[2.15,1.6,.55]]:[[2.1,1.8,.45]]){
       if(groundSpace(x,z,size*1.5,size*1.5))tree(plot,x,z,size,box,mat);
     }
     // A simple rooftop garden instead of a texture or subdivided material face.
-    if(b.style==='terrace'&&kind!=='rural') tree(architecture,.48,-.25,.38,box,mat,h+baseY+.12);
+    if(b.style==='terrace'&&kind!=='rural'&&roofW>1.3&&roofD>1.3)tree(architecture,topCenter.x+.25,topCenter.z-.2,.25,box,mat,h+baseY+.12);
   }
   const residentPositions=buildings.map(b=>plotPosition(b.x,b.z));
   for(const project of projects){

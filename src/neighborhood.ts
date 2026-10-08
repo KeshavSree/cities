@@ -2,6 +2,7 @@ import type { Building } from '../shared/types';
 import { plotPosition, PLOT_SPACING } from '../shared/world';
 import { plotPlan } from '../shared/plots';
 import { PUBLIC_PROJECTS, projectBoundary } from '../shared/projects';
+import { MAX_LEVEL } from '../shared/progression';
 
 export const SETTLEMENT_THRESHOLDS={suburban:.25,urban:.72};
 export const SETTLEMENT_WEIGHTS={density:.45,levels:.55};
@@ -26,7 +27,7 @@ export function neighborhoodScores(buildings:Building[]) {
       nearbyResidents++;weight+=importance;levelWeight+=importance*b.level;
     }
     const density=weight/total,averageLevel=weight?levelWeight/weight:0;
-    const levels=weight?Math.max(0,(averageLevel-1)/19):0;
+    const levels=weight?Math.max(0,(averageLevel-1)/(MAX_LEVEL-1)):0;
     const densityContribution=SETTLEMENT_WEIGHTS.density*density,levelContribution=SETTLEMENT_WEIGHTS.levels*levels;
     const score={total:densityContribution+levelContribution,density,levels,densityContribution,levelContribution,averageLevel,nearbyResidents};
     cache.set(key,score);return score;

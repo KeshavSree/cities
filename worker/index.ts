@@ -4,7 +4,7 @@ import { seedDemo, ensureDemoConnections } from './demo';
 import { VIEW_RADIUS } from '../shared/world';
 import { availablePlotPlans } from '../shared/plots';
 import { reward, projects, processConstruction } from './economy';
-import { REWARDS, MAX_LEVEL, SEGMENT_COST, SEGMENT_STYLES, xpAtLevel } from '../shared/progression';
+import { REWARDS, MAX_LEVEL, TIERS, SEGMENT_COST, SEGMENT_STYLES, tierStartLevel, xpAtLevel } from '../shared/progression';
 import { PROJECT_RADIUS } from '../shared/projects';
 import { plotPosition } from '../shared/world';
 
@@ -323,11 +323,11 @@ export default {
       }
       if(path==='/api/segments'&&req.method==='POST'){
         const data=await body(req),index=Number(data.segment);
-        if(!Number.isInteger(index)||index<0||index>4||typeof data.color!=='string'||!Object.hasOwn(COLORS,data.color)||typeof data.style!=='string'||!Object.hasOwn(SEGMENT_STYLES,data.style))throw new ApiError('Choose a valid segment design.');
+        if(!Number.isInteger(index)||index<0||index>=TIERS.length||typeof data.color!=='string'||!Object.hasOwn(COLORS,data.color)||typeof data.style!=='string'||!Object.hasOwn(SEGMENT_STYLES,data.style))throw new ApiError('Choose a valid segment design.');
         const design=JSON.stringify({color:data.color,style:data.style});
         const result=await env.DB.prepare(`UPDATE buildings SET segments=json_set(segments,?,json(?)),bricks=bricks-?,updated_at=datetime('now')
           WHERE user_id=? AND bricks>=? AND level>=? AND COALESCE(json_extract(segments,?), '')<>? RETURNING user_id`)
-          .bind(`$[${index}]`,design,SEGMENT_COST,user.id,SEGMENT_COST,index*4+1,`$[${index}]`,design).first();
+          .bind(`$[${index}]`,design,SEGMENT_COST,user.id,SEGMENT_COST,tierStartLevel(index),`$[${index}]`,design).first();
         if(!result)throw new ApiError('That segment is locked, you need more bricks, or that design is already selected.',409);
         return json({building:await changed(env,user.id,ctx)});
       }
@@ -369,7 +369,7 @@ export default {
         const data=await body(req),target=typeof data.tower==='string'?data.tower:user.id;
         const demo=await building(env,target);if(!demo.is_demo)throw new ApiError('Choose a demo resident.');
         if(data.level!==undefined){
-          const level=Number(data.level);if(!Number.isInteger(level)||level<1||level>MAX_LEVEL)throw new ApiError('Choose level 1–20.');
+          const level=Number(data.level);if(!Number.isInteger(level)||level<1||level>MAX_LEVEL)throw new ApiError(`Choose level 1–${MAX_LEVEL}.`);
           await env.DB.prepare("UPDATE buildings SET xp=?,level=?,updated_at=datetime('now') WHERE user_id=?").bind(xpAtLevel(level),level,target).run();
           // A preview tier change is a dev edit, not a verified construction event.
           await env.DB.prepare('UPDATE construction_events SET processed=1 WHERE user_id=?').bind(target).run();
