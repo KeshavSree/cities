@@ -451,6 +451,20 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     }
     const parts=form.sections.map(section=>({...section,polygon:localOutline(section.outline),cap:localOutline(section.cornice)}));
     const win=night?'#f3d795':'#627e8a',concrete='#e3e2d7',metal='#708a89',timber='#b39a78';
+    // Early models use punched windows in substantial walls. Glazing grows
+    // with the building's overall tier, including when glass details are chosen.
+    const glazing=[
+      {bay:1.15,width:.26,height:.30,ratio:.38},
+      {bay:1.10,width:.30,height:.34,ratio:.43},
+      {bay:.98,width:.34,height:.40,ratio:.50},
+      {bay:.90,width:.38,height:.46,ratio:.56},
+      {bay:.78,width:.43,height:.53,ratio:.64},
+      {bay:.70,width:.46,height:.59,ratio:.69},
+      {bay:.62,width:.46,height:.62,ratio:.73},
+      {bay:.62,width:.46,height:.62,ratio:.73},
+      {bay:.62,width:.46,height:.62,ratio:.73},
+      {bay:.62,width:.46,height:.62,ratio:.73},
+    ][form.tier];
     const edgeBeam=(a:GroundPoint,end:GroundPoint,y:number,width:number,height:number,color:string,inset=0)=>{
       const dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz);
       const mesh=box(architecture,(a.x+end.x)/2-dz/length*inset,y,(a.z+end.z)/2+dx/length*inset,length,height,width,color,b.id);
@@ -477,17 +491,17 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
         if(length<.14)continue;
         // Anchor the facade bays to a building-wide datum so adjacent tiers
         // share mullion lines even when one end of the wall steps back.
-        const tx=dx/length,tz=dz/length,start=a.x*tx+a.z*tz,bay=.62;
+        const tx=dx/length,tz=dz/length,start=a.x*tx+a.z*tz,bay=glazing.bay;
         const bays:number[]=[];
         for(let u=Math.ceil((start+.19)/bay)*bay;u<start+length-.19;u+=bay)bays.push(u-start);
         for(let i=0;i<floors;i++){
-          const y=p.y+loggiaHeight+floorHeight*(i+.5),windowHeight=Math.min(.62,floorHeight*.73);
+          const y=p.y+loggiaHeight+floorHeight*(i+.5),windowHeight=Math.min(glazing.height,floorHeight*glazing.ratio);
           for(const u of bays){
             const x=a.x+tx*u,z=a.z+tz*u;
             if(p.segment===0&&i===0&&nz>.9&&Math.abs(x)<.55)continue;
-            const ww=form.tier<3?.32:design.style==='glass'?.55:.46;
+            const ww=Math.min(length*.35,glazing.width*(design.style==='glass'?(form.tier<4?1.12:1.20):1));
             const window=box(architecture,x+nx*.024,y,z+nz*.024,ww,windowHeight,.04,win,b.id);window.rotation.y=-Math.atan2(dz,dx);
-            if(form.tier>=3){
+            if(form.tier>=5||design.style==='glass'&&form.tier>=3){
               const mullion=box(architecture,x+tx*ww/2+nx*.05,y,z+tz*ww/2+nz*.05,.035,windowHeight+.04,.055,metal,b.id);mullion.rotation.y=window.rotation.y;
             }
           }
@@ -551,7 +565,14 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       // A small inhabited pavilion finishes the composition, leaving a roof garden around it.
       const pavilion=top.polygon.map(p=>({x:topCenter.x+(p.x-topCenter.x)*.48,z:topCenter.z+(p.z-topCenter.z)*.48}));
       const pavilionHeight=b.style==='spire'?.95:.65;
-      prism(architecture,pavilion,roofY+.08,pavilionHeight,'#627e8a',b.id);
+      const glazedPavilion=form.tier>=5;
+      prism(architecture,pavilion,roofY+.08,pavilionHeight,glazedPavilion?'#627e8a':mixGroundColor(color,concrete,.35),b.id);
+      if(!glazedPavilion)for(let i=0;i<pavilion.length;i++){
+        const a=pavilion[i],end=pavilion[(i+1)%pavilion.length],dx=end.x-a.x,dz=end.z-a.z,length=Math.hypot(dx,dz);
+        if(length<.45)continue;
+        const window=box(architecture,(a.x+end.x)/2+dz/length*.024,roofY+.08+pavilionHeight*.55,(a.z+end.z)/2-dx/length*.024,Math.min(.38,length*.40),pavilionHeight*.43,.04,win,b.id);
+        window.rotation.y=-Math.atan2(dz,dx);
+      }
       const canopy=pavilion.map(p=>({x:topCenter.x+(p.x-topCenter.x)*1.14,z:topCenter.z+(p.z-topCenter.z)*1.14}));
       prism(architecture,canopy,roofY+.09+pavilionHeight,.09,concrete,b.id);
       for(const v of pavilion)box(architecture,v.x,roofY+.08+pavilionHeight/2,v.z,.055,pavilionHeight,.055,timber,b.id);
