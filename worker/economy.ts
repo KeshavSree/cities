@@ -3,7 +3,7 @@ import { REWARDS } from '../shared/progression';
 import type { PublicProject } from '../shared/types';
 
 export function reward(db:D1Database,key:string,id:string,source:string,xp:number,bricks:number,description:string){
-  return db.prepare('INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description) VALUES(?,?,?,?,?,?,?)')
+  return db.prepare('INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description) VALUES(?,?,?,?,?,?)')
     .bind(key,id,source,xp,bricks,description).run();
 }
 export async function projects(db:D1Database,viewer:string|null){
