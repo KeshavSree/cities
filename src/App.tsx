@@ -9,6 +9,7 @@ import { TowerDrawer } from './TowerDrawer';
 import { CityMap } from './CityMap';
 import { ScoreBreakdown } from './ScoreBreakdown';
 import { neighborhoodScores, settlementType } from './neighborhood';
+import { upcomingPlotPreviews } from './plotPreview';
 
 type Modal = 'invite' | 'help' | 'login' | null;
 const CityScene = lazy(()=>import('./CityScene').then(m=>({default:m.CityScene})));
@@ -116,6 +117,7 @@ export default function App() {
   const toggleScores=()=>{const next=!debugScores;setDebugScores(next);try{localStorage.setItem('cities-dev-scores',String(next));}catch{/* Dev scores work without storage. */}};
   const tower=buildings.find(b=>b.id===selected);
   const me=buildings.find(b=>b.id===snapshot?.me);
+  const previews=useMemo(()=>me?upcomingPlotPreviews(buildings,me,snapshot?.nextPlots||[]):[],[buildings,me,snapshot?.nextPlots]);
   const own=tower?.id===snapshot?.me;
   const neighbors=[...buildings].sort((a,b)=>b.level-a.level);
   const filtered=neighbors.filter(b=>`${b.name} ${b.username}`.toLowerCase().includes(query.toLowerCase()));
@@ -128,7 +130,7 @@ export default function App() {
   const showInvites=()=>{if(!me){setModal('login');return;}setModal('invite');api<{invites:Invite[]}>('/invites').then(r=>setInvites(r.invites)).catch(e=>notify(e.message,true));};
   const copy=async(token:string)=>{try{await navigator.clipboard.writeText(`${location.origin}/?invite=${token}`);setCopied(token);notify('Invitation copied.');}catch{notify('Clipboard is unavailable. Select and copy the invitation link below.',true);}};
   const createInvite=()=>action('invite',async()=>{const result=await api<{token:string}>('/invites',{});setInvites(prev=>[{token:result.token,created_at:new Date().toISOString(),used_by:null},...prev]);await copy(result.token);});
-  const demoJoin=(token:string)=>action(`join-${token}`,async()=>{const result=await api<{building:Building;inviter:Building}>('/dev/join',{invite:token});update(result.building);update(result.inviter);setInvites(prev=>prev.map(i=>i.token===token?{...i,used_by:result.building.id}:i));notify('A new neighbor moved in near your tower.');setModal(null);select(result.building);});
+  const demoJoin=(token:string)=>action(`join-${token}`,async()=>{const result=await api<{building:Building;inviter:Building}>('/dev/join',{invite:token});update(result.building);update(result.inviter);await load().catch(()=>{});setInvites(prev=>prev.map(i=>i.token===token?{...i,used_by:result.building.id}:i));notify('A new neighbor moved in near your tower.');setModal(null);select(result.building);});
 
   return <div className={`app ${lighting.night?'night':''}`} style={{background:`radial-gradient(ellipse at 40% 55%,${lighting.skyCenter} 0,${lighting.skyEdge} 100%)`}}>
     <header className="topbar">
@@ -145,7 +147,8 @@ export default function App() {
     </header>
 
     <main>
-      <Suspense fallback={<div className="scene-loading"><LoaderCircle className="spin" size={24}/><span>Drawing your little city…</span></div>}><CityScene ref={scene} buildings={buildings} selected={selected} lighting={lighting} center={center} debugScores={showScores} onSelect={id=>{const b=buildings.find(b=>b.id===id);if(b)select(b);}} onPan={(x,z)=>setCenter({x,z})}/></Suspense>
+      <Suspense fallback={<div className="scene-loading"><LoaderCircle className="spin" size={24}/><span>Drawing your little city…</span></div>}><CityScene ref={scene} buildings={buildings} selected={selected} lighting={lighting} center={center} debugScores={showScores} previews={previews} onSelect={id=>{const b=buildings.find(b=>b.id===id);if(b)select(b);}} onPan={(x,z)=>setCenter({x,z})}/></Suspense>
+      {showScores&&previews.length>0&&<div className="plot-preview-legend">{previews.length} planned plots · Outlines show level 1 massing and entrance direction</div>}
       {searchOpen && <section className="resident-search" aria-label="Find a neighbor">
         <div className="search-input"><Search size={17}/><input autoFocus placeholder="Find a name or username" value={query} onChange={e=>setQuery(e.target.value)} aria-label="Search residents"/><button className="icon-button" aria-label="Close search" onClick={()=>setSearchOpen(false)}><X size={16}/></button></div>
         <div className="resident-results">{filtered.length?filtered.map(b=><button key={b.id} className="resident-result" onClick={()=>select(b)}><span className="avatar small" style={{background:COLORS[b.color].hex}}>{initials(b.name)}</span><span><strong>{b.name}</strong><small>@{b.username}</small></span><span className="level-label">Lv. {b.level}</span></button>):<p className="empty-search">No neighbors match that name.</p>}</div>
@@ -164,7 +167,7 @@ export default function App() {
           {tower.website && <a href={tower.website} target="_blank" rel="noreferrer">Website<ArrowUpRight size={12}/></a>}
           <span className={`verification ${tower.is_demo?'demo':''}`}>{tower.is_demo?<Sparkles size={12}/>:<Check size={12}/>} {tower.is_demo?'Demo resident':'GitHub connected'}</span>
         </div>
-        {showScores && <ScoreBreakdown score={scoreAt(tower.x,tower.z)}/>}
+        {showScores && <ScoreBreakdown score={scoreAt(tower.x,tower.z)} building={tower}/>}
         <div className="tower-stat"><div><span className="stat-icon"><Layers size={19}/></span><div><span>Building level</span><strong>{tower.level}<small> and growing</small></strong></div></div><div className="tower-silhouette" style={{'--tower-color':COLORS[tower.color].hex} as React.CSSProperties}><i/><i/><i/></div></div>
         <div className="inspector-tabs" role="tablist" aria-label="Tower information" onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const next=tab==='overview'?'design':'overview';setTab(next);document.getElementById(`tab-${next}`)?.focus();}}}>
           <button role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected={tab==='overview'} onClick={()=>setTab('overview')}>Overview</button>

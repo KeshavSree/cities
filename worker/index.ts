@@ -1,7 +1,8 @@
 import { DAILY_REWARD, STYLE_COST, COLOR_COST, STYLES, COLORS, upgradeCost } from '../shared/types';
 import type { Building, Style, Color } from '../shared/types';
 import { seedDemo, ensureDemoConnections } from './demo';
-import { isLandPlot, VIEW_RADIUS } from '../shared/world';
+import { VIEW_RADIUS } from '../shared/world';
+import { availablePlotPlans } from '../shared/plots';
 
 interface Env {
   DB: D1Database; NEIGHBORHOODS: DurableObjectNamespace; ASSETS: Fetcher;
@@ -125,31 +126,26 @@ async function join(env: Env, profile: { id: number; login: string; name?: strin
   const id = uuid();
   const occupied = new Set((await env.DB.prepare('SELECT x,z FROM buildings WHERE x BETWEEN ? AND ? AND z BETWEEN ? AND ?').bind(invitation.x - 12, invitation.x + 12, invitation.z - 12, invitation.z + 12).all<{ x: number; z: number }>()).results.map(p => `${p.x},${p.z}`));
   let attempts = 0;
-  for (let radius = 1; radius <= 12; radius++) {
-    for (let dx = -radius; dx <= radius; dx++) for (let dz = -radius; dz <= radius; dz++) {
-      if (Math.max(Math.abs(dx), Math.abs(dz)) !== radius) continue;
-      const x = invitation.x + dx, z = invitation.z + dz;
-      if (!isLandPlot(x,z)) continue;
-      if (occupied.has(`${x},${z}`)) continue;
-      // A guard table's UNIQUE(token) is represented by the conditional claim below plus
-      // a NOT NULL assertion in the insert. A competing invite redemption rolls back the batch.
-      try {
-        await env.DB.batch([
-          env.DB.prepare(`INSERT INTO users(id, github_id, username, name, bio, avatar, github_url, website, github_token)
-            VALUES((SELECT ? WHERE EXISTS(SELECT 1 FROM invitations WHERE token=? AND used_by IS NULL)), ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, invite, String(profile.id), profile.login, profile.name || profile.login, profile.bio || '', profile.avatar_url || null, profile.html_url || null, /^https?:\/\//.test(profile.blog || '') ? profile.blog : null, encrypted),
-          env.DB.prepare('INSERT INTO buildings(user_id,x,z) VALUES(?,?,?)').bind(id, x, z),
-          env.DB.prepare('INSERT INTO metrics(user_id) VALUES(?)').bind(id),
-          env.DB.prepare('UPDATE invitations SET used_by=? WHERE token=? AND used_by IS NULL').bind(id, invite),
-        ]);
-        return id;
-      } catch (error) {
-        const used = await env.DB.prepare('SELECT used_by FROM invitations WHERE token=?').bind(invite).first<{ used_by: string | null }>();
-        if (used?.used_by) throw new ApiError('This invitation has already been used.', 409);
-        const found = await env.DB.prepare('SELECT id FROM users WHERE github_id=?').bind(String(profile.id)).first<{ id: string }>();
-        if (found) return found.id;
-        if (!String(error).includes('UNIQUE') || ++attempts > 5) throw error;
-        occupied.add(`${x},${z}`);
-      }
+  const plannedSlots=availablePlotPlans(invitation,occupied);
+  for (const {x,z} of plannedSlots) {
+    // A guard table's UNIQUE(token) is represented by the conditional claim below plus
+    // a NOT NULL assertion in the insert. A competing invite redemption rolls back the batch.
+    try {
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO users(id, github_id, username, name, bio, avatar, github_url, website, github_token)
+          VALUES((SELECT ? WHERE EXISTS(SELECT 1 FROM invitations WHERE token=? AND used_by IS NULL)), ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, invite, String(profile.id), profile.login, profile.name || profile.login, profile.bio || '', profile.avatar_url || null, profile.html_url || null, /^https?:\/\//.test(profile.blog || '') ? profile.blog : null, encrypted),
+        env.DB.prepare('INSERT INTO buildings(user_id,x,z) VALUES(?,?,?)').bind(id, x, z),
+        env.DB.prepare('INSERT INTO metrics(user_id) VALUES(?)').bind(id),
+        env.DB.prepare('UPDATE invitations SET used_by=? WHERE token=? AND used_by IS NULL').bind(id, invite),
+      ]);
+      return id;
+    } catch (error) {
+      const used = await env.DB.prepare('SELECT used_by FROM invitations WHERE token=?').bind(invite).first<{ used_by: string | null }>();
+      if (used?.used_by) throw new ApiError('This invitation has already been used.', 409);
+      const found = await env.DB.prepare('SELECT id FROM users WHERE github_id=?').bind(String(profile.id)).first<{ id: string }>();
+      if (found) return found.id;
+      if (!String(error).includes('UNIQUE') || ++attempts > 5) throw error;
+      occupied.add(`${x},${z}`);
     }
   }
   throw new ApiError('This neighborhood is full. Ask for an invitation from another neighbor.', 409);
@@ -196,7 +192,15 @@ export default {
         const rows = await env.DB.prepare(`${QUERY} WHERE b.x BETWEEN ? AND ? AND b.z BETWEEN ? AND ? ORDER BY ((b.x-?)*(b.x-?)+(b.z-?)*(b.z-?)) LIMIT 250`).bind(centerX - VIEW_RADIUS, centerX + VIEW_RADIUS, centerZ - VIEW_RADIUS, centerZ + VIEW_RADIUS, centerX, centerX, centerZ, centerZ).all<Building>();
         if (user && !rows.results.find(b => b.id === user.id)) rows.results.push(await building(env, user.id));
         const claimed = user ? await env.DB.prepare('SELECT 1 FROM daily_claims WHERE user_id=? AND day=?').bind(user.id, DAY()).first() : null;
-        return json({ buildings: rows.results, me: user?.id ?? null, demo: env.DEV_MODE === 'true', githubConfigured: authReady(env), claimedToday: Boolean(claimed), dailyReward: DAILY_REWARD, inviteRequired: true });
+        const own=rows.results.find(b=>b.id===user?.id);
+        let nextPlots:{x:number;z:number}[]=[];
+        if(own){
+          // Availability must include every occupied slot, even beyond the render limit.
+          const occupied=await env.DB.prepare('SELECT x,z FROM buildings WHERE x BETWEEN ? AND ? AND z BETWEEN ? AND ?')
+            .bind(own.x-12,own.x+12,own.z-12,own.z+12).all<{x:number;z:number}>();
+          nextPlots=availablePlotPlans(own,new Set(occupied.results.map(b=>`${b.x},${b.z}`))).slice(0,24).map(({x,z})=>({x,z}));
+        }
+        return json({ buildings: rows.results, nextPlots, me: user?.id ?? null, demo: env.DEV_MODE === 'true', githubConfigured: authReady(env), claimedToday: Boolean(claimed), dailyReward: DAILY_REWARD, inviteRequired: true });
       }
       if (path === '/api/dev/start' && req.method === 'POST') {
         if (env.DEV_MODE !== 'true') throw new ApiError('Demo mode is not enabled.', 404);
@@ -215,11 +219,8 @@ export default {
         if (!invitation) throw new ApiError('Choose an unused invitation you created.', 409);
         const id = `demo-${uuid()}`, username = `neighbor-${id.slice(-6)}`;
         const taken = new Set((await env.DB.prepare('SELECT x,z FROM buildings').all<{ x: number; z: number }>()).results.map(b => `${b.x},${b.z}`));
-        for (let radius = 1; radius < 12; radius++) for (let dx = -radius; dx <= radius; dx++) for (let dz = -radius; dz <= radius; dz++) {
-          if (Math.max(Math.abs(dx), Math.abs(dz)) !== radius) continue;
-          const x = invitation.x + dx, z = invitation.z + dz;
-          if (!isLandPlot(x,z)) continue;
-          if (taken.has(`${x},${z}`)) continue;
+        const plannedSlots=availablePlotPlans(invitation,taken);
+        for (const {x,z} of plannedSlots) {
           try {
             await env.DB.batch([
               env.DB.prepare(`INSERT INTO users(id,username,name,bio,is_demo) VALUES((SELECT ? WHERE EXISTS(SELECT 1 FROM invitations WHERE token=? AND used_by IS NULL)), ?, 'New neighbor', 'A new idea has moved into the neighborhood.', 1)`).bind(id, invite, username),

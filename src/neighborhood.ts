@@ -1,5 +1,6 @@
 import type { Building } from '../shared/types';
 import { plotPosition, PLOT_SPACING } from '../shared/world';
+import { plotPlan } from '../shared/plots';
 
 export const SETTLEMENT_THRESHOLDS={suburban:.25,urban:.72};
 export const SETTLEMENT_WEIGHTS={proximity:.1,connections:.9};
@@ -77,9 +78,13 @@ export function streetNetwork(buildings:Building[],densityAt:(x:number,z:number)
     junctions.set(`${endX},${endZ}`,{position:points[1],density:densities[2]});
   };
   for(const b of buildings){
-    add(b.x,b.z,true);add(b.x,b.z+1,true);
-    if(settlementType(densityAt(b.x,b.z))==='urban'||occupied.has(`${b.x},${b.z+1}`)||occupied.has(`${b.x},${b.z-1}`)){
-      add(b.x,b.z,false);add(b.x+1,b.z,false);
+    const plan=plotPlan(b.x,b.z),horizontal=plan.axis==='horizontal';
+    // An occupied plot always creates its planned entrance road, even in isolation.
+    add(plan.frontage.x,plan.frontage.z,plan.frontage.horizontal);
+    add(b.x,b.z,horizontal);add(b.x+(horizontal?0:1),b.z+(horizontal?1:0),horizontal);
+    if(settlementType(densityAt(b.x,b.z))==='urban'||
+      [[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dz])=>occupied.has(`${b.x+dx},${b.z+dz}`))){
+      add(b.x,b.z,!horizontal);add(b.x+(horizontal?1:0),b.z+(horizontal?0:1),!horizontal);
     }
   }
   return {roads,junctions};

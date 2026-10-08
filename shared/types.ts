@@ -10,6 +10,7 @@ export interface Building {
 export interface Bootstrap {
   buildings: Building[]; me: string | null; demo: boolean; githubConfigured: boolean;
   claimedToday: boolean; dailyReward: number; inviteRequired: boolean;
+  nextPlots:{x:number;z:number}[];
 }
 export const COLORS: Record<Color, { label: string; hex: string }> = {
   sand: { label: 'Sandstone', hex: '#dfba85' },

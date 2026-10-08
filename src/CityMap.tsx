@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { MapPin } from 'lucide-react';
 import { COLORS, type Building } from '../shared/types';
 import { PLOT_SPACING, coastZ, plotPosition } from '../shared/world';
+import { plotPlan } from '../shared/plots';
+import { buildingForm } from './buildingForm';
 import { neighborhoodDensity, streetNetwork, streetDensity, roadColor, shoulderColor, roadWidth, roadShoulder, mixGroundColor, SETTLEMENT_THRESHOLDS } from './neighborhood';
 
 export function CityMap({buildings,selected,center}:{buildings:Building[];selected:string|null;center:{x:number;z:number}}){
@@ -20,7 +22,8 @@ export function CityMap({buildings,selected,center}:{buildings:Building[];select
       const p=project({x:a.x+(b.x-a.x)*start,z:a.z+(b.z-a.z)*start}),q=project({x:a.x+(b.x-a.x)*end,z:a.z+(b.z-a.z)*end});
       return <g key={`${road.key}:${i}`}><line x1={p.x} y1={p.z} x2={q.x} y2={q.z} stroke={shoulderColor(density)} strokeWidth={(roadWidth(density)+roadShoulder(density))*10/PLOT_SPACING} strokeLinecap="round"/><line x1={p.x} y1={p.z} x2={q.x} y2={q.z} stroke={roadColor(density)} strokeWidth={roadWidth(density)*10/PLOT_SPACING} strokeLinecap="round"/></g>;
     }))}
-    {local.map(b=>{const p=project(plotPosition(b.x,b.z));return <rect key={b.id} x={p.x-2.5} y={p.z-2.5} width="5" height="5" fill={b.id===selected?'#7971df':COLORS[b.color].hex} stroke={b.id===selected?'#fff':'#6d877b'} strokeWidth={b.id===selected?1:.3}/>;})}
+    {local.map(b=>{const plan=plotPlan(b.x,b.z),p=project(plan.position),{w,d}=buildingForm(b,densityAt(b.x,b.z)).footprint,scale=10/PLOT_SPACING;
+      return <g key={b.id} transform={`rotate(${-plan.rotation*180/Math.PI} ${p.x} ${p.z})`}><rect x={p.x-w*scale/2} y={p.z-d*scale/2} width={w*scale} height={d*scale} fill={b.id===selected?'#7971df':COLORS[b.color].hex} stroke={b.id===selected?'#fff':'#6d877b'} strokeWidth={b.id===selected?1:.3}/><line x1={p.x} y1={p.z+d*scale/2} x2={p.x} y2={p.z+d*scale/2+1.5} stroke="#f8f7ec" strokeWidth=".7"/></g>;})}
     {local.filter(b=>b.invited_by).map(b=>{const parent=local.find(p=>p.id===b.invited_by);if(!parent)return null;const a=project(plotPosition(b.x,b.z)),p=project(plotPosition(parent.x,parent.z));return <line key={`invite-${b.id}`} x1={a.x} y1={a.z} x2={p.x} y2={p.z} stroke="#7971df" strokeWidth=".8" opacity=".8"/>;})}
   </svg><span><MapPin size={11}/> You’re in good company</span></div>;
 }

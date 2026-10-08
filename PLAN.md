@@ -76,3 +76,5 @@ City-first layout with quiet white controls, pale blue sky, green terrain, viole
 - Add a local dev toggle for camera-tracked numeric labels above each tower.
 - Show the selected tower’s raw proximity/invitation scores, weighted contributions, total, graph degree, and nearby resident count in the flush drawer.
 - Use one shared score calculation for the diagnostics, 3D world, and minimap, including the same loaded neighborhood data at view boundaries.
+
+- Planned twelve-slot orientation areas switch street families, with independent per-slot facing, four-sided windows/lights, and 24 upcoming placement previews in dev mode. Server joins and previews use the same shared plot planner.

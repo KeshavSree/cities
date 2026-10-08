@@ -131,7 +131,7 @@ Development dependencies override `sharp` and `shell-quote` to patched releases 
 
 ### Density and irregular streets
 
-Plot allocation uses integer keys internally, while a deterministic world projection offsets the visible plots and shared street corners. Buildings stay rectangular, with their front and back faces parallel to the frontage roads. Separate polygonal ground pads follow the irregular street corners. The terrain has no repeating square grid overlay. Existing towers stay in place when someone joins.
+Plot allocation uses integer keys internally, while a deterministic world projection offsets the visible plots and shared street corners. Buildings stay rectangular, with their front and back faces parallel to their chosen frontage roads. Separate polygonal ground pads follow the irregular street corners. The terrain has no repeating square grid overlay. Existing towers stay in place when someone joins.
 
 Settlement classification uses **both geography and the invitation graph**, calculated over a 7 × 7 plot neighborhood (three plot keys in each direction). Spatial weights use the actual rendered world distance, in plot-spacing units: `w = exp(-distance² / 3.2)`.
 
@@ -154,3 +154,11 @@ Each lot is clipped against its actual road shoulders. Its ground surface respon
 Clicking a tower selects its meshes for a white silhouette outline. Invitation connections remain violet and are only drawn for actual used invitations between loaded residents. New arrivals broadcast updates for both the neighbor and inviter so their graph degrees and surrounding land adapt live.
 
 The local demo includes a sample invitation tree. Every non-founder resident has an inviter connection; older local databases are backfilled without replacing existing invitations. Noah is invited by Zoe and remains rural with one connection. Invited real residents already receive this connection during joining. The founding account is the only account that can exist before any connections.
+
+### Planned orientations and future plots
+
+`shared/plots.ts` precomputes whole 4 × 3 areas (12 slots). The area coordinates are `floor((x + 2) / 4)` and `floor((z + 1) / 3)`. Even area-coordinate sums align buildings with the horizontal road family; odd sums align them with the vertical family. Every neighboring area therefore switches road family after twelve planned slots. This is based on planned capacity, so occupancy changes never reorient an existing building. Area plans are generated before residents arrive and cached in bounded chunks.
+
+Each slot independently chooses one of the two facing directions on its road family using a stable coordinate hash. Its rectangular building, foundation, porch, and path rotate to the actual frontage segment, including the angled side streets. Every occupied plot explicitly creates its planned entrance road; paths terminate at that road’s actual shoulder. Ground polygons stay independent and fill the clipped lot; fences follow those lot boundaries and leave an entrance gap. All four facades have windows and wall lights. The minimap uses the same orientation and marks the entrance side.
+
+Both actual invitation joins and demo joins consume the shared, precomputed candidate order within twelve plot rings of the inviter. The server returns the next 24 available slots around the signed-in resident using a bounded occupancy query that is independent of the 250-resident render limit. The frontend precomputes their appearance, including footprint, entrance, level 1 height, and predicted settlement score. Each candidate simulates one actual connection to the inviter independently. Dev mode draws the lot and building outlines plus entrance arrows; the first candidate has a predicted score label. These outlines preview massing, not every facade detail. Terrain classification still changes as actual connections and nearby occupancy change, and concurrent joins can take a previewed slot before redemption.
