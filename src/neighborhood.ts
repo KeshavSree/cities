@@ -2,7 +2,7 @@ import type { Building } from '../shared/types';
 import { plotPosition, PLOT_SPACING } from '../shared/world';
 
 export const SETTLEMENT_THRESHOLDS={suburban:.25,urban:.72};
-export const SETTLEMENT_WEIGHTS={proximity:.6,invitations:.4};
+export const SETTLEMENT_WEIGHTS={proximity:.1,invitations:.9};
 export const INVITATION_DEGREE_SCALE=8;
 
 export interface SettlementScore {
