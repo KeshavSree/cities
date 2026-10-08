@@ -1,6 +1,6 @@
 # C.I.T.I.E.S
 
-A little city of people who build things. Every resident gets a low-poly building; GitHub contributions and daily participation earn resources to grow and customize it. New residents arrive through invitations and receive plots near their inviter.
+A little city of people who build things. Every resident gets a low-poly building; Verified activity earns permanent XP to level up through five model tiers. Spend bricks on segment designs, finishes, and nearby public projects. New residents arrive through invitations and receive plots near their inviter.
 
 ## Run locally
 
@@ -14,7 +14,7 @@ npm run dev
 
 Open **http://127.0.0.1:5173**. The Worker runs at `127.0.0.1:8787`; Vite proxies API and WebSocket requests. Use `127.0.0.1` consistently rather than mixing it with `localhost`, so cookies and origin checks match.
 
-`setup` copies `.dev.vars.example` to the ignored `.dev.vars`, generates a local encryption key, and applies D1 migrations. The local D1 database and Durable Object state persist in `.wrangler/state/`. The first visit seeds 21 explicitly labeled demo residents and signs you in as Alex Park. Balances, upgrades, colors, daily claims, invitations, and live updates use the real local Worker and D1 database. Refreshing or restarting the app preserves changes.
+`setup` copies `.dev.vars.example` to the ignored `.dev.vars`, generates a local encryption key, and applies D1 migrations. The local D1 database and Durable Object state persist in `.wrangler/state/`. The first visit seeds 21 explicitly labeled demo residents and signs you in as Alex Park. XP, bricks, customization, likes, public contributions, daily claims, invitations, and live updates use the real local Worker and D1 database. Refreshing or restarting the app preserves changes.
 
 To demonstrate invitations, click **Invite a friend**, create an invitation, then **Try a demo join**. This consumes the invitation and places a demo neighbor near you. Demo routes are disabled unless the server configuration sets `DEV_MODE=true`; that setting is absent from production configuration.
 
@@ -28,12 +28,12 @@ npm run preview     # Serve the built app through the local Worker on port 8787
 - Drag to orbit, right-drag to pan, scroll or use the buttons to zoom.
 - Click the city canvas or focus it with Tab. Hold WASD to move relative to the camera, Q/E to rotate, Space to rise, and Shift to descend. Arrow keys also pan. Movement pauses while an input, button, or dialog has focus, and clears when the tab loses focus.
 - Click a tower or use the searchable resident list to inspect it.
-- In local development, toggle **Dev scores** in the header to show each tower’s combined connectivity score overhead. The selected tower’s drawer shows raw proximity and invitation scores, their 30%/70% contributions, invitation degree, nearby resident count, and settlement cutoffs. Labels track the camera and live city updates. The toggle persists locally and is hidden in production.
-- Select your tower to upgrade, change architecture, or change its facade color.
+- In local development, toggle **Dev mode** to show level, model tier, and XP above each building. The drawer explains the road score, nearby mean level, and planned frontage. Local demo controls preview any level from 1–20 and simulate rewards, clearly labeled in the XP ledger. Dev edits cannot target real residents, and dev routes are disabled in production.
+- Select your tower to inspect XP, bricks, and recent rewards. Architecture lets you customize four segments or change the overall finish. Levels unlock automatically.
 - Lighting follows the viewer's actual local clock, refreshing automatically and when the tab becomes visible. Dawn and dusk are approximate clock-based transitions, not location-based sunrise calculations. There is no day/night toggle or district selector.
 - Orbit down to about 2.6 degrees above the ground. The camera and terrain adapt to keep the foreground continuous at low angles.
 - The help dialog explains progression. Tower details slide from the right edge on desktop and mobile. Click or drag the edge handle to pull them out or push them back.
-- For a live update demonstration, open the city in two tabs, then upgrade or change a tower in one. The other receives the update over a Durable Object WebSocket.
+- For a live update demonstration, open the city in two tabs, then earn a reward or change a tower in one. The other receives the update over a Durable Object WebSocket.
 
 ## Real GitHub login locally
 
@@ -49,19 +49,44 @@ GitHub OAuth uses state validation, PKCE, and server-only credentials. Session c
 
 ## Progression
 
-| Action | Resources |
-| --- | ---: |
-| Newly credited GitHub commit contribution | 1 |
-| Newly credited pull request contribution | 8 |
-| Newly credited review contribution | 5 |
-| Daily check-in, once per UTC calendar day | 30 |
-| Next tower level | Costs `65 + current level × 35` |
-| Change silhouette | Costs 45 |
-| Change facade color | Costs 15 |
+XP is permanent and levels unlock automatically. The current version has **20 levels and five model tiers**. Going from level `L` to `L+1` requires `100 + 50 × (L−1)` XP. Cumulative thresholds are shared by the UI and the database migration; XP never pays for cosmetics. XP can continue accumulating at level 20.
 
-No level cap. Rendered height continues to increase, while mesh detail is bounded so very tall towers don't require one mesh per floor. Meshes are merged by material and resident to reduce draw calls. Provider data is fetched from GitHub's past-year `contributionsCollection`. Each metric's credited high-water mark prevents repeated refreshes from awarding the same contributions. This deliberately conservative first version can under-credit new activity when older contributions leave the rolling year; permanent provider event IDs are the next step for precise long-term progression.
+| Action | XP | Bricks |
+| --- | ---: | ---: |
+| Newly credited GitHub commit / pull request / review | 1 / 10 / 5 | 1 per five contribution XP |
+| Invited resident actually joins | 100 | — |
+| Another authenticated resident likes your tower | 15 | — |
+| Nearby new construction or tier milestone | 12 | — |
+| Complete a public project, having contributed at least 25 bricks | 120 | — |
+| Daily visit, once per UTC calendar day | 10 | 30 |
+| Edit one segment's color and details | — | Costs 20 |
+| Change overall finish / default facade color | — | Costs 45 / 15 |
 
-GitHub account control and provider counts are verifiable. They do not prove that commits are valuable work, that a person is unique, or that activity cannot be gamed. Demo heatmaps are decorative and labeled. Real residents show provider counts without fabricated contribution history. School email, website ownership, and LinkedIn integrations are future work.
+Likes are permanent, limited to one per account per tower, and cannot target yourself. Production liking requires a GitHub-connected account; local demo likes stay between demo residents. Invites only award after successful joining. Nearby construction is an event, not passive proximity income: the eight closest other residents within three plot spacings receive XP when a building is created or crosses levels 5, 9, 13, or 17. Coordinate-keyed, distance-weighted occupancy still shapes roads; it no longer determines an individual tower's model.
+
+| Levels | Model | Ground |
+| --- | --- | --- |
+| 1–4 | Cottage | Grass garden, fences, stepping stones |
+| 5–8 | Townhouse | Lawn, brick patio, hedges |
+| 9–12 | Apartments | Shared paved courtyard, planters, bench |
+| 13–16 | High-rise | Stone plaza, inlaid paving, lamp |
+| 17–20 | Skyscraper | Raised plinth, civic terrace, linear planted borders |
+
+Each tier has a different massing and height curve; all four levels within it add height. Four persistent segment slots (base, lower, upper, crown) independently support colors and classic windows, glass facades, or balconies. Facade details are rendered on all four sides. Separate lot polygons fill irregular street-bounded land.
+
+`0002_progression.sql` preserves existing levels, initializes corresponding cumulative XP, and converts legacy resource balances to bricks. Selected illustrative demo neighbors show the full five-tier range. The old `resources` column is retained only for migration compatibility and is no longer used for progression or spending.
+
+GitHub account control and provider counts are verifiable. Provider data comes from the past-year contribution collection; credited high-water marks prevent repeated refresh awards. This conservative version may under-credit activity when old contributions leave the rolling year. Permanent provider event IDs remain a future improvement. School email, website ownership, LinkedIn, and package release verification are not integrated yet.
+
+### Public projects
+
+Riverside commons and Makers square reserve two-by-two plot zones. They cannot be allocated as private homes. Nearby residents (within 35 world units) pool bricks; funding reveals groundwork, trees, seating, and a final pavilion or sculpture at quarter-goal stages. Site labels open the Projects board.
+
+Contributions are guarded by balance and remaining goal, with idempotent request receipts. Completion rewards each resident who contributed at least 25 bricks once. D1 triggers commit spending, funding, and completion XP together. Projects broadcast updates over a neighborhood WebSocket; completion reloads snapshots to reflect contributors' newly unlocked levels.
+
+### Reward accounting
+
+A unique-key XP ledger records GitHub credits, redeemed invites, likes, daily visits, nearby construction, and public project completions. SQL triggers apply XP, bricks, and automatic level changes atomically. Construction milestones are queued durably, and a bounded worker drains one milestone per active snapshot/reward request or scheduled run, broadcasting the eight recipients. Further milestones caused by those rewards remain queued. Delays are possible when nobody is active; retries cannot double-credit a milestone. Dev level previews edit sample totals directly and suppress preview-only construction; simulated rewards are labeled `demo`.
 
 ## Architecture
 
@@ -131,34 +156,20 @@ Development dependencies override `sharp` and `shell-quote` to patched releases 
 
 ### Density and irregular streets
 
-Plot allocation uses integer keys internally, while a deterministic world projection offsets the visible plots and shared street corners. Buildings stay rectangular, with their front and back faces parallel to their chosen frontage roads. Separate polygonal ground pads follow the irregular street corners. The terrain has no repeating square grid overlay. Existing towers stay in place when someone joins.
+The straight road segments, shared angled junctions, tapering widths, and solid-color transitions are retained. Road development now combines nearby occupancy and building levels over a 7 × 7 neighborhood. Spatial weights use actual world distance: `w = exp(−distance² / 3.2)` in plot-spacing units.
 
-Settlement classification uses **both geography and the invitation graph**, calculated over a 7 × 7 plot neighborhood (three plot keys in each direction). Spatial weights use the actual rendered world distance, in plot-spacing units: `w = exp(-distance² / 3.2)`.
+- `D`: occupied weight divided by all possible plot weight.
+- `M`: distance-weighted mean level of occupied nearby buildings.
+- `L`: `(M−1)/19`, or zero when there are no occupied neighbors.
+- Road score: **`0.45 × D + 0.55 × L`**.
+- Rural roads below 0.25; suburban from 0.25 to below 0.72; urban at 0.72 or above.
 
-- `P`: occupied-neighbor weight divided by the weight of all 49 possible plots.
-- Invite degree: the resident's inviter, if any, plus successfully invited residents. Unused invitations do not count. The server returns the total degree, including connections outside the loaded view.
-- `G`: this building's own `min(invite_degree / 8, 1)`. Neighboring residents' connections do not contribute to this component; a degree of zero produces exactly zero. Unoccupied plots have no invite contribution.
-- Settlement score: `0.3 × P + 0.7 × G`.
-- **Rural:** score below **0.25**.
-- **Suburban:** score from **0.25** up to, but excluding, **0.72**.
-- **Urban:** score **0.72 or higher**.
-
-The previous urban cutoff was 0.54 using occupancy alone. With the current weights and the 0.72 urban threshold, an area with no invitation edges scores at most 0.3: it can be rural or suburban, but cannot become urban from proximity alone. An isolated resident with a high invite degree can still qualify as urban. Dividing invite degree by eight is a tunable normalization choice: one invitation relationship gives a raw invite score of 0.125, four give 0.5, and eight or more give 1. This includes the inviter and successfully invited residents; unused invites do not count. Scores reflect loaded nearby residents; dense scenes beyond the 250-resident snapshot limit need additional spatial paging.
-
-Building silhouettes follow the same classification: rural homes use `0.95 + 0.25 × sqrt(level)` body height, suburban buildings use `1.7 + 0.75 × sqrt(level)`, and urban towers use `2.3 + 1.65 × sqrt(level)`. Levels and resources are preserved, and all three height curves grow without a cap. Rural architecture uses porches, cottage roofs or flat residential roofs rather than tower massing. Score labels and connection arcs follow the actual roof height.
-
-Urban areas gain asphalt, pavement, markings, lamps, cars, and pocket parks; suburban areas have narrower roads and more gardens; rural homes get gravel lanes, fences, and woodland. The shared street network tapers width and blends solid-color surface sections into common junctions.
-
-Each lot is clipped against its actual road shoulders. Its ground surface responds to local grass, coastal soil, and settlement score. The tower foundation also responds to architecture, footprint, level, and facade color: modern towers have cooler raised plinths, terraced towers have warmer stone and planted borders, and spires have stone entry steps. Buildings stay rectangular while the surrounding ground fills the irregular lot.
-
-Clicking a tower selects its meshes for a white silhouette outline. Invitation connections remain violet and are only drawn for actual used invitations between loaded residents. New arrivals broadcast updates for both the neighbor and inviter so their graph degrees and surrounding land adapt live.
-
-The local demo includes a sample invitation tree. Every non-founder resident has an inviter connection; older local databases are backfilled without replacing existing invitations. Noah is invited by Zoe and remains rural with one connection. Invited real residents already receive this connection during joining. The founding account is the only account that can exist before any connections.
+Roads correlate with neighboring development, while individual building models and grounds follow their own level tier. The same score drives street surfaces, transitions, empty gardens, dev diagnostics, and placement previews. The snapshot is capped at 250 residents, so a larger dense city will require finer spatial paging for accurate nearby means.
 
 ### Planned orientations and future plots
 
-`shared/plots.ts` precomputes whole 4 × 3 areas (12 slots). The area coordinates are `floor((x + 2) / 4)` and `floor((z + 1) / 3)`. Even area-coordinate sums align buildings with the horizontal road family; odd sums align them with the vertical family. Every neighboring area therefore switches road family after twelve planned slots. This is based on planned capacity, so occupancy changes never reorient an existing building. Area plans are generated before residents arrive and cached in bounded chunks.
+`shared/plots.ts` precomputes 4 × 3 areas (12 slots). Even sums of area coordinates align buildings with horizontal roads; odd sums use the angled side-road family. Adjacent areas switch families. Every slot independently chooses one of the two facing directions on its chosen family. Plans are cached in bounded chunks; occupancy never rotates existing buildings.
 
-Each slot independently chooses one of the two facing directions on its road family using a stable coordinate hash. Its rectangular building, foundation, porch, and path rotate to the actual frontage segment, including the angled side streets. Every occupied plot explicitly creates its planned entrance road; paths terminate at that road’s actual shoulder. Ground polygons stay independent and fill the clipped lot; fences follow those lot boundaries and leave an entrance gap. All four facades have windows and wall lights.
+Every occupied plot creates its planned entrance road. The rectangular model, foundation, porch, and path align to that frontage. Separate ground polygons are clipped to road shoulders; fences leave an entrance gap.
 
-Both actual invitation joins and demo joins consume the shared, precomputed candidate order within twelve plot rings of the inviter. The server returns the next 24 available slots around the signed-in resident using a bounded occupancy query that is independent of the 250-resident render limit. The frontend precomputes their appearance, including footprint, entrance, level 1 height, and predicted settlement score. Each candidate simulates one actual connection to the inviter independently. Dev mode draws the lot and building outlines plus entrance arrows; the first candidate has a predicted score label. These outlines preview massing, not every facade detail. Terrain classification still changes as actual connections and nearby occupancy change, and concurrent joins can take a previewed slot before redemption.
+The server returns 24 available slots around the signed-in resident using occupancy independent of the render limit, excluding public zones. Dev mode shows level-one cottage outlines, entrance arrows, and an initial road prediction. Each candidate is simulated individually; simultaneous joins can take a previewed slot before redemption. Ground gardens are cleared when a real building occupies the plot.

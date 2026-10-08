@@ -1,18 +1,15 @@
-import { INVITE_DEGREE_SCALE, SETTLEMENT_THRESHOLDS, SETTLEMENT_WEIGHTS, settlementType, type SettlementScore } from './neighborhood';
+import { SETTLEMENT_WEIGHTS, settlementType, type SettlementScore } from './neighborhood';
 import type { Building } from '../shared/types';
 import { AREA_CAPACITY, plotPlan } from '../shared/plots';
-
-export function ScoreBreakdown({score,building}:{score:SettlementScore;building:Building}){
-  const format=(value:number)=>value.toFixed(3);
-  const plan=plotPlan(building.x,building.z);
-  const facing=['south','east','north','west'][(Math.round(plan.rotation/(Math.PI/2))+4)%4];
-  return <section className="score-breakdown" aria-label="Connectivity score breakdown">
-    <div className="score-heading"><h3>Connectivity score</h3><span className={`settlement-label ${settlementType(score.total)}`}>{settlementType(score.total)}</span><strong title={String(score.total)}>{format(score.total)}</strong></div>
-    <div className="score-contribution"><span>Proximity</span><span title={String(score.proximity)}>{format(score.proximity)} × {SETTLEMENT_WEIGHTS.proximity*100}%</span><strong title={String(score.proximityContribution)}>+{format(score.proximityContribution)}</strong></div>
-    <div className="score-contribution"><span>Invites</span><span title={String(score.invites)}>{format(score.invites)} × {SETTLEMENT_WEIGHTS.invites*100}%</span><strong title={String(score.inviteContribution)}>+{format(score.inviteContribution)}</strong></div>
-    <p>Invites: <strong>{score.inviteDegree}</strong> · Nearby residents: <strong>{score.nearbyResidents}</strong></p>
-    <p>Invite score uses this building’s degree ÷ {INVITE_DEGREE_SCALE}, capped at 1. Includes the inviter and residents they invited.</p>
-    <p>Planned area {plan.area} · {AREA_CAPACITY} plots · {plan.axis} street alignment<br/>Entrance faces {facing} ({Math.round(plan.rotation*180/Math.PI)}°). Adjacent areas use the other road family.</p>
-    <div className="score-thresholds">Rural &lt; {SETTLEMENT_THRESHOLDS.suburban} · Suburban &lt; {SETTLEMENT_THRESHOLDS.urban} · Urban ≥ {SETTLEMENT_THRESHOLDS.urban}</div>
+import { TIERS, tierForLevel, tierIndex, xpAtLevel } from '../shared/progression';
+export function ScoreBreakdown({score,building,editable,busy,onDev}:{score:SettlementScore;building:Building;editable:boolean;busy:boolean;onDev:(data:{level?:number;source?:string})=>void}){
+  const plan=plotPlan(building.x,building.z),facing=['south','east','north','west'][(Math.round(plan.rotation/(Math.PI/2))+4)%4],tier=tierForLevel(building.level);
+  return <section className="score-breakdown" aria-label="Development diagnostics">
+    <div className="score-heading"><h3>Development diagnostics</h3><strong>T{tierIndex(building.level)+1}</strong></div>
+    <p>{tier.name} · Level {building.level}/20 · {building.xp} XP · {building.bricks} bricks<br/>{tier.ground}</p>
+    <div className="score-contribution"><span>Road occupancy</span><span>{score.density.toFixed(3)} × {Math.round(SETTLEMENT_WEIGHTS.density*100)}%</span><strong>+{score.densityContribution.toFixed(3)}</strong></div>
+    <div className="score-contribution"><span>Nearby levels</span><span>{score.levels.toFixed(3)} × {Math.round(SETTLEMENT_WEIGHTS.levels*100)}%</span><strong>+{score.levelContribution.toFixed(3)}</strong></div>
+    <p>Road score {score.total.toFixed(3)} · {settlementType(score.total)}<br/>Weighted mean level {score.averageLevel.toFixed(1)} · {score.nearbyResidents} nearby residents<br/>Planned area {plan.area} · {AREA_CAPACITY} slots · {plan.axis} alignment · Entrance {facing}</p>
+    {editable&&<div className="dev-simulations"><h4>Preview a model tier</h4><div className="dev-tier-buttons">{TIERS.map((t,i)=><button key={t.name} disabled={busy} aria-pressed={tierIndex(building.level)===i} onClick={()=>onDev({level:i*4+1})} title={`${t.name}, ${xpAtLevel(i*4+1)} XP`}>{i+1}<small>L{i*4+1}</small></button>)}</div><label>Preview level <select value={building.level} disabled={busy} onChange={e=>onDev({level:Number(e.target.value)})}>{Array.from({length:20},(_,i)=><option key={i} value={i+1}>{i+1}</option>)}</select></label><details className="dev-rewards"><summary>Simulate rewards</summary><div className="dev-reward-buttons">{[['github','GitHub +250 XP'],['invite','Invite +100 XP'],['like','Like +15 XP'],['construction','Nearby build +12 XP'],['project','Project +120 XP'],['bricks','Add 100 bricks']].map(([source,label])=><button key={source} disabled={busy} onClick={()=>onDev({source})}>{label}</button>)}</div><p>Local demo controls. Previewing a level edits sample XP; simulated rewards are labeled in the ledger.</p></details></div>}
   </section>;
 }

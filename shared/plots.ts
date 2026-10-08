@@ -1,4 +1,5 @@
 import { isLandPlot, plotPosition, worldHash } from './world';
+import { isReservedPlot } from './projects';
 
 export const AREA_WIDTH=4,AREA_DEPTH=3,AREA_CAPACITY=AREA_WIDTH*AREA_DEPTH;
 type Point={x:number;z:number};
@@ -44,7 +45,7 @@ export function availablePlotPlans(origin:{x:number;z:number},occupied:Set<strin
   for(let ring=1;ring<=radius;ring++)for(let dx=-ring;dx<=ring;dx++)for(let dz=-ring;dz<=ring;dz++){
     if(Math.max(Math.abs(dx),Math.abs(dz))!==ring)continue;
     const x=origin.x+dx,z=origin.z+dz;
-    if(occupied.has(`${x},${z}`)||!isLandPlot(x,z))continue;
+    if(occupied.has(`${x},${z}`)||isReservedPlot(x,z)||!isLandPlot(x,z))continue;
     plans.push(plotPlan(x,z));
   }
   return plans;

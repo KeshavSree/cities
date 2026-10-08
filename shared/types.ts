@@ -3,14 +3,14 @@ export type Color = 'sand' | 'lilac' | 'sage' | 'coral' | 'blue';
 export interface Building {
   id: string; username: string; name: string; bio: string; avatar: string | null;
   github_url: string | null; website: string | null; school: string | null;
-  is_demo: number; x: number; z: number; level: number; resources: number;
+  is_demo: number; x: number; z: number; level: number; xp:number; bricks:number; segments:string; likes:number;
   style: Style; color: Color; commits: number; prs: number; reviews: number;
   synced_at: string | null; updated_at: string; invited_by?: string | null; invite_degree?: number;
 }
 export interface Bootstrap {
   buildings: Building[]; me: string | null; demo: boolean; githubConfigured: boolean;
   claimedToday: boolean; dailyReward: number; inviteRequired: boolean;
-  nextPlots:{x:number;z:number}[];
+  nextPlots:{x:number;z:number}[]; projects:PublicProject[]; likedIds:string[];
 }
 export const COLORS: Record<Color, { label: string; hex: string }> = {
   sand: { label: 'Sandstone', hex: '#dfba85' },
@@ -24,7 +24,8 @@ export const STYLES: Record<Style, { label: string; description: string }> = {
   modern: { label: 'Modern', description: 'Clean lines. A fresh perspective.' },
   spire: { label: 'Spire', description: 'A little ambition in the skyline.' },
 };
-export const upgradeCost = (level: number) => 65 + level * 35;
+export interface PublicProject{id:string;name:string;kind:string;x:number;z:number;goal:number;funded:number;contributors:number;myContribution:number;description:string;}
+export interface XpEvent{event_key:string;source:string;xp:number;bricks:number;description:string;created_at:string;}
 export const DAILY_REWARD = 30;
 export const STYLE_COST = 45;
 export const COLOR_COST = 15;

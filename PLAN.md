@@ -19,11 +19,11 @@ Build an invitation-only 3D city: each person has a plot near their inviter and 
 6. Commit and push to a new private `KeshavSree/cities` repository.
 
 ## Game rules for the first version
-- Each additional floor costs more resources; no maximum level.
-- Daily claim awards resources once per UTC calendar day.
+- Twenty levels unlock automatically from permanent XP, with five model tiers of four levels. Each successive level costs more XP.
+- Daily claim awards 10 XP and 30 bricks once per UTC calendar day.
 - GitHub's authenticated contribution API supplies commit, pull request, and review counts. Reward already-credited activity only once. These counts verify provider data, not the quality or uniqueness of a person's work.
 - Invitation tokens are single-use. The server searches for a free plot around the inviter and retries coordinate collisions.
-- Styles and facade colors cost resources. All balances and costs are enforced by the Worker.
+- Styles, facade colors and independent segment designs cost bricks. All balances and costs are enforced by the Worker.
 - Demo residents and demo activity are visibly labeled, cannot be mistaken for verified achievements, and cannot be enabled through a production browser request.
 
 ## Scope boundaries
@@ -69,12 +69,21 @@ City-first layout with quiet white controls, pale blue sky, green terrain, viole
 ## Ground, roads, graph density, and selection
 - Clip independent lot polygons to actual road shoulders; choose ground and foundation treatments from terrain, coast distance, settlement score, tower footprint, style, level, and color.
 - Use shared street geometry in the 3D view. Taper widths and blend solid-color road sections into shared junction surfaces.
-- Use a 30% spatial occupancy / 70% individual invitation-degree score. A building's own degree is normalized by eight; zero degree contributes exactly zero. Rural <0.25, suburban 0.25–<0.72, urban ≥0.72. Read total invitation degrees from the server and update both endpoints on arrivals.
+- Use a 45% nearby occupancy / 55% distance-weighted building-level score for roads. Individual models and grounds follow their own XP level tier. Nearby levels are normalized over levels 1–20. Rural <0.25, suburban 0.25–<0.72, urban ≥0.72. Invite redemptions reward XP and update both endpoints on arrivals.
 - Highlight selected building silhouettes in white with a selection outline render pass.
 
 ## Dev score inspection
 - Add a local dev toggle for camera-tracked numeric labels above each tower.
-- Show the selected tower’s raw proximity/invitation scores, weighted contributions, total, graph degree, and nearby resident count in the flush drawer.
+- Show the selected tower’s XP, bricks, model tier, nearby occupancy/level contributions, and local tier/reward simulation controls in the flush drawer.
 - Use one shared score calculation for the diagnostics and 3D world, including the same loaded neighborhood data at view boundaries.
 
 - Planned twelve-slot orientation areas switch street families, with independent per-slot facing, four-sided windows/lights, and 24 upcoming placement previews in dev mode. Server joins and previews use the same shared plot planner.
+
+## XP and bricks implementation
+
+- Migration preserves old levels and balances, introduces an idempotent XP ledger and automatic level triggers.
+- GitHub, successful invites, unique likes, daily visits, construction milestones and completed public projects award XP.
+- Twenty levels, five model tiers, five corresponding ground treatments; ground and models are independent of road density.
+- Four persistent segment designs use bricks. Roads keep the existing network and blend occupancy with surrounding levels.
+- Two reserved public zones pool nearby contributions, show four construction stages, and award completion XP once.
+- Dev mode shows level/tier/XP labels, road diagnostics, all 20 level previews and labeled sample rewards.

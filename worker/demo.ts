@@ -1,16 +1,17 @@
 import type { Color, Style } from '../shared/types';
+import { xpAtLevel } from '../shared/progression';
 const people = [
   ['demo-you', 'alexpark', 'Alex Park', 'Building useful little things. Usually with TypeScript.', 0, 0, 5, 'terrace', 'sand', 186, 24, 18],
-  ['demo-maya', 'mayachen', 'Maya Chen', 'Frontend engineer. Collector of tiny side projects.', 1, 0, 8, 'modern', 'lilac', 412, 38, 27],
+  ['demo-maya', 'mayachen', 'Maya Chen', 'Frontend engineer. Collector of tiny side projects.', 1, 0, 14, 'modern', 'lilac', 412, 38, 27],
   ['demo-jules', 'julesrivera', 'Jules Rivera', 'Making the web a more playful place.', -1, 0, 4, 'terrace', 'coral', 132, 19, 9],
-  ['demo-sam', 'samokafor', 'Sam Okafor', 'Systems, open source, and very good coffee.', 0, 1, 10, 'spire', 'blue', 628, 71, 42],
+  ['demo-sam', 'samokafor', 'Sam Okafor', 'Systems, open source, and very good coffee.', 0, 1, 18, 'spire', 'blue', 628, 71, 42],
   ['demo-nora', 'norali', 'Nora Li', 'Learning by making. Currently exploring creative coding.', 0, -1, 3, 'modern', 'sage', 94, 12, 6],
   ['demo-eli', 'elithomas', 'Eli Thomas', 'Open source tools for curious people.', 1, 1, 6, 'terrace', 'sage', 244, 31, 22],
-  ['demo-asha', 'ashapatel', 'Asha Patel', 'Backend engineer with a soft spot for game design.', -1, 1, 7, 'modern', 'sand', 328, 42, 31],
-  ['demo-leo', 'leomartin', 'Leo Martin', 'Graphics, shaders, and the occasional happy accident.', 1, -1, 9, 'spire', 'coral', 520, 46, 28],
+  ['demo-asha', 'ashapatel', 'Asha Patel', 'Backend engineer with a soft spot for game design.', -1, 1, 13, 'modern', 'sand', 328, 42, 31],
+  ['demo-leo', 'leomartin', 'Leo Martin', 'Graphics, shaders, and the occasional happy accident.', 1, -1, 17, 'spire', 'coral', 520, 46, 28],
   ['demo-zoe', 'zoekim', 'Zoe Kim', 'Design engineer. Details make the difference.', -1, -1, 5, 'terrace', 'lilac', 174, 22, 17],
   ['demo-ben', 'benwilliams', 'Ben Williams', 'Turning ideas into things you can click.', 2, 0, 4, 'modern', 'blue', 122, 18, 8],
-  ['demo-ida', 'idahassan', 'Ida Hassan', 'Small experiments in machine learning.', -2, 0, 6, 'spire', 'sand', 284, 34, 21],
+  ['demo-ida', 'idahassan', 'Ida Hassan', 'Small experiments in machine learning.', -2, 0, 10, 'spire', 'sand', 284, 34, 21],
   ['demo-omar', 'omarali', 'Omar Ali', 'Building for the next billion people.', 0, 2, 8, 'terrace', 'coral', 402, 41, 33],
   ['demo-theo', 'theodavis', 'Theo Davis', 'Infrastructure should feel invisible.', 0, -2, 7, 'modern', 'blue', 357, 39, 29],
   ['demo-ruby', 'rubyng', 'Ruby Ng', 'New to open source. Happy to be here.', 2, 1, 2, 'terrace', 'lilac', 46, 8, 3],
@@ -54,7 +55,7 @@ export async function seedDemo(db: D1Database) {
   const stmts: D1PreparedStatement[] = [];
   for (const [id, username, name, bio, x, z, level, style, color, commits, prs, reviews] of people) {
     stmts.push(db.prepare('INSERT OR IGNORE INTO users(id, username, name, bio, is_demo) VALUES(?, ?, ?, ?, 1)').bind(id, username, name, bio));
-    stmts.push(db.prepare('INSERT OR IGNORE INTO buildings(user_id, x, z, level, resources, style, color) VALUES(?, ?, ?, ?, ?, ?, ?)').bind(id, x, z, level, id === 'demo-you' ? 360 : 120, style as Style, color as Color));
+    stmts.push(db.prepare('INSERT OR IGNORE INTO buildings(user_id, x, z, level, xp, bricks, style, color) VALUES(?, ?, ?, ?, ?, ?, ?, ?)').bind(id, x, z, level, xpAtLevel(level), id === 'demo-you' ? 360 : 120, style as Style, color as Color));
     stmts.push(db.prepare("INSERT OR IGNORE INTO metrics(user_id, commits, prs, reviews, credited_commits, credited_prs, credited_reviews, synced_at) VALUES(?, ?, ?, ?, ?, ?, ?, datetime('now'))").bind(id, commits, prs, reviews, commits, prs, reviews));
   }
   // Seed in three requests via /api/dev/start?batch=N. Each invocation stays below 50 queries.

@@ -7,7 +7,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import { COLORS, type Building } from '../shared/types';
+import { COLORS, type Building, type PublicProject } from '../shared/types';
 import { coastZ, plotPosition, worldHash, PLOT_SPACING, VIEW_RADIUS } from '../shared/world';
 import { WorldTerrain } from './WorldTerrain';
 import type { CityLighting } from './lighting';
@@ -16,16 +16,18 @@ import { CameraKeyboard } from './CameraKeyboard';
 import { buildingForm } from './buildingForm';
 import { plotPlan } from '../shared/plots';
 import type { PlotPreview } from './plotPreview';
+import { tierForLevel, tierIndex } from '../shared/progression';
+import { isReservedPlot } from '../shared/projects';
 
 export interface SceneHandle { focus: (b: Building) => void; reset: () => void; zoom: (amount: number) => void; }
-interface Props { buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; debugScores:boolean; previews:PlotPreview[]; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
+interface Props { buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; debugScores:boolean; previews:PlotPreview[]; projects:PublicProject[]; onProject:()=>void; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
 const SPACING = PLOT_SPACING;
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ buildings, selected, lighting, center, debugScores, previews, onSelect, onPan }, ref) {
+export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ buildings, selected, lighting, center, debugScores, previews, projects, onProject, onSelect, onPan }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const engine = useRef<{ scene: THREE.Scene; renderer: THREE.WebGLRenderer; camera: THREE.OrthographicCamera; controls: OrbitControls; city: THREE.Group; selection: THREE.Group; planned:THREE.Group; labels:THREE.Group; outline:OutlinePass; focus: THREE.Vector3 | null; night: boolean; resize: () => void } | null>(null);
-  const props = useRef({ buildings, selected, lighting, onSelect, onPan }); props.current = { buildings, selected, lighting, onSelect, onPan };
+  const props = useRef({ buildings, selected, lighting, onSelect, onPan, onProject }); props.current = { buildings, selected, lighting, onSelect, onPan, onProject };
   const night=lighting.night;
   const [unavailable, setUnavailable] = useState(false);
   useImperativeHandle(ref, () => ({
@@ -163,24 +165,31 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
   useEffect(() => {
     const e = engine.current; if (!e) return;
     e.night = night; disposeGroup(e.city);
-    buildCity(e.city,buildings.filter(b=>Math.abs(b.x-center.x)<=VIEW_RADIUS&&Math.abs(b.z-center.z)<=VIEW_RADIUS),night,neighborhoodDensity(buildings));
+    buildCity(e.city,buildings.filter(b=>Math.abs(b.x-center.x)<=VIEW_RADIUS&&Math.abs(b.z-center.z)<=VIEW_RADIUS),night,neighborhoodDensity(buildings),projects);
     e.outline.selectedObjects=e.city.children.filter(mesh=>mesh.userData.owner===props.current.selected);
-  }, [buildings,night,center.x,center.z]);
+  }, [buildings,night,center.x,center.z,projects]);
   useEffect(()=>{
     const e=engine.current;if(!e)return;disposeGroup(e.planned);
     if(debugScores)drawPlotPreviews(e.planned,previews);
   },[debugScores,previews]);
   useEffect(()=>{
     const e=engine.current;if(!e)return;e.labels.clear();
+    for(const project of projects){
+      if(Math.abs(project.x-center.x)>VIEW_RADIUS||Math.abs(project.z-center.z)>VIEW_RADIUS)continue;
+      const element=document.createElement('button');element.className='public-site-label';
+      element.textContent=`${project.name} · ${Math.round(project.funded/project.goal*100)}%`;
+      element.onclick=()=>props.current.onProject();element.setAttribute('aria-label',`Open public project ${project.name}`);
+      const label=new CSS2DObject(element),position=plotPosition(project.x,project.z);label.position.set(position.x,3,position.z);e.labels.add(label);
+    }
     if(!debugScores)return;
     const scoreAt=neighborhoodScores(buildings);
     for(const b of buildings){
       if(Math.abs(b.x-center.x)>VIEW_RADIUS||Math.abs(b.z-center.z)>VIEW_RADIUS)continue;
       const score=scoreAt(b.x,b.z),element=document.createElement('div');
       element.className=`building-score ${b.id===selected?'is-selected':''}`;
-      element.dataset.settlement=settlementType(score.total);
-      element.textContent=score.total.toFixed(3);
-      element.setAttribute('aria-label',`${b.name}: connectivity score ${score.total.toFixed(3)}, ${settlementType(score.total)}`);
+      element.dataset.settlement=tierForLevel(b.level).kind;
+      element.textContent=`L${b.level} · T${tierIndex(b.level)+1}\n${b.xp} XP`;
+      element.setAttribute('aria-label',`${b.name}: level ${b.level}, tier ${tierIndex(b.level)+1}, ${b.xp} XP, road score ${score.total.toFixed(3)}`);
       const label=new CSS2DObject(element),position=plotPosition(b.x,b.z);
       label.position.set(position.x,buildingForm(b,score.total).topY+.55,position.z);
       e.labels.add(label);
@@ -188,11 +197,11 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     const next=previews[0];
     if(next){
       const element=document.createElement('div');element.className='building-score plot-preview-label';
-      element.textContent=`Next plot · ${next.score.total.toFixed(3)}`;
+      element.textContent=`Next plot · L1 Cottage`;
       element.setAttribute('aria-label',`Next available plot ${next.plan.x}, ${next.plan.z}, ${next.plan.axis} frontage, predicted score ${next.score.total.toFixed(3)}`);
       const label=new CSS2DObject(element);label.position.set(next.plan.position.x,next.form.topY+.6,next.plan.position.z);e.labels.add(label);
     }
-  },[buildings,selected,debugScores,previews,center.x,center.z]);
+  },[buildings,selected,debugScores,previews,center.x,center.z,projects]);
   useEffect(() => {
     const e = engine.current; if (!e) return; disposeGroup(e.selection);
     e.outline.selectedObjects=e.city.children.filter(mesh=>mesh.userData.owner===selected);
@@ -244,7 +253,7 @@ function disposeGroup(group: THREE.Group) {
   group.traverse(o=>{ if (o instanceof THREE.Mesh||o instanceof THREE.LineSegments) { geometries.add(o.geometry); for (const m of Array.isArray(o.material)?o.material:[o.material]) materials.add(m); } });
   geometries.forEach(g=>g.dispose()); materials.forEach(m=>m.dispose()); group.clear();
 }
-function buildCity(group: THREE.Group, buildings: Building[], night: boolean,densityAt:(x:number,z:number)=>number) {
+function buildCity(group: THREE.Group, buildings: Building[], night: boolean,densityAt:(x:number,z:number)=>number,projects:PublicProject[]) {
   const materials = new Map<string,THREE.MeshStandardMaterial>();
   const mat = (color: string) => {
     if (!materials.has(color)) materials.set(color,new THREE.MeshStandardMaterial({
@@ -304,7 +313,7 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
   for(const b of buildings)for(let dx=-3;dx<=3;dx++)for(let dz=-3;dz<=3;dz++)gardens.add(`${b.x+dx},${b.z+dz}`);
   for(const garden of gardens){
     const [x,z]=garden.split(',').map(Number);
-    if(taken.has(garden))continue;
+    if(taken.has(garden)||isReservedPlot(x,z))continue;
     const position=plotPosition(x,z);
     if(position.z+3>coastZ(position.x)-2.5)continue;
     const density=densityAt(x,z),kind=settlementType(density);
@@ -327,12 +336,12 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     const urban=Math.min(1,density/SETTLEMENT_THRESHOLDS.urban),coastal=Math.max(0,1-(coastZ(position.x)-position.z)/15);
     const grass=mixGroundColor(night?'#637e6c':'#bfd2ae',night?'#969078':'#d4c39a',coastal*.45);
     const paving=b.style==='modern'?'#cbd2ce':b.style==='terrace'?'#d4d1bf':'#ccc7bc';
-    const lotColor=mixGroundColor(grass,paving,urban**1.8*.9);
+    const lotColor=mixGroundColor(grass,form.definition.groundColor,form.definition.paving);
     const lot=lotPolygon(b,roads).map(p=>({x:p.x-position.x,z:p.z-position.z}));
     surface(plot,lot,.085,lotColor);
     const architecture=new THREE.Group();architecture.rotation.y=plan.rotation;plot.add(architecture);
     // Rotate the rectangular building independently of its irregular ground lot.
-    const soilStone=mixGroundColor('#c5b38f',paving,urban);
+    const soilStone=mixGroundColor(form.definition.stone,paving,urban*.2);
     const foundationColor=mixGroundColor(soilStone,color,b.style==='modern'?.12:.07);
     const padding=.15+urban*.22+Math.min(.16,Math.sqrt(b.level)*.035);
     box(architecture,0,.085+foundationHeight/2,0,footprint.w+padding*2,foundationHeight,footprint.d+padding*2,foundationColor,b.id);
@@ -362,30 +371,58 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       box(architecture,footprint.w/2+.27,.22,-.9,.32,.25,.95,foundationColor);
       box(architecture,footprint.w/2+.27,.38,-.9,.25,.08,.82,'#87a875');
     }
-    const parts: {w:number;d:number;h:number;y:number}[] = b.style==='terrace'&&kind!=='rural'
-      ? [{w:footprint.w,d:footprint.d,h:h*.48,y:baseY},{w:2.65,d:2.5,h:h*.32,y:baseY+h*.48},{w:1.85,d:1.85,h:h*.2,y:baseY+h*.8}]
-      : [{...footprint,h,y:baseY}];
+    if(form.tier===1){
+      box(architecture,0,.11,-footprint.d/2-.45,2.2,.045,.65,'#c8a991');
+      for(const side of [-1,1])box(plot,side*2.25,.25,-.4,.35,.3,1.8,'#8fab80');
+    }else if(form.tier===2){
+      box(plot,-2.15,.24,.9,.35,.26,1.3,'#b99c7e');box(plot,-2.15,.48,.9,.1,.28,1.3,'#b99c7e');
+      box(plot,2.15,.21,-1,.45,.23,1,'#c3c6b8');box(plot,2.15,.36,-1,.36,.1,.88,'#8fab80');
+    }else if(form.tier===3){
+      for(const x of [-2.25,2.25])box(plot,x,.096,0,.06,.015,4.4,'#9dadad');
+      box(plot,-2.25,1,-1.8,.07,1.8,.07,'#738b8d');box(plot,-2.25,1.94,-1.8,.25,.12,.25,night?'#f0daab':'#d8d8c7');
+    }else if(form.tier===4){
+      for(const x of [-2.25,2.25]){
+        box(plot,x,.18,0,.4,.2,3.7,'#afbfc1');box(plot,x,.32,0,.3,.12,3.5,'#8fab80');
+        box(plot,x,.45,-1.65,.16,.16,.16,night?'#f0daab':'#d8d8c7');
+      }
+    }
+    const parts: {w:number;d:number;h:number;y:number}[] = form.tier<=1?[{...footprint,h,y:baseY}]
+      :form.tier===2?[{...footprint,h:h*.72,y:baseY},{w:3,d:2.6,h:h*.28,y:baseY+h*.72}]
+      :form.tier===3?[{...footprint,h:h*.22,y:baseY},{w:2.6,d:2.5,h:h*.78,y:baseY+h*.22}]
+      :[{...footprint,h:h*.15,y:baseY},{w:2.6,d:2.6,h:h*.7,y:baseY+h*.15},{w:2.15,d:2.15,h:h*.15,y:baseY+h*.85}];
     const win=night?'#f3d795':'#627e8a';
     for(const p of parts){
-      box(architecture,0,p.y+p.h/2,0,p.w,p.h,p.d,color,b.id);
-      const floors=Math.max(1,Math.min(8,Math.floor(p.h/(kind==='rural'?1.1:.65))));
-      for(let i=0;i<floors;i++)for(let column=-1;column<=1;column++){
+      for(let segment=0;segment<4;segment++){
+        const low=Math.max(p.y,baseY+h*segment/4),high=Math.min(p.y+p.h,baseY+h*(segment+1)/4);
+        if(high<=low)continue;
+        box(architecture,0,(low+high)/2,0,p.w,high-low,p.d,COLORS[form.segments[segment].color].hex,b.id);
+      }
+      const floors=Math.max(1,Math.min(10,Math.floor(p.h/(form.tier<=1?1:.75))));
+      for(let i=0;i<floors;i++){
         const y=p.y+.38+i*(p.h-.5)/floors;
-        if(!(i===0&&column===0&&p.y===baseY))box(architecture,column*p.w*.26,y,p.d/2+.018,.36,.29,.04,win,b.id);
-        box(architecture,p.w/2+.018,y,column*p.d*.26,.04,.29,.36,win,b.id);
-        box(architecture,column*p.w*.26,y,-p.d/2-.018,.36,.29,.04,win,b.id);
-        box(architecture,-p.w/2-.018,y,column*p.d*.26,.04,.29,.36,win,b.id);
+        const design=form.segments[Math.min(3,Math.floor((y-baseY)/h*4))],ww=design.style==='glass'?.55:.36;
+        for(let column=-1;column<=1;column++){
+          if(!(i===0&&column===0&&p.y===baseY))box(architecture,column*p.w*.26,y,p.d/2+.018,ww,.29,.04,win,b.id);
+          box(architecture,p.w/2+.018,y,column*p.d*.26,.04,.29,ww,win,b.id);
+          box(architecture,column*p.w*.26,y,-p.d/2-.018,ww,.29,.04,win,b.id);
+          box(architecture,-p.w/2-.018,y,column*p.d*.26,.04,.29,ww,win,b.id);
+        }
+        if(design.style==='balcony')for(const sign of [-1,1]){
+          box(architecture,0,y-.2,sign*(p.d/2+.12),p.w*.72,.06,.3,'#deded2',b.id);
+          box(architecture,0,y-.05,sign*(p.d/2+.25),p.w*.72,.22,.035,'#9bb2ae',b.id);
+          box(architecture,sign*(p.w/2+.12),y-.2,0,.3,.06,p.d*.72,'#deded2',b.id);
+        }
       }
       box(architecture,0,p.y+p.h+.06,0,p.w+.14,.12,p.d+.14,'#ece4d5',b.id);
       if(b.style==='terrace')box(architecture,-p.w*.3,p.y+p.h+.18,p.d*.27,.4,.25,.48,'#7f9d76');
     }
     if(b.style==='modern') {
-      box(architecture,-footprint.w/2+.1,h/2+baseY,0,.18,h,footprint.d+.15,'#e8e9df',b.id);
+      for(const p of parts)box(architecture,-p.w/2+.08,p.y+p.h/2,0,.16,p.h,p.d+.05,'#e8e9df',b.id);
       if(kind==='rural')box(architecture,.85,h+baseY+.18,-.5,.5,.2,.6,'#8a969b',b.id);
-      else box(architecture,.9,h+baseY+.36,.6,.7,.6,.8,'#8a969b',b.id);
+      else box(architecture,.55,h+baseY+.36,.3,.6,.6,.65,'#8a969b',b.id);
     }
-    if(b.style==='spire'){
-      const rural=kind==='rural',roofHeight=rural?.8:1.5;
+    if(form.tier<=1||b.style==='spire'){
+      const rural=form.tier<=1,roofHeight=rural?.8:1.5;
       const roof=new THREE.Mesh(new THREE.ConeGeometry(1,roofHeight,4),mat(rural?'#b98e77':color));
       roof.geometry.rotateY(Math.PI/4);roof.scale.set((footprint.w+.15)/Math.SQRT2,1,(footprint.d+.15)/Math.SQRT2);
       roof.position.y=h+baseY+roofHeight/2+.01;roof.userData.owner=b.id; roof.castShadow=true;architecture.add(roof);
@@ -416,16 +453,27 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     }
     else box(architecture,0,.12,(front+pathEnd)/2,b.style==='modern'?1.05:.78,.07,pathEnd-front,pathColor);
     if(b.style==='spire')box(architecture,0,baseY-.03,front+.24,.83,.06,.42,foundationColor);
-    tree(plot,-2.25,-1.8,.75,box,mat); tree(plot,2.15,1.6,.55,box,mat);
+    if(form.tier<3){tree(plot,-2.25,-1.8,.75,box,mat);tree(plot,2.15,1.6,.55,box,mat);}else tree(plot,2.1,1.8,.45,box,mat);
     // A simple rooftop garden instead of a texture or subdivided material face.
     if(b.style==='terrace'&&kind!=='rural') tree(architecture,.48,-.25,.38,box,mat,h+baseY+.12);
   }
-  // Keep the plaza only next to inhabited plots, and leave its lot available for expansion.
-  if(!taken.has('3,0')&&buildings.some(b=>Math.abs(b.x-3)+Math.abs(b.z)<=1)){
-  const plaza=plotPosition(3,0);
-  box(group,plaza.x,.1,plaza.z,5.2,.12,5.2,'#b1c6a0');
-  const fountain = new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.5,.25,8),mat('#e1e1d6')); fountain.position.set(plaza.x,.25,plaza.z);group.add(fountain);
-  const water=new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.1,.03,8),mat('#87bcc7')); water.position.set(plaza.x,.39,plaza.z);group.add(water);
+  for(const project of projects){
+    const center=plotPosition(project.x,project.z),ratio=project.funded/project.goal;
+    const site=new THREE.Group();site.position.set(center.x,0,center.z);group.add(site);
+    box(site,0,.06,0,11.5,.12,10.5,project.kind==='park'?'#afc69d':'#c6ccc1');
+    box(site,0,.15,0,8.5,.08,1,'#d5c9ae');
+    if(ratio<1){
+      for(const x of [-5.4,5.4])box(site,x,.4,0,.08,.6,9.8,'#c4aa82');
+      // Brick stacks grow as actual contributions accumulate.
+      for(let i=0;i<Math.ceil(ratio*8);i++)box(site,-4+i%4*.65,.25+Math.floor(i/4)*.3,-3,.55,.3,.4,'#b9927a');
+    }
+    if(ratio>=.25){tree(site,-3,-2,.9,box,mat);tree(site,3,2,.9,box,mat);}
+    if(ratio>=.5)for(const x of [-2,2]){box(site,x,.3,2.5,1.5,.3,.4,'#b99d7d');box(site,x,.57,2.68,1.5,.3,.08,'#b99d7d');}
+    if(ratio>=.75){box(site,0,.18,0,3.2,.2,3.2,'#d9d8c6');for(const x of [-1.3,1.3])for(const z of [-1.3,1.3])box(site,x,1.1,z,.12,1.8,.12,'#a9ada1');}
+    if(ratio>=1){
+      if(project.kind==='park')box(site,0,2.05,0,3.7,.3,3.7,'#9dbaa0');
+      else {box(site,0,.45,0,1.8,.5,1.8,'#cad3d0');const sculpture=new THREE.Mesh(new THREE.IcosahedronGeometry(1,0),mat('#a79bc7'));sculpture.position.y=1.65;site.add(sculpture);}
+    }
   }
   // Merge meshes by material and owner, preserving pickable towers while reducing draw calls.
   group.updateMatrixWorld(true);

@@ -3,44 +3,31 @@ import { plotPosition, PLOT_SPACING } from '../shared/world';
 import { plotPlan } from '../shared/plots';
 
 export const SETTLEMENT_THRESHOLDS={suburban:.25,urban:.72};
-export const SETTLEMENT_WEIGHTS={proximity:.3,invites:.7};
-export const INVITE_DEGREE_SCALE=8;
+export const SETTLEMENT_WEIGHTS={density:.45,levels:.55};
 
 export interface SettlementScore {
-  total:number;proximity:number;invites:number;
-  proximityContribution:number;inviteContribution:number;
-  inviteDegree:number;nearbyResidents:number;
+  total:number;density:number;levels:number;densityContribution:number;levelContribution:number;
+  averageLevel:number;nearbyResidents:number;
 }
 
-/** One calculation supplies both the rendered world and its dev score breakdown. */
+/** Roads blend nearby occupancy and distance-weighted development levels. */
 export function neighborhoodScores(buildings:Building[]) {
   const occupied=new Map(buildings.map(b=>[`${b.x},${b.z}`,b]));
-  const degrees=new Map<string,number>();
-  for(const b of buildings)if(b.invited_by){degrees.set(b.id,(degrees.get(b.id)||0)+1);degrees.set(b.invited_by,(degrees.get(b.invited_by)||0)+1);}
   const cache=new Map<string,SettlementScore>();
-  const positions=new Map<string,GroundPoint>();
-  const positionAt=(x:number,z:number)=>{const key=`${x},${z}`;if(!positions.has(key))positions.set(key,plotPosition(x,z));return positions.get(key)!;};
-  const kernel:{x:number;z:number}[]=[];
-  for(let x=-3;x<=3;x++)for(let z=-3;z<=3;z++)kernel.push({x,z});
   return (x:number,z:number)=>{
-    const key=`${x},${z}`;
-    if(cache.has(key))return cache.get(key)!;
-    const center=positionAt(x,z);
-    let weight=0,total=0,nearbyResidents=0;
-    for(const k of kernel){
-      const neighbor=positionAt(x+k.x,z+k.z);
+    const key=`${x},${z}`;if(cache.has(key))return cache.get(key)!;
+    const center=plotPosition(x,z);let weight=0,total=0,levelWeight=0,nearbyResidents=0;
+    for(let dx=-3;dx<=3;dx++)for(let dz=-3;dz<=3;dz++){
+      const neighbor=plotPosition(x+dx,z+dz);
       const distanceSquared=((neighbor.x-center.x)**2+(neighbor.z-center.z)**2)/PLOT_SPACING**2;
       const importance=Math.exp(-distanceSquared/3.2);total+=importance;
-      const b=occupied.get(`${x+k.x},${z+k.z}`);if(!b)continue;
-      nearbyResidents++;
-      weight+=importance;
+      const b=occupied.get(`${x+dx},${z+dz}`);if(!b)continue;
+      nearbyResidents++;weight+=importance;levelWeight+=importance*b.level;
     }
-    const resident=occupied.get(key);
-    const inviteDegree=resident?Math.max(resident.invite_degree??0,degrees.get(resident.id)||0):0;
-    const proximity=weight/total,invites=Math.min(1,inviteDegree/INVITE_DEGREE_SCALE);
-    const proximityContribution=SETTLEMENT_WEIGHTS.proximity*proximity,inviteContribution=SETTLEMENT_WEIGHTS.invites*invites;
-    const score={total:proximityContribution+inviteContribution,proximity,invites,proximityContribution,inviteContribution,
-      inviteDegree,nearbyResidents};
+    const density=weight/total,averageLevel=weight?levelWeight/weight:0;
+    const levels=weight?Math.max(0,(averageLevel-1)/19):0;
+    const densityContribution=SETTLEMENT_WEIGHTS.density*density,levelContribution=SETTLEMENT_WEIGHTS.levels*levels;
+    const score={total:densityContribution+levelContribution,density,levels,densityContribution,levelContribution,averageLevel,nearbyResidents};
     cache.set(key,score);return score;
   };
 }
