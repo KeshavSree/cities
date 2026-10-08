@@ -19,8 +19,8 @@ import type { PlotPreview } from './plotPreview';
 import { tierForLevel, tierIndex } from '../shared/progression';
 import { isReservedPlot } from '../shared/projects';
 
-export interface SceneHandle { focus: (b: Building) => void; reset: () => void; zoom: (amount: number) => void; }
-interface Props { buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; debugScores:boolean; previews:PlotPreview[]; projects:PublicProject[]; onProject:()=>void; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
+export interface SceneHandle { focus: (b: {x:number;z:number}) => void; reset: () => void; zoom: (amount: number) => void; }
+interface Props { buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; debugScores:boolean; previews:PlotPreview[]; projects:PublicProject[]; onProject:(id:string)=>void; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
 const SPACING = PLOT_SPACING;
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -90,13 +90,14 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
       if (Math.hypot(e.clientX-down.x,e.clientY-down.y)>6 || e.button !== 0) return;
       const r = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX-r.left)/r.width*2-1, -(e.clientY-r.top)/r.height*2+1);
       raycaster.setFromCamera(pointer,camera);
-      const hit = raycaster.intersectObjects(city.children,true).find(v => v.object.userData.owner);
-      if (hit) props.current.onSelect(hit.object.userData.owner);
+      const hit = raycaster.intersectObjects(city.children,true).find(v => v.object.userData.owner||v.object.userData.project);
+      if (hit?.object.userData.project) props.current.onProject(hit.object.userData.project);
+      else if (hit) props.current.onSelect(hit.object.userData.owner);
     };
     const move = (e: PointerEvent) => {
       const r = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX-r.left)/r.width*2-1, -(e.clientY-r.top)/r.height*2+1);
       raycaster.setFromCamera(pointer,camera);
-      renderer.domElement.style.cursor = raycaster.intersectObjects(city.children,true).some(v => v.object.userData.owner) ? 'pointer' : 'grab';
+      renderer.domElement.style.cursor = raycaster.intersectObjects(city.children,true).some(v => v.object.userData.owner||v.object.userData.project) ? 'pointer' : 'grab';
     };
     const pointerCancel = () => { pointerActive=false; };
     const viewDirection=new THREE.Vector3(),groundCenter=new THREE.Vector3();
@@ -166,7 +167,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     const e = engine.current; if (!e) return;
     e.night = night; disposeGroup(e.city);
     buildCity(e.city,buildings.filter(b=>Math.abs(b.x-center.x)<=VIEW_RADIUS&&Math.abs(b.z-center.z)<=VIEW_RADIUS),night,neighborhoodDensity(buildings),projects);
-    e.outline.selectedObjects=e.city.children.filter(mesh=>mesh.userData.owner===props.current.selected);
+    e.outline.selectedObjects=e.city.children.filter(mesh=>mesh.userData.owner===props.current.selected||mesh.userData.project===props.current.selected);
   }, [buildings,night,center.x,center.z,projects]);
   useEffect(()=>{
     const e=engine.current;if(!e)return;disposeGroup(e.planned);
@@ -178,7 +179,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
       if(Math.abs(project.x-center.x)>VIEW_RADIUS||Math.abs(project.z-center.z)>VIEW_RADIUS)continue;
       const element=document.createElement('button');element.className='public-site-label';
       element.textContent=`${project.name} · ${Math.round(project.funded/project.goal*100)}%`;
-      element.onclick=()=>props.current.onProject();element.setAttribute('aria-label',`Open public project ${project.name}`);
+      element.onclick=()=>props.current.onProject(project.id);element.setAttribute('aria-label',`Open public project ${project.name}`);
       const label=new CSS2DObject(element),position=plotPosition(project.x,project.z);label.position.set(position.x,3,position.z);e.labels.add(label);
     }
     if(!debugScores)return;
@@ -204,7 +205,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
   },[buildings,selected,debugScores,previews,center.x,center.z,projects]);
   useEffect(() => {
     const e = engine.current; if (!e) return; disposeGroup(e.selection);
-    e.outline.selectedObjects=e.city.children.filter(mesh=>mesh.userData.owner===selected);
+    e.outline.selectedObjects=e.city.children.filter(mesh=>mesh.userData.owner===selected||mesh.userData.project===selected);
     const b = buildings.find(b=>b.id===selected); if (!b) return;
     const loaded=new Map(buildings.map(tower=>[tower.id,tower]));
     const scoreAt=neighborhoodScores(buildings);
@@ -392,15 +393,15 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       :[{...footprint,h:h*.15,y:baseY},{w:2.6,d:2.6,h:h*.7,y:baseY+h*.15},{w:2.15,d:2.15,h:h*.15,y:baseY+h*.85}];
     const win=night?'#f3d795':'#627e8a';
     for(const p of parts){
-      for(let segment=0;segment<4;segment++){
-        const low=Math.max(p.y,baseY+h*segment/4),high=Math.min(p.y+p.h,baseY+h*(segment+1)/4);
+      for(let segment=0;segment<form.segments.length;segment++){
+        const low=Math.max(p.y,baseY+h*segment/form.segments.length),high=Math.min(p.y+p.h,baseY+h*(segment+1)/form.segments.length);
         if(high<=low)continue;
         box(architecture,0,(low+high)/2,0,p.w,high-low,p.d,COLORS[form.segments[segment].color].hex,b.id);
       }
       const floors=Math.max(1,Math.min(10,Math.floor(p.h/(form.tier<=1?1:.75))));
       for(let i=0;i<floors;i++){
         const y=p.y+.38+i*(p.h-.5)/floors;
-        const design=form.segments[Math.min(3,Math.floor((y-baseY)/h*4))],ww=design.style==='glass'?.55:.36;
+        const design=form.segments[Math.min(form.segments.length-1,Math.floor((y-baseY)/h*form.segments.length))],ww=design.style==='glass'?.55:.36;
         for(let column=-1;column<=1;column++){
           if(!(i===0&&column===0&&p.y===baseY))box(architecture,column*p.w*.26,y,p.d/2+.018,ww,.29,.04,win,b.id);
           box(architecture,p.w/2+.018,y,column*p.d*.26,.04,.29,ww,win,b.id);
@@ -417,7 +418,8 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       if(b.style==='terrace')box(architecture,-p.w*.3,p.y+p.h+.18,p.d*.27,.4,.25,.48,'#7f9d76');
     }
     if(b.style==='modern') {
-      for(const p of parts)box(architecture,-p.w/2+.08,p.y+p.h/2,0,.16,p.h,p.d+.05,'#e8e9df',b.id);
+      // Project the trim beyond the wall instead of leaving its outer face coplanar.
+      for(const p of parts)box(architecture,-p.w/2+.06,p.y+p.h/2,0,.16,p.h,p.d+.05,'#e8e9df',b.id);
       if(kind==='rural')box(architecture,.85,h+baseY+.18,-.5,.5,.2,.6,'#8a969b',b.id);
       else box(architecture,.55,h+baseY+.36,.3,.6,.6,.65,'#8a969b',b.id);
     }
@@ -452,7 +454,7 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       for(let i=0;i<count;i++)box(architecture,0,.115,front+.18+(pathEnd-front-.3)*i/(count-1),.66,.05,.25,pathColor);
     }
     else box(architecture,0,.12,(front+pathEnd)/2,b.style==='modern'?1.05:.78,.07,pathEnd-front,pathColor);
-    if(b.style==='spire')box(architecture,0,baseY-.03,front+.24,.83,.06,.42,foundationColor);
+    if(b.style==='spire')box(architecture,0,baseY-.02,front+.24,.83,.06,.42,foundationColor);
     if(form.tier<3){tree(plot,-2.25,-1.8,.75,box,mat);tree(plot,2.15,1.6,.55,box,mat);}else tree(plot,2.1,1.8,.45,box,mat);
     // A simple rooftop garden instead of a texture or subdivided material face.
     if(b.style==='terrace'&&kind!=='rural') tree(architecture,.48,-.25,.38,box,mat,h+baseY+.12);
@@ -474,15 +476,16 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       if(project.kind==='park')box(site,0,2.05,0,3.7,.3,3.7,'#9dbaa0');
       else {box(site,0,.45,0,1.8,.5,1.8,'#cad3d0');const sculpture=new THREE.Mesh(new THREE.IcosahedronGeometry(1,0),mat('#a79bc7'));sculpture.position.y=1.65;site.add(sculpture);}
     }
+    site.traverse(object=>{if(object instanceof THREE.Mesh)object.userData.project=project.id;});
   }
   // Merge meshes by material and owner, preserving pickable towers while reducing draw calls.
   group.updateMatrixWorld(true);
-  const batches=new Map<string,{material:THREE.Material;owner?:string;geometries:THREE.BufferGeometry[]}>();
+  const batches=new Map<string,{material:THREE.Material;owner?:string;project?:string;geometries:THREE.BufferGeometry[]}>();
   const originals=new Set<THREE.BufferGeometry>();
   group.traverse(o=>{
     if(!(o instanceof THREE.Mesh) || Array.isArray(o.material))return;
-    const key=`${o.material.uuid}:${o.userData.owner || ''}`;
-    if(!batches.has(key))batches.set(key,{material:o.material,owner:o.userData.owner,geometries:[]});
+    const key=`${o.material.uuid}:${o.userData.owner || ''}:${o.userData.project || ''}`;
+    if(!batches.has(key))batches.set(key,{material:o.material,owner:o.userData.owner,project:o.userData.project,geometries:[]});
     const clone=o.geometry.clone(); const geometry=clone.index?clone.toNonIndexed():clone;
     if(geometry!==clone)clone.dispose();
     geometry.applyMatrix4(o.matrixWorld);batches.get(key)!.geometries.push(geometry);originals.add(o.geometry);
@@ -493,7 +496,9 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     batch.geometries.forEach(g=>g.dispose());
     if(!geometry)continue;
     const mesh=new THREE.Mesh(geometry,batch.material);mesh.castShadow=true;mesh.receiveShadow=true;
-    if(batch.owner)mesh.userData.owner=batch.owner;group.add(mesh);
+    if(batch.owner)mesh.userData.owner=batch.owner;
+    if(batch.project)mesh.userData.project=batch.project;
+    group.add(mesh);
   }
 }
 function tree(parent:THREE.Group,x:number,z:number,scale:number,box:(p:THREE.Group,x:number,y:number,z:number,w:number,h:number,d:number,c:string)=>THREE.Mesh,mat:(c:string)=>THREE.Material,base=0){

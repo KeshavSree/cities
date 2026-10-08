@@ -1,7 +1,7 @@
 import { useRef, type PointerEvent, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-export function TowerDrawer({open,onOpenChange,children}:{open:boolean;onOpenChange:(open:boolean)=>void;children:ReactNode}) {
+export function TowerDrawer({open,onOpenChange,children,subject='tower'}:{open:boolean;onOpenChange:(open:boolean)=>void;children:ReactNode;subject?:'tower'|'project'}) {
   const panel=useRef<HTMLDivElement>(null);
   const handle=useRef<HTMLButtonElement>(null);
   const drag=useRef<{x:number;offset:number;width:number;moved:boolean}|null>(null);
@@ -17,7 +17,7 @@ export function TowerDrawer({open,onOpenChange,children}:{open:boolean;onOpenCha
     if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);
   };
   return <div ref={panel} className={`tower-drawer ${open?'is-open':''}`}>
-    <button ref={handle} className="drawer-handle" aria-label={open?'Push tower details closed':'Pull tower details open'} aria-expanded={open} aria-controls="tower-details"
+    <button ref={handle} className="drawer-handle" aria-label={open?`Push ${subject} details closed`:`Pull ${subject} details open`} aria-expanded={open} aria-controls="tower-details"
       onPointerDown={event=>{
         if(event.button!==0)return;
         const width=panel.current!.offsetWidth;
@@ -35,7 +35,7 @@ export function TowerDrawer({open,onOpenChange,children}:{open:boolean;onOpenCha
       }}
       onPointerUp={event=>finish(event)} onPointerCancel={event=>finish(event,true)}
       onClick={()=>{if(suppressClick.current){suppressClick.current=false;return;}onOpenChange(!open);}}
-      title="Drag or click to slide tower details">{open?<ChevronRight size={17}/>:<ChevronLeft size={17}/>}<span className="handle-grip"/>
+      title={`Drag or click to slide ${subject} details`}>{open?<ChevronRight size={17}/>:<ChevronLeft size={17}/>}<span className="handle-grip"/>
     </button>
     <div id="tower-details" className="drawer-content" inert={!open} aria-hidden={!open} onKeyDown={event=>{if(event.key==='Escape'){onOpenChange(false);handle.current?.focus();}}}>{children}</div>
   </div>;

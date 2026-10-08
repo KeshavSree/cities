@@ -1,12 +1,12 @@
 import { SETTLEMENT_WEIGHTS, settlementType, type SettlementScore } from './neighborhood';
 import type { Building } from '../shared/types';
 import { AREA_CAPACITY, plotPlan } from '../shared/plots';
-import { TIERS, tierForLevel, tierIndex, xpAtLevel } from '../shared/progression';
+import { TIERS, tierForLevel, tierIndex, segmentCount, xpAtLevel } from '../shared/progression';
 export function ScoreBreakdown({score,building,editable,busy,onDev}:{score:SettlementScore;building:Building;editable:boolean;busy:boolean;onDev:(data:{level?:number;source?:string})=>void}){
   const plan=plotPlan(building.x,building.z),facing=['south','east','north','west'][(Math.round(plan.rotation/(Math.PI/2))+4)%4],tier=tierForLevel(building.level);
   return <section className="score-breakdown" aria-label="Development diagnostics">
     <div className="score-heading"><h3>Development diagnostics</h3><strong>T{tierIndex(building.level)+1}</strong></div>
-    <p>{tier.name} · Level {building.level}/20 · {building.xp} XP · {building.bricks} bricks<br/>{tier.ground}</p>
+    <p>{tier.name} · Level {building.level}/20 · {building.xp} XP{building.bricks!==null&&` · ${building.bricks} bricks`}<br/>{tier.ground} · {segmentCount(building.level)} segment{segmentCount(building.level)===1?'':'s'}</p>
     <div className="score-contribution"><span>Road occupancy</span><span>{score.density.toFixed(3)} × {Math.round(SETTLEMENT_WEIGHTS.density*100)}%</span><strong>+{score.densityContribution.toFixed(3)}</strong></div>
     <div className="score-contribution"><span>Nearby levels</span><span>{score.levels.toFixed(3)} × {Math.round(SETTLEMENT_WEIGHTS.levels*100)}%</span><strong>+{score.levelContribution.toFixed(3)}</strong></div>
     <p>Road score {score.total.toFixed(3)} · {settlementType(score.total)}<br/>Weighted mean level {score.averageLevel.toFixed(1)} · {score.nearbyResidents} nearby residents<br/>Planned area {plan.area} · {AREA_CAPACITY} slots · {plan.axis} alignment · Entrance {facing}</p>

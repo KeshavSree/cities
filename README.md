@@ -29,7 +29,7 @@ npm run preview     # Serve the built app through the local Worker on port 8787
 - Click the city canvas or focus it with Tab. Hold WASD to move relative to the camera, Q/E to rotate, Space to rise, and Shift to descend. Arrow keys also pan. Movement pauses while an input, button, or dialog has focus, and clears when the tab loses focus.
 - Click a tower or use the searchable resident list to inspect it.
 - In local development, toggle **Dev mode** to show level, model tier, and XP above each building. The drawer explains the road score, nearby mean level, and planned frontage. Local demo controls preview any level from 1–20 and simulate rewards, clearly labeled in the XP ledger. Dev edits cannot target real residents, and dev routes are disabled in production.
-- Select your tower to inspect XP, bricks, and recent rewards. Architecture lets you customize four segments or change the overall finish. Levels unlock automatically.
+- Select your tower to inspect XP, bricks, and recent rewards. Architecture lets you customize the segments unlocked by your tier or change the overall finish. Levels unlock automatically.
 - Lighting follows the viewer's actual local clock, refreshing automatically and when the tab becomes visible. Dawn and dusk are approximate clock-based transitions, not location-based sunrise calculations. There is no day/night toggle or district selector.
 - Orbit down to about 2.6 degrees above the ground. The camera and terrain adapt to keep the foreground continuous at low angles.
 - The help dialog explains progression. Tower details slide from the right edge on desktop and mobile. Click or drag the edge handle to pull them out or push them back.
@@ -72,7 +72,7 @@ Likes are permanent, limited to one per account per tower, and cannot target you
 | 13–16 | High-rise | Stone plaza, inlaid paving, lamp |
 | 17–20 | Skyscraper | Raised plinth, civic terrace, linear planted borders |
 
-Each tier has a different massing and height curve; all four levels within it add height. Four persistent segment slots (base, lower, upper, crown) independently support colors and classic windows, glass facades, or balconies. Facade details are rendered on all four sides. Separate lot polygons fill irregular street-bounded land.
+Each tier has a different massing and height curve; all four levels within it add height. Each tier unlocks one segment, from a single segment at levels 1–4 to five at levels 17–20. Persistent segment slots independently support colors and classic windows, glass facades, or balconies. The server only accepts edits for unlocked segments. Facade details are rendered on all four sides. Separate lot polygons fill irregular street-bounded land.
 
 `0002_progression.sql` preserves existing levels, initializes corresponding cumulative XP, and converts legacy resource balances to bricks. Selected illustrative demo neighbors show the full five-tier range. The old `resources` column is retained only for migration compatibility and is no longer used for progression or spending.
 
@@ -80,9 +80,11 @@ GitHub account control and provider counts are verifiable. Provider data comes f
 
 ### Public projects
 
-Riverside commons and Makers square reserve two-by-two plot zones. They cannot be allocated as private homes. Nearby residents (within 35 world units) pool bricks; funding reveals groundwork, trees, seating, and a final pavilion or sculpture at quarter-goal stages. Site labels open the Projects board.
+Riverside commons and Makers square reserve two-by-two plot zones. They cannot be allocated as private homes. Nearby residents (within 35 world units) pool bricks; funding reveals groundwork, trees, seating, and a final pavilion or sculpture at quarter-goal stages. Clicking a site or its label opens that project in the flush sidebar, with funding, contributors, and brick contributions. The Projects button opens a project directory in the same sidebar.
 
 Contributions are guarded by balance and remaining goal, with idempotent request receipts. Completion rewards each resident who contributed at least 25 bricks once. D1 triggers commit spending, funding, and completion XP together. Projects broadcast updates over a neighborhood WebSocket; completion reloads snapshots to reflect contributors' newly unlocked levels.
+
+Brick balances are private to their owner. Production snapshots, like responses, and public WebSocket events redact other balances; the owner refreshes their private balance through an authenticated endpoint after a live update. Local dev diagnostics can inspect all balances.
 
 ### Reward accounting
 

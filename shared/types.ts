@@ -3,7 +3,7 @@ export type Color = 'sand' | 'lilac' | 'sage' | 'coral' | 'blue';
 export interface Building {
   id: string; username: string; name: string; bio: string; avatar: string | null;
   github_url: string | null; website: string | null; school: string | null;
-  is_demo: number; x: number; z: number; level: number; xp:number; bricks:number; segments:string; likes:number;
+  is_demo: number; x: number; z: number; level: number; xp:number; bricks:number|null; segments:string; likes:number;
   style: Style; color: Color; commits: number; prs: number; reviews: number;
   synced_at: string | null; updated_at: string; invited_by?: string | null; invite_degree?: number;
 }

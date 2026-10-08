@@ -84,6 +84,6 @@ City-first layout with quiet white controls, pale blue sky, green terrain, viole
 - Migration preserves old levels and balances, introduces an idempotent XP ledger and automatic level triggers.
 - GitHub, successful invites, unique likes, daily visits, construction milestones and completed public projects award XP.
 - Twenty levels, five model tiers, five corresponding ground treatments; ground and models are independent of road density.
-- Four persistent segment designs use bricks. Roads keep the existing network and blend occupancy with surrounding levels.
+- One persistent segment per tier (one to five) uses bricks. Roads keep the existing network and blend occupancy with surrounding levels.
 - Two reserved public zones pool nearby contributions, show four construction stages, and award completion XP once.
 - Dev mode shows level/tier/XP labels, road diagnostics, all 20 level previews and labeled sample rewards.

@@ -64,9 +64,12 @@ async function building(env: Env, id: string) {
   if (!row) throw new ApiError('This tower could not be found.', 404);
   return row;
 }
+// Local dev diagnostics may inspect balances. Public snapshots and events cannot.
+const visibleBuilding=(env:Env,b:Building,viewer:string|null=null):Building=>
+  env.DEV_MODE==='true'||b.id===viewer?b:{...b,bricks:null};
 async function broadcast(env: Env, b: Building, extra: Record<string,unknown> = {}) {
   const room = env.NEIGHBORHOODS.get(env.NEIGHBORHOODS.idFromName(roomName(b)));
-  await room.fetch('https://neighborhood.internal/update', { method: 'POST', body: JSON.stringify({ type: 'building.changed', building: b, ...extra }) });
+  await room.fetch('https://neighborhood.internal/update', { method: 'POST', body: JSON.stringify({ type: 'building.changed', building: visibleBuilding(env,b), ...extra }) });
 }
 async function changed(env: Env, id: string, ctx: ExecutionContext, extra: Record<string,unknown> = {}) {
   const b = await building(env, id);
@@ -213,7 +216,7 @@ export default {
             .bind(own.x-12,own.x+12,own.z-12,own.z+12).all<{x:number;z:number}>();
           nextPlots=availablePlotPlans(own,new Set(occupied.results.map(b=>`${b.x},${b.z}`))).slice(0,24).map(({x,z})=>({x,z}));
         }
-        return json({ buildings: rows.results, nextPlots, projects:await projects(env.DB,user?.id??null), likedIds:user?(await env.DB.prepare('SELECT tower_id FROM tower_likes WHERE voter_id=?').bind(user.id).all<{tower_id:string}>()).results.map(l=>l.tower_id):[], me: user?.id ?? null, demo: env.DEV_MODE === 'true', githubConfigured: authReady(env), claimedToday: Boolean(claimed), dailyReward: DAILY_REWARD, inviteRequired: true });
+        return json({ buildings: rows.results.map(b=>visibleBuilding(env,b,user?.id??null)), nextPlots, projects:await projects(env.DB,user?.id??null), likedIds:user?(await env.DB.prepare('SELECT tower_id FROM tower_likes WHERE voter_id=?').bind(user.id).all<{tower_id:string}>()).results.map(l=>l.tower_id):[], me: user?.id ?? null, demo: env.DEV_MODE === 'true', githubConfigured: authReady(env), claimedToday: Boolean(claimed), dailyReward: DAILY_REWARD, inviteRequired: true });
       }
       if (path === '/api/dev/start' && req.method === 'POST') {
         if (env.DEV_MODE !== 'true') throw new ApiError('Demo mode is not enabled.', 404);
@@ -297,6 +300,7 @@ export default {
         return env.NEIGHBORHOODS.get(env.NEIGHBORHOODS.idFromName(room)).fetch(req);
       }
       const user = await requireUser(req, env);
+      if(path==='/api/me'&&req.method==='GET')return json({building:await building(env,user.id)});
       if (path === '/api/daily' && req.method === 'POST') {
         try {
           await env.DB.batch([
@@ -319,12 +323,12 @@ export default {
       }
       if(path==='/api/segments'&&req.method==='POST'){
         const data=await body(req),index=Number(data.segment);
-        if(!Number.isInteger(index)||index<0||index>3||typeof data.color!=='string'||!Object.hasOwn(COLORS,data.color)||typeof data.style!=='string'||!Object.hasOwn(SEGMENT_STYLES,data.style))throw new ApiError('Choose a valid segment design.');
+        if(!Number.isInteger(index)||index<0||index>4||typeof data.color!=='string'||!Object.hasOwn(COLORS,data.color)||typeof data.style!=='string'||!Object.hasOwn(SEGMENT_STYLES,data.style))throw new ApiError('Choose a valid segment design.');
         const design=JSON.stringify({color:data.color,style:data.style});
         const result=await env.DB.prepare(`UPDATE buildings SET segments=json_set(segments,?,json(?)),bricks=bricks-?,updated_at=datetime('now')
-          WHERE user_id=? AND bricks>=? AND COALESCE(json_extract(segments,?), '')<>? RETURNING user_id`)
-          .bind(`$[${index}]`,design,SEGMENT_COST,user.id,SEGMENT_COST,`$[${index}]`,design).first();
-        if(!result)throw new ApiError('You need more bricks, or that design is already selected.',409);
+          WHERE user_id=? AND bricks>=? AND level>=? AND COALESCE(json_extract(segments,?), '')<>? RETURNING user_id`)
+          .bind(`$[${index}]`,design,SEGMENT_COST,user.id,SEGMENT_COST,index*4+1,`$[${index}]`,design).first();
+        if(!result)throw new ApiError('That segment is locked, you need more bricks, or that design is already selected.',409);
         return json({building:await changed(env,user.id,ctx)});
       }
       if(path==='/api/like'&&req.method==='POST'){
@@ -338,7 +342,7 @@ export default {
           env.DB.prepare('INSERT INTO xp_events(event_key,user_id,source,xp,bricks,description) VALUES(?,?,?,?,0,?)')
             .bind(`like:${user.id}:${target}`,target,'like',REWARDS.like,'A resident liked your tower'),
         ]);}catch(e){if(String(e).includes('UNIQUE'))throw new ApiError('You already liked this tower.',409);throw e;}
-        settleConstruction(env,ctx);return json({building:await changed(env,target,ctx)});
+        settleConstruction(env,ctx);return json({building:visibleBuilding(env,await changed(env,target,ctx),user.id)});
       }
       if(path==='/api/history'&&req.method==='GET')return json({events:(await env.DB.prepare('SELECT event_key,source,xp,bricks,description,created_at FROM xp_events WHERE user_id=? ORDER BY rowid DESC LIMIT 12').bind(user.id).all()).results});
       if(path==='/api/projects/contribute'&&req.method==='POST'){
