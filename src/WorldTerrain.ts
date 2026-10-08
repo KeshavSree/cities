@@ -48,7 +48,7 @@ export class WorldTerrain {
   }
 
   private generate(minX: number, maxX: number, minZ: number, maxZ: number, night: boolean) {
-    const positions: number[] = [], colors: number[] = [], grid: number[] = [];
+    const positions: number[] = [], colors: number[] = [];
     const beach: number[] = [], shallow: number[] = [];
     const grass = new THREE.Color(night ? '#637e6c' : '#bfd2ae');
     const ocean = new THREE.Mesh(
@@ -63,20 +63,15 @@ export class WorldTerrain {
     for (let x = minX; x < maxX; x += PLOT_SPACING) {
       const right = x + PLOT_SPACING;
       const coastLeft = coastZ(x), coastRight = coastZ(right);
-      for (let z = minZ; z < maxZ; z += PLOT_SPACING) {
-        const polygon = clipToCoast([
-          { x, z }, { x: right, z },
-          { x: right, z: z + PLOT_SPACING }, { x, z: z + PLOT_SPACING },
-        ], x, right, coastLeft - BEACH_WIDTH, coastRight - BEACH_WIDTH);
-        if (polygon.length < 3) continue;
-        // One flat color for every face; variation stays fixed at its world grid location.
-        const cellColor = grass.clone().multiplyScalar(0.985 + hash(x / PLOT_SPACING, z / PLOT_SPACING) * 0.03);
+      // Long strips replace individual filled tiles. Low camera angles can see a long
+      // distance without allocating a full square grid of terrain polygons.
+      const polygon = clipToCoast([
+        {x,z:minZ},{x:right,z:minZ},{x:right,z:maxZ},{x,z:maxZ},
+      ],x,right,coastLeft-BEACH_WIDTH,coastRight-BEACH_WIDTH);
+      if(polygon.length>=3){
+        const cellColor = grass.clone().multiplyScalar(0.99 + hash(x / PLOT_SPACING,0) * 0.02);
         appendPolygon(positions, polygon, 0);
         for (let i = 1; i < polygon.length - 1; i++) for (let v = 0; v < 3; v++) colors.push(cellColor.r, cellColor.g, cellColor.b);
-        for (let i = 0; i < polygon.length; i++) {
-          const a = polygon[i], b = polygon[(i + 1) % polygon.length];
-          grid.push(a.x, 0.009, a.z, b.x, 0.009, b.z);
-        }
       }
       if (Math.max(coastLeft, coastRight) < minZ - 9 || Math.min(coastLeft, coastRight) > maxZ + BEACH_WIDTH) continue;
       appendPolygon(beach, [
@@ -94,9 +89,6 @@ export class WorldTerrain {
     const ground = new THREE.Mesh(grassGeometry, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true, side: THREE.DoubleSide }));
     ground.receiveShadow = true;
     this.group.add(ground);
-    const lines = new THREE.BufferGeometry();
-    lines.setAttribute('position', new THREE.Float32BufferAttribute(grid, 3));
-    this.group.add(new THREE.LineSegments(lines, new THREE.LineBasicMaterial({ color: night ? '#8aa18e' : '#99b38c', transparent: true, opacity: night ? 0.13 : 0.17, depthWrite: false })));
     const sand = new THREE.Mesh(geometry(beach), new THREE.MeshStandardMaterial({ color: night ? '#a6a08c' : '#e4d5b2', roughness: 1, side: THREE.DoubleSide }));
     sand.receiveShadow = true;
     this.group.add(sand);

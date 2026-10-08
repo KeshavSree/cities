@@ -2,6 +2,7 @@
 
 .account-link{padding:0;margin-left:8px;font-size:8px;color:#978cc4}.account-link:hover{text-decoration:underline}.verified-activity{display:flex;align-items:center;gap:9px;padding:18px 12px;background:#f0f6f1;border-radius:8px;color:#82a087}.verified-activity span{font-size:9px;line-height:1.8;color:#82958a}
 .scene-loading{position:absolute;inset:40% 35% 40% 25%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:#a0aeb8;font-size:12px}
+.night .city-count,.night .map-hint{color:#c7d6df!important}
 
 /* Keep supporting text readable against the pale city palette. */
 .profile-name>span,.bio,.activity-grid span,.section-heading>span,.growth-info,.growth-footnote,.inspector-footer,.activity-caption,.daily-card small,.inspector-heading>span,.city-count,.map-hint{color:#687d87!important}

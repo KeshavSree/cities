@@ -29,8 +29,9 @@ npm run preview     # Serve the built app through the local Worker on port 8787
 - Focus the city canvas with Tab and use arrow keys to pan with the keyboard.
 - Click a tower or use the searchable resident list to inspect it.
 - Select your tower to upgrade, change architecture, or change its facade color.
-- Switch between daytime and evening from the navigation bar.
-- The help dialog explains progression. Mobile uses a bottom inspector.
+- Lighting follows the viewer's actual local clock, refreshing automatically and when the tab becomes visible. Dawn and dusk are approximate clock-based transitions, not location-based sunrise calculations. There is no day/night toggle or district selector.
+- Orbit down to about 2.6 degrees above the ground. The camera and terrain adapt to keep the foreground continuous at low angles.
+- The help dialog explains progression. Tower details slide from the right edge on desktop and mobile. Click or drag the edge handle to pull them out or push them back.
 - For a live update demonstration, open the city in two tabs, then upgrade or change a tower in one. The other receives the update over a Durable Object WebSocket.
 
 ## Real GitHub login locally
@@ -81,7 +82,9 @@ The initial view fetches up to 250 nearest towers within a bounded 64-plot radiu
 
 ### Continuous terrain and coastline
 
-The visible world uses a finite mesh window projected from the camera's four viewing lines onto the ground plane, with extra terrain beyond the view. The window is rebuilt on chunk boundaries as you pan or zoom. Land, its faint plot grid, and water fill the view without a board edge; terrain generation is entirely local and does not create empty database plots.
+The visible world uses a finite mesh window projected from the camera's four viewing lines onto the ground plane, with extra terrain beyond the view. The window is rebuilt on chunk boundaries as you pan or zoom. Land and water fill the view without a board edge; terrain generation is entirely local and does not create empty database plots.
+
+Terrain uses long filled strips rather than one polygon per distant plot. This keeps shallow camera angles practical as the visible ground extends toward the horizon.
 
 `shared/world.ts` defines a fixed curved coast using a sum of waves sampled at globally anchored intervals. Straight segments connect those samples into a low-poly shoreline that extends in both directions. Its shape and location stay stable while the terrain window moves. The same function keeps server-created plots and their bordering streets inland of the beach.
 
@@ -124,3 +127,9 @@ Static assets bypass the Worker except for `/api/*`. Use SQLite-backed Durable O
 - `PLAN.md`: implementation plan and scope.
 
 Development dependencies override `sharp` and `shell-quote` to patched releases because the local runtime and process runner pulled affected versions. `package-lock.json` records the complete installation.
+
+### Density and irregular streets
+
+Plot allocation uses integer keys internally, while a deterministic world projection offsets the visible plots and shared street corners. Buildings stay rectangular, with their front and back faces parallel to the frontage roads. Separate polygonal ground pads follow the irregular street corners. The terrain has no repeating square grid overlay. Existing towers stay in place when someone joins.
+
+A weighted count of occupied plots within three plots drives the surroundings: urban areas gain asphalt, pavement, street markings, lamps, cars, and pocket parks; suburban areas have narrower roads and more gardens; rural towers get gravel lanes, fences, and woodland. Density is computed locally from the loaded snapshot and updates with live arrivals. The minimap shows the same irregular streets and density. Actual invitation relationships are fetched through the indexed invitations table and appear as subtle faceted connections between loaded towers.

@@ -1,9 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowUp, ArrowUpRight, Check, ChevronDown, Compass, Copy, Gift, Hammer, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, MapPin, Minus, Moon, Plus, Search, Sparkles, Sun, Users, X } from 'lucide-react';
+import { ArrowUp, ArrowUpRight, Check, Compass, Copy, Gift, Hammer, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, MapPin, Minus, Plus, Search, Sparkles, Users, X } from 'lucide-react';
 import type { SceneHandle } from './CityScene';
 import { api } from './api';
 import { COLORS, STYLES, COLOR_COST, STYLE_COST, upgradeCost, type Bootstrap, type Building, type Color, type Style } from '../shared/types';
 import { VIEW_RADIUS } from '../shared/world';
+import { lightingAt } from './lighting';
+import { TowerDrawer } from './TowerDrawer';
+import { CityMap } from './CityMap';
 
 type Modal = 'invite' | 'help' | 'login' | null;
 const CityScene = lazy(()=>import('./CityScene').then(m=>({default:m.CityScene})));
@@ -25,18 +28,17 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<Bootstrap | null>(null);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
-  const [night, setNight] = useState(false);
+  const [lighting, setLighting] = useState(()=>lightingAt(new Date()));
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<'overview' | 'design'>('overview');
   const [modal, setModal] = useState<Modal>(null);
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState('');
-  const [live, setLive] = useState(false);
   const [center, setCenter] = useState({ x: 0, z: 0 });
   const [invites, setInvites] = useState<Invite[]>([]);
   const [copied, setCopied] = useState('');
-  const [mobileInspector, setMobileInspector] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(()=>window.innerWidth>760);
   const scene = useRef<SceneHandle>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const latestCenter = useRef(center); latestCenter.current = center;
@@ -58,6 +60,13 @@ export default function App() {
     return ()=>{active=false;};
   },[notify]);
   useEffect(()=>()=>clearTimeout(toastTimer.current),[]);
+  useEffect(()=>{
+    const refresh=()=>setLighting(lightingAt(new Date()));
+    const timer=setInterval(refresh,30_000);
+    const visible=()=>{if(document.visibilityState==='visible')refresh();};
+    document.addEventListener('visibilitychange',visible);
+    return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',visible);};
+  },[]);
   useEffect(()=>{ if (snapshot) load().catch(e=>notify(e.message,true)); },[center.x,center.z,load,notify]);
   const update = useCallback((building: Building) => {
     setSnapshot(prev=>{
@@ -82,13 +91,13 @@ export default function App() {
       if(disposed)return;
       const ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/api/live?room=${room}`); sockets.push(ws);
       let opened=false;
-      ws.onopen=()=>{if(disposed){ws.close();return;}opened=true;open++;setLive(true);if(open===1)load().catch(()=>{});};
+      ws.onopen=()=>{if(disposed){ws.close();return;}opened=true;open++;if(open===1)load().catch(()=>{});};
       ws.onmessage=e=>{try{const msg=JSON.parse(e.data);if(msg.type==='building.changed'){update(msg.building);if(msg.claimedDay===new Date().toISOString().slice(0,10))setSnapshot(prev=>prev&&prev.me===msg.building.id?{...prev,claimedToday:true}:prev);}}catch{/* Keepalive is not a city event. */}};
-      ws.onclose=()=>{if(disposed)return;if(opened)open--;setLive(open>0);timers.push(setTimeout(()=>connect(room,opened?0:attempt+1),Math.min(30000,1000*2**Math.min(attempt,5))));};
+      ws.onclose=()=>{if(disposed)return;if(opened)open--;timers.push(setTimeout(()=>connect(room,opened?0:attempt+1),Math.min(30000,1000*2**Math.min(attempt,5))));};
       ws.onerror=()=>ws.close();
     };
     for(const room of roomKey.split(';'))connect(room);
-    return()=>{disposed=true;timers.forEach(clearTimeout);sockets.forEach(ws=>ws.close());setLive(false);};
+    return()=>{disposed=true;timers.forEach(clearTimeout);sockets.forEach(ws=>ws.close());};
   },[ready,roomKey,load,update]);
   useEffect(()=>{
     if(!ready)return;
@@ -98,13 +107,12 @@ export default function App() {
   },[ready,snapshot?.claimedToday,load]);
 
   const buildings=snapshot?.buildings || [];
-  const visibleCount=buildings.filter(b=>Math.abs(b.x-center.x)<=VIEW_RADIUS&&Math.abs(b.z-center.z)<=VIEW_RADIUS).length;
   const tower=buildings.find(b=>b.id===selected);
   const me=buildings.find(b=>b.id===snapshot?.me);
   const own=tower?.id===snapshot?.me;
   const neighbors=[...buildings].sort((a,b)=>b.level-a.level);
   const filtered=neighbors.filter(b=>`${b.name} ${b.username}`.toLowerCase().includes(query.toLowerCase()));
-  const select=(b:Building)=>{setSelected(b.id);setTab('overview');setSearchOpen(false);setMobileInspector(true);scene.current?.focus(b);};
+  const select=(b:Building)=>{setSelected(b.id);setTab('overview');setSearchOpen(false);setDrawerOpen(true);scene.current?.focus(b);};
   const focusMe=()=>{if(me)select(me);else setModal('login');};
   const action=async(key:string,fn:()=>Promise<void>)=>{if(busy)return;setBusy(key);try{await fn();}catch(e){notify(e instanceof Error?e.message:'Please try again.',true);}finally{setBusy('');}};
   const upgrade=()=>tower && action('upgrade',async()=>{const result=await api<{building:Building}>('/upgrade',{level:tower.level});update(result.building);notify(`A little taller. Your tower is now level ${result.building.level}.`);});
@@ -115,15 +123,13 @@ export default function App() {
   const createInvite=()=>action('invite',async()=>{const result=await api<{token:string}>('/invites',{});setInvites(prev=>[{token:result.token,created_at:new Date().toISOString(),used_by:null},...prev]);await copy(result.token);});
   const demoJoin=(token:string)=>action(`join-${token}`,async()=>{const result=await api<{building:Building}>('/dev/join',{invite:token});update(result.building);setInvites(prev=>prev.map(i=>i.token===token?{...i,used_by:result.building.id}:i));notify('A new neighbor moved in near your tower.');setModal(null);select(result.building);});
 
-  return <div className={`app ${night?'night':''}`}>
+  return <div className={`app ${lighting.night?'night':''}`} style={{background:`radial-gradient(ellipse at 40% 55%,${lighting.skyCenter} 0,${lighting.skyEdge} 100%)`}}>
     <header className="topbar">
       <button className="brand" onClick={()=>{scene.current?.reset();setCenter({x:0,z:0});}} aria-label="C.I.T.I.E.S, return to city center">
         <span className="brand-mark"><i/><i/><i/></span><span>c.i.t.i.e.s<span className="brand-period">.</span></span>
       </button>
-      <div className="neighborhood"><span className="neighborhood-icon"><MapPin size={15}/></span><span>{center.x===0&&center.z===0?'Founders’ district':`Neighborhood ${center.x}, ${center.z}`}</span><ChevronDown size={14}/></div>
       <nav aria-label="City controls">
         <button className={`icon-button search-toggle ${searchOpen?'active':''}`} title="Find a neighbor" aria-label="Find a neighbor" aria-expanded={searchOpen} onClick={()=>setSearchOpen(!searchOpen)}><Search size={19}/></button>
-        <button className="icon-button" title={night?'Switch to daytime':'Switch to evening'} aria-label={night?'Switch to daytime':'Switch to evening'} onClick={()=>setNight(!night)}>{night?<Sun size={19}/>:<Moon size={19}/>}</button>
         <span className="nav-divider"/>
         <button className="invite-button" onClick={showInvites}><Plus size={16}/> Invite a friend</button>
         <button className="user-button" onClick={focusMe} title="Your tower">{me?<span className="avatar tiny" style={{background:COLORS[me.color].hex}}>{initials(me.name)}</span>:<Github size={19}/>}<span>{me?'My tower':'Sign in'}</span></button>
@@ -131,21 +137,14 @@ export default function App() {
     </header>
 
     <main>
-      <Suspense fallback={<div className="scene-loading"><LoaderCircle className="spin" size={24}/><span>Drawing your little city…</span></div>}><CityScene ref={scene} buildings={buildings} selected={selected} night={night} center={center} onSelect={id=>{const b=buildings.find(b=>b.id===id);if(b)select(b);}} onPan={(x,z)=>setCenter({x,z})}/></Suspense>
-      <div className="intro">
-        <div className="live-label"><span className={`status-dot ${live?'connected':''}`}/>{live?'A neighborhood, alive.':'Connecting the neighborhood…'}</div>
-        <h1>Your work.<br/>A little taller.</h1>
-        <p>A city of people who build things.<br/>Make yourself at home.</p>
-        <div className="city-count"><Users size={15}/><strong>{visibleCount}</strong> neighbors nearby<span className="tiny-divider"/><Leaf size={14}/> room to grow</div>
-      </div>
-
+      <Suspense fallback={<div className="scene-loading"><LoaderCircle className="spin" size={24}/><span>Drawing your little city…</span></div>}><CityScene ref={scene} buildings={buildings} selected={selected} lighting={lighting} center={center} onSelect={id=>{const b=buildings.find(b=>b.id===id);if(b)select(b);}} onPan={(x,z)=>setCenter({x,z})}/></Suspense>
       {searchOpen && <section className="resident-search" aria-label="Find a neighbor">
         <div className="search-input"><Search size={17}/><input autoFocus placeholder="Find a name or username" value={query} onChange={e=>setQuery(e.target.value)} aria-label="Search residents"/><button className="icon-button" aria-label="Close search" onClick={()=>setSearchOpen(false)}><X size={16}/></button></div>
         <div className="resident-results">{filtered.length?filtered.map(b=><button key={b.id} className="resident-result" onClick={()=>select(b)}><span className="avatar small" style={{background:COLORS[b.color].hex}}>{initials(b.name)}</span><span><strong>{b.name}</strong><small>@{b.username}</small></span><span className="level-label">Lv. {b.level}</span></button>):<p className="empty-search">No neighbors match that name.</p>}</div>
       </section>}
 
-      {tower && <aside className={`inspector ${mobileInspector?'mobile-open':''}`} aria-label={`${tower.name}'s tower`}>
-        <div className="inspector-heading"><span><span className="small-dot"/>{own?'Your little corner':'Meet your neighbor'}</span><button className="icon-button mobile-close" aria-label="Close tower details" onClick={()=>setMobileInspector(false)}><X size={18}/></button><button className="icon-button desktop-focus" title="Focus this tower" aria-label="Focus this tower" onClick={()=>scene.current?.focus(tower)}><LocateFixed size={17}/></button></div>
+      {tower && <TowerDrawer open={drawerOpen} onOpenChange={setDrawerOpen}><aside className="inspector" aria-label={`${tower.name}'s tower`}>
+        <div className="inspector-heading"><span><span className="small-dot"/>{own?'Your little corner':'Meet your neighbor'}</span><div className="drawer-heading-actions"><button className="icon-button desktop-focus" title="Focus this tower" aria-label="Focus this tower" onClick={()=>scene.current?.focus(tower)}><LocateFixed size={17}/></button><button className="icon-button" aria-label="Close tower details" onClick={()=>{setDrawerOpen(false);document.querySelector<HTMLButtonElement>('.drawer-handle')?.focus();}}><X size={18}/></button></div></div>
         <div className="profile">
           <span className="avatar profile-avatar" style={{background:COLORS[tower.color].hex}}>{initials(tower.name)}<span className="profile-avatar-badge"><Hammer size={11}/></span></span>
           <div className="profile-name"><h2>{tower.name}</h2><span>@{tower.username}</span></div>
@@ -184,14 +183,13 @@ export default function App() {
           {own && <div className="resource-row"><span><Sparkles size={16}/> Available resources</span><strong>{tower.resources.toLocaleString()}</strong></div>}
         </div>}
         <footer className="inspector-footer"><MapPin size={13}/>Plot {tower.x}, {tower.z}<span>{STYLES[tower.style].label} tower</span>{own && <button className="account-link" onClick={()=>setModal('login')}>Account</button>}</footer>
-      </aside>}
+      </aside></TowerDrawer>}
 
       {me && <button className={`daily-card ${snapshot?.claimedToday?'collected':''}`} disabled={Boolean(busy)||snapshot?.claimedToday} onClick={daily}>
         <span className="daily-icon">{snapshot?.claimedToday?<Check size={20}/>:<Gift size={21}/>}</span><span><strong>{snapshot?.claimedToday?'A good day to build.':'A little something for showing up.'}</strong><small>{snapshot?.claimedToday?'Today’s reward collected. See you tomorrow.':`Collect your daily ${snapshot?.dailyReward} resources`}</small></span>{!snapshot?.claimedToday && <span className="daily-action">{busy==='daily'?<LoaderCircle className="spin" size={17}/>:<Plus size={16}/>}</span>}
       </button>}
       <div className="map-controls"><div className="map-tools"><button title="Zoom in" aria-label="Zoom in" onClick={()=>scene.current?.zoom(1.2)}><Plus size={18}/></button><button title="Zoom out" aria-label="Zoom out" onClick={()=>scene.current?.zoom(1/1.2)}><Minus size={18}/></button><span/><button title="Reset view" aria-label="Reset view" onClick={()=>{scene.current?.reset();setCenter({x:0,z:0});}}><Compass size={19}/></button><button title="How it works" aria-label="How it works" onClick={()=>setModal('help')}><HelpCircle size={18}/></button></div><span className="map-hint">Drag to orbit <span>·</span> Scroll to zoom</span></div>
-      <button className="mobile-tower-button" onClick={()=>setMobileInspector(true)}><Layers size={16}/>{tower?`${tower.name.split(' ')[0]}’s tower`:'Tower details'}</button>
-      <div className="mini-map" aria-label="Neighborhood map"><svg viewBox="0 0 120 100" role="img" aria-label="Plots in the current neighborhood"><path d="M12 50H108M60 8V92M12 27H108M12 73H108M35 8V92M85 8V92" stroke="currentColor" strokeWidth="1" opacity=".22"/>{buildings.map(b=><rect key={b.id} x={54+(b.x-center.x)*10} y={44+(b.z-center.z)*10} width={b.id===selected?9:6} height={b.id===selected?9:6} rx="1" fill={b.id===selected?'#7971df':COLORS[b.color].hex}/>)}</svg><span><MapPin size={11}/> You’re in good company</span></div>
+      <CityMap buildings={buildings} selected={selected} center={center}/>
       {snapshot?.demo && <div className="demo-label"><Sparkles size={12}/>Local demo<span>Sample people. Real building mechanics.</span></div>}
       {!snapshot && <div className="loading-screen"><span className="brand-mark"><i/><i/><i/></span><h2>{error?'The city is taking a moment.':'Making room for good ideas.'}</h2><p>{error || 'Preparing your neighborhood…'}</p>{error?<button className="primary-button" onClick={()=>location.reload()}>Try again</button>:<LoaderCircle className="spin" size={22}/>}</div>}
       {snapshot && !snapshot.buildings.length && <div className="empty-city"><h2>A city starts with someone.</h2><p>Sign in with the founding GitHub account or an invitation to place the first tower.</p><button className="primary-button" onClick={()=>setModal('login')}><Github size={16}/>Join the city</button></div>}
@@ -206,7 +204,7 @@ export default function App() {
         <p className="modal-small">Single-use invitations. Up to five new invitations per day.</p>
         {invites.length>0 && <div className="invitation-list"><h3>Your invitations</h3>{invites.map(i=><div className="invitation" key={i.token}><div><span>{i.used_by?'A neighbor moved in':'A plot is waiting'}</span><input readOnly aria-label="Invitation link" value={`${location.origin}/?invite=${i.token}`} onFocus={e=>e.target.select()}/></div>{i.used_by?<Check size={17}/>:<button className="icon-button" title="Copy invitation" aria-label="Copy invitation" onClick={()=>copy(i.token)}>{copied===i.token?<Check size={17}/>:<Copy size={17}/>}</button>}{snapshot?.demo && !i.used_by && <button className="demo-join" disabled={Boolean(busy)} onClick={()=>demoJoin(i.token)}>Try a demo join</button>}</div>)}</div>}
       </>}
-      {modal==='help' && <><p className="modal-description">Every tower belongs to a person. Their contributions become resources, and their resources become a little piece of the skyline.</p><div className="help-item"><Github/><div><h3>Build things. Grow here.</h3><p>GitHub commits earn 1 resource, pull requests earn 8, and reviews earn 5. Counts come from GitHub’s past-year contribution totals.</p></div></div><div className="help-item"><Layers/><div><h3>There’s always another level.</h3><p>New levels cost more resources. There’s no maximum height. Tower detail stays light so the city runs smoothly.</p></div></div><div className="help-item"><Users/><div><h3>Bring your people.</h3><p>Your invitation gives someone a nearby plot. Streets grow as the neighborhood does.</p></div></div><div className="help-item"><Gift/><div><h3>A little reward for returning.</h3><p>Collect 30 resources once per day. The day resets at midnight UTC.</p></div></div><div className="help-controls">Drag to orbit. Right-drag to pan. Scroll to zoom.<br/>Use search to select residents with your keyboard.</div>{snapshot?.demo && <p className="demo-explanation">You’re exploring a local demo. Residents and activity are samples; upgrades, rewards, invitations, and live updates use the real local backend.</p>}</>}
+      {modal==='help' && <><p className="modal-description">Every tower belongs to a person. Their contributions become resources, and their resources become a little piece of the skyline.</p><div className="help-item"><Github/><div><h3>Build things. Grow here.</h3><p>GitHub commits earn 1 resource, pull requests earn 8, and reviews earn 5. Counts come from GitHub’s past-year contribution totals.</p></div></div><div className="help-item"><Layers/><div><h3>There’s always another level.</h3><p>New levels cost more resources. There’s no maximum height. Tower detail stays light so the city runs smoothly.</p></div></div><div className="help-item"><Users/><div><h3>Bring your people.</h3><p>Your invitation gives someone a nearby plot. Violet links show invitation connections. More neighbors bring urban streets; sparse areas stay greener and quieter.</p></div></div><div className="help-item"><Gift/><div><h3>A little reward for returning.</h3><p>Collect 30 resources once per day. The day resets at midnight UTC.</p></div></div><div className="help-controls">Drag to orbit. Right-drag to pan. Scroll to zoom.<br/>Use search to select residents with your keyboard.</div>{snapshot?.demo && <p className="demo-explanation">You’re exploring a local demo. Residents and activity are samples; upgrades, rewards, invitations, and live updates use the real local backend.</p>}</>}
       {modal==='login' && <><p className="modal-description">Connect GitHub to make your own tower. New neighbors need an invitation; returning neighbors can sign in directly.</p><label className="invite-field">Invitation code<input id="invite-code" defaultValue={new URLSearchParams(location.search).get('invite') || ''} placeholder="Paste your invitation code or link"/></label><button className="primary-button full-width" disabled={!snapshot?.githubConfigured} onClick={()=>{const value=(document.getElementById('invite-code') as HTMLInputElement).value.trim();let token=value;try{token=new URL(value).searchParams.get('invite')||value;}catch{/* Plain token. */}location.href=`/api/auth/github${token?`?invite=${encodeURIComponent(token)}`:''}`;}}><Github size={18}/>Continue with GitHub</button>{!snapshot?.githubConfigured && <p className="setup-note">GitHub login needs OAuth credentials in the local server configuration. Setup instructions are in README.md.</p>}{snapshot?.demo && <button className="secondary-button full-width" disabled={Boolean(busy)} onClick={()=>action('demo',async()=>{for(let batch=0;batch<3;batch++)await api(`/dev/start?batch=${batch}`,{});await load();setModal(null);notify('Welcome to your local demo tower.');})}><Sparkles size={16}/>Explore as a demo resident</button>}{me && <button className="logout-button" disabled={Boolean(busy)} onClick={()=>action('logout',async()=>{await api('/auth/logout',{});await load();setModal(null);notify('You signed out.');})}><LogOut size={14}/>Sign out of this session</button>}</>}
     </Dialog>}
   </div>;

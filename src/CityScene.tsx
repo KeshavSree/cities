@@ -3,22 +3,25 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { COLORS, type Building } from '../shared/types';
-import { coastZ, PLOT_SPACING, VIEW_RADIUS } from '../shared/world';
+import { coastZ, plotPosition, worldHash, PLOT_SPACING, VIEW_RADIUS } from '../shared/world';
 import { WorldTerrain } from './WorldTerrain';
+import type { CityLighting } from './lighting';
+import { neighborhoodDensity, settlementType, streetPoints } from './neighborhood';
 
 export interface SceneHandle { focus: (b: Building) => void; reset: () => void; zoom: (amount: number) => void; }
-interface Props { buildings: Building[]; selected: string | null; night: boolean; center: {x:number;z:number}; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
+interface Props { buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
 const SPACING = PLOT_SPACING;
 const heightOf = (level: number) => 2.3 + Math.sqrt(level) * 1.65;
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ buildings, selected, night, center, onSelect, onPan }, ref) {
+export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ buildings, selected, lighting, center, onSelect, onPan }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const engine = useRef<{ scene: THREE.Scene; renderer: THREE.WebGLRenderer; camera: THREE.OrthographicCamera; controls: OrbitControls; city: THREE.Group; selection: THREE.Group; focus: THREE.Vector3 | null; night: boolean; resize: () => void } | null>(null);
-  const props = useRef({ buildings, selected, onSelect, onPan }); props.current = { buildings, selected, onSelect, onPan };
+  const props = useRef({ buildings, selected, lighting, onSelect, onPan }); props.current = { buildings, selected, lighting, onSelect, onPan };
+  const night=lighting.night;
   const [unavailable, setUnavailable] = useState(false);
   useImperativeHandle(ref, () => ({
-    focus(b) { if (engine.current) engine.current.focus = new THREE.Vector3(b.x * SPACING, 0, b.z * SPACING); },
+    focus(b) { if (engine.current) engine.current.focus = new THREE.Vector3(plotPosition(b.x,b.z).x, 0, plotPosition(b.x,b.z).z); },
     reset() { const e = engine.current; if (!e) return; e.focus = new THREE.Vector3(0,0,0); e.camera.position.set(38, 36, 46).multiplyScalar(4).add(e.controls.target); e.camera.zoom = .83; e.camera.updateProjectionMatrix(); },
     zoom(amount) { const e = engine.current; if (!e) return; e.camera.zoom = THREE.MathUtils.clamp(e.camera.zoom * amount, .4, 3.8); e.camera.updateProjectionMatrix(); },
   }), []);
@@ -32,7 +35,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.setClearColor(0x000000, 0);
     el.appendChild(renderer.domElement);
-    renderer.domElement.setAttribute('aria-label', 'Interactive 3D city. Drag to orbit, scroll to zoom, or select a tower. Use the resident list for keyboard navigation.');
+    renderer.domElement.setAttribute('aria-label', 'Interactive 3D city. Drag to orbit, scroll to zoom, or select a tower. Violet links show invitation connections. Use the resident list for keyboard navigation.');
     renderer.domElement.tabIndex = 0;
     const scene = new THREE.Scene();
     const terrain = new WorldTerrain(); scene.add(terrain.group);
@@ -43,7 +46,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     camera.position.set(38,36,46).multiplyScalar(4);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0,0,0); controls.enableDamping = !reducedMotion(); controls.dampingFactor = .09;
-    controls.minZoom = .4; controls.maxZoom = 3.8; controls.maxPolarAngle = Math.PI / 2.55; controls.minPolarAngle = .25;
+    controls.minZoom = .4; controls.maxZoom = 3.8; controls.maxPolarAngle = Math.PI / 2 - .045; controls.minPolarAngle = .25;
     controls.enablePan = true; controls.screenSpacePanning = false;
     controls.listenToKeyEvents(renderer.domElement);
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
@@ -87,6 +90,8 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     renderer.domElement.addEventListener('keyup',keyUp);
     renderer.domElement.addEventListener('pointermove', move); controls.addEventListener('end', panEnd);
     let frame: number;
+    const cameraDirection = new THREE.Vector3();
+    const warmSun = new THREE.Color('#f0b17d'), middaySun = new THREE.Color('#fff3df');
     function animate() {
       frame = requestAnimationFrame(animate);
       const e = engine.current;
@@ -96,8 +101,21 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
         controls.target.addScaledVector(delta,step); camera.position.addScaledVector(delta,step);
         if (delta.length() < .03) { e.focus = null; panEnd(); }
       }
-      ambient.intensity = e?.night ? 1.1 : 2.8; sun.intensity = e?.night ? .55 : 3.1;
-      controls.update(); terrain.update(camera,Boolean(e?.night)); renderer.render(scene,camera);
+      const light=props.current.lighting;
+      ambient.intensity = THREE.MathUtils.lerp(.9,2.8,light.daylight);
+      sun.intensity = THREE.MathUtils.lerp(.2,3.1,light.daylight);
+      sun.color.copy(warmSun).lerp(middaySun,light.daylight);
+      sun.target.position.set(controls.target.x,0,controls.target.z);
+      sun.target.updateMatrixWorld();
+      sun.position.set(controls.target.x+Math.cos(light.sunPhase)*34,12+light.daylight*38,controls.target.z+25);
+      controls.update();
+      // Keep the orthographic foreground in front of the camera, even near the horizon.
+      cameraDirection.copy(camera.position).sub(controls.target).normalize();
+      const distance=Math.max(280,(camera.top/camera.zoom*Math.sqrt(1-cameraDirection.y**2)+2)/Math.max(.04,cameraDirection.y));
+      camera.position.copy(controls.target).addScaledVector(cameraDirection,distance);
+      const far=Math.max(5000,distance*4);
+      if(Math.abs(camera.far-far)>.1){camera.far=far;camera.updateProjectionMatrix();}
+      terrain.update(camera,light.night); renderer.render(scene,camera);
     }
     animate();
     return () => {
@@ -120,9 +138,22 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     const b = buildings.find(b=>b.id===selected); if (!b) return;
     const material = new THREE.MeshBasicMaterial({ color: '#7971e0', transparent: true, opacity: .85, side: THREE.DoubleSide });
     const ring = new THREE.Mesh(new THREE.RingGeometry(2.5,2.65,4,1,Math.PI/4), material);
-    ring.rotation.x = -Math.PI/2; ring.position.set(b.x*SPACING,.09,b.z*SPACING); e.selection.add(ring);
+    ring.rotation.x = -Math.PI/2; const position=plotPosition(b.x,b.z); ring.position.set(position.x,.09,position.z); e.selection.add(ring);
     const marker = new THREE.Mesh(new THREE.OctahedronGeometry(.25),new THREE.MeshBasicMaterial({ color: '#7971e0' }));
-    marker.position.set(b.x*SPACING,heightOf(b.level)+2,b.z*SPACING); e.selection.add(marker);
+    marker.position.set(position.x,heightOf(b.level)+2,position.z); e.selection.add(marker);
+    const loaded=new Map(buildings.map(tower=>[tower.id,tower]));
+    for(const child of buildings){
+      const parent=child.invited_by?loaded.get(child.invited_by):null;
+      if(!parent)continue;
+      const a=plotPosition(parent.x,parent.z),end=plotPosition(child.x,child.z);
+      const start=new THREE.Vector3(a.x,heightOf(parent.level)+1,a.z);
+      const finish=new THREE.Vector3(end.x,heightOf(child.level)+1,end.z);
+      const control=start.clone().add(finish).multiplyScalar(.5);control.y=Math.max(start.y,finish.y)+2;
+      const connected=child.id===selected||parent.id===selected;
+      const curve=new THREE.QuadraticBezierCurve3(start,control,finish);
+      const link=new THREE.Mesh(new THREE.TubeGeometry(curve,16,connected?.045:.025,4,false),new THREE.MeshBasicMaterial({color:'#b6a5ee',transparent:true,opacity:connected?.7:.18,depthWrite:false}));
+      e.selection.add(link);
+    }
   }, [selected,buildings]);
   return <div className="scene" ref={host}>{unavailable && <div className="webgl-fallback"><h2>Your city needs WebGL</h2><p>Enable hardware acceleration or open a browser that supports WebGL. You can still use the resident list and building controls.</p></div>}</div>;
 });
@@ -134,36 +165,97 @@ function disposeGroup(group: THREE.Group) {
 }
 function buildCity(group: THREE.Group, buildings: Building[], night: boolean) {
   const materials = new Map<string,THREE.MeshStandardMaterial>();
-  const mat = (color: string) => { if (!materials.has(color)) materials.set(color,new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 1 })); return materials.get(color)!; };
+  const mat = (color: string) => {
+    if (!materials.has(color)) materials.set(color,new THREE.MeshStandardMaterial({
+      color,flatShading:true,roughness:1,
+      emissive:night&&(color==='#f3d795'||color==='#f0daab')?color:'#000000',emissiveIntensity:.55,
+    }));
+    return materials.get(color)!;
+  };
   const box = (parent: THREE.Group, x:number,y:number,z:number,w:number,h:number,d:number,color:string,owner?:string) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color)); mesh.position.set(x,y,z); mesh.castShadow = h>.3; mesh.receiveShadow = true;
     if (owner) mesh.userData.owner = owner; parent.add(mesh); return mesh;
   };
-  const roads = new Map<string,{x:number;z:number;horizontal:boolean}>();
-  for(const b of buildings){
-    for(const z of [b.z,b.z+1])roads.set(`h:${b.x},${z}`,{x:b.x*SPACING,z:(z-.5)*SPACING,horizontal:true});
-    for(const x of [b.x,b.x+1])roads.set(`v:${x},${b.z}`,{x:(x-.5)*SPACING,z:b.z*SPACING,horizontal:false});
-  }
-  for(const road of roads.values()){
-    const length=SPACING+1.15;
-    box(group,road.x,.015,road.z,road.horizontal?length:1.15,.055,road.horizontal?1.15:length,'#e1e5db');
-    box(group,road.x,.051,road.z,road.horizontal?length:.7,.024,road.horizontal?.7:length,'#b5c2bd');
-  }
+  const densityAt=neighborhoodDensity(buildings);
   const taken=new Set(buildings.map(b=>`${b.x},${b.z}`));
+  const roads=new Map<string,{x:number;z:number;horizontal:boolean;density:number}>();
+  const addRoad=(x:number,z:number,horizontal:boolean,density:number)=>{
+    const key=`${horizontal?'h':'v'}:${x},${z}`;
+    const old=roads.get(key);
+    roads.set(key,{x,z,horizontal,density:Math.max(density,old?.density||0)});
+  };
+  for(const b of buildings){
+    const density=densityAt(b.x,b.z),kind=settlementType(density);
+    addRoad(b.x,b.z+1,true,density);
+    addRoad(b.x,b.z,true,density);
+    if(kind==='urban'||taken.has(`${b.x},${b.z+1}`)||taken.has(`${b.x},${b.z-1}`)){
+      addRoad(b.x,b.z,false,density);addRoad(b.x+1,b.z,false,density);
+    }
+  }
+  const ribbon=(points:{x:number;z:number}[],width:number,y:number,h:number,color:string)=>{
+    for(let i=0;i<points.length-1;i++){
+      const a=points[i],b=points[i+1],dx=b.x-a.x,dz=b.z-a.z;
+      const segment=box(group,(a.x+b.x)/2,y,(a.z+b.z)/2,Math.hypot(dx,dz)+.08,h,width,color);
+      segment.rotation.y=-Math.atan2(dz,dx);
+    }
+  };
+  for(const road of roads.values()){
+    const kind=settlementType(road.density),points=streetPoints(road.x,road.z,road.horizontal);
+    const width=kind==='urban'?1.35:kind==='suburban'?.85:.45;
+    ribbon(points,width+.35,.025,.055,kind==='rural'?'#c4bd9f':'#dfded3');
+    ribbon(points,width,.065,.024,kind==='urban'?'#849394':kind==='suburban'?'#a8b2ad':'#b3ac91');
+    const a=points[0],b=points[1],middle={x:(a.x+b.x)/2,z:(a.z+b.z)/2},angle=-Math.atan2(b.z-a.z,b.x-a.x);
+    if(kind==='urban'){
+      const stripe=box(group,middle.x,.083,middle.z,.7,.008,.035,'#e4dfc5');stripe.rotation.y=angle;
+      const side=road.horizontal?{x:0,z:width/2+.2}:{x:width/2+.2,z:0};
+      box(group,middle.x+side.x,.8,middle.z+side.z,.07,1.5,.07,'#667e81');
+      box(group,middle.x+side.x,1.58,middle.z+side.z,.23,.17,.23,night?'#f0daab':'#d8d8c7');
+      if(worldHash(road.x,road.z+(road.horizontal?0:13))>.72){
+        const car=box(group,middle.x,.24,middle.z,.9,.27,.43,'#8b9cac');car.rotation.y=angle;
+        const top=box(group,middle.x,.42,middle.z,.43,.17,.35,'#c0ced1');top.rotation.y=angle;
+      }
+    }
+  }
   const gardens=new Set<string>();
-  for(const b of buildings)for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++)gardens.add(`${b.x+dx},${b.z+dz}`);
+  for(const b of buildings)for(let dx=-3;dx<=3;dx++)for(let dz=-3;dz<=3;dz++)gardens.add(`${b.x+dx},${b.z+dz}`);
   for(const garden of gardens){
     const [x,z]=garden.split(',').map(Number);
-    if(taken.has(`${x},${z}`))continue;
-    if(z*SPACING+2.5>coastZ(x*SPACING)-2.5)continue;
-    const treeCount = Math.abs(x*13+z*7)%3+1;
-    for(let i=0;i<treeCount;i++) tree(group,x*SPACING+(i-1)*1.55,z*SPACING+Math.sin(x+z+i)*1.7,.8+Math.abs(Math.sin(x*3+z+i))*.5,box,mat);
-    if((x+z)%3===0&&buildings.some(b=>Math.abs(b.x-x)+Math.abs(b.z-z)<=1)) { box(group,x*SPACING,.2,z*SPACING+2.5,1.3,.25,.35,'#b49775'); box(group,x*SPACING,.48,z*SPACING+2.62,1.3,.36,.13,'#b49775'); }
+    if(taken.has(garden))continue;
+    const position=plotPosition(x,z);
+    if(position.z+3>coastZ(position.x)-2.5)continue;
+    const density=densityAt(x,z),kind=settlementType(density);
+    const treeCount=kind==='urban'?1:kind==='suburban'?2:2+Math.floor(worldHash(x,z)*3);
+    if(kind==='urban')box(group,position.x,.035,position.z,4.8,.07,4.8,'#d2d6c5');
+    for(let i=0;i<treeCount;i++){
+      const tx=(worldHash(x+i*7,z)-.5)*4.5,tz=(worldHash(z+i*11,x)-.5)*4.5;
+      tree(group,position.x+tx,position.z+tz,.65+worldHash(x+i,z+17)*.65,box,mat);
+    }
+    if(kind!=='rural'&&(x+z)%3===0){
+      box(group,position.x,.2,position.z+2,1.3,.25,.35,'#b49775');
+      box(group,position.x,.48,position.z+2.12,1.3,.36,.13,'#b49775');
+    }
   }
   for(const b of buildings){
-    const plot=new THREE.Group(); plot.position.set(b.x*SPACING,0,b.z*SPACING); group.add(plot);
+    const plot=new THREE.Group(),position=plotPosition(b.x,b.z);
+    const density=densityAt(b.x,b.z),kind=settlementType(density);
+    plot.position.set(position.x,0,position.z);group.add(plot);
     const color=COLORS[b.color]?.hex || COLORS.sand.hex; const h=heightOf(b.level);
-    box(plot,0,.04,0,5.8,.12,5.8,'#b3c8a0'); box(plot,0,.14,0,4.3,.17,4.3,'#e1dfd4',b.id);
+    // The lot follows the street corners; the tower itself remains rectangular.
+    const inset=kind==='urban'?.76:kind==='suburban'?.83:.89;
+    const corners=[[-.5,-.5],[.5,-.5],[.5,.5],[-.5,.5]].map(([dx,dz])=>{
+      const corner=plotPosition(b.x+dx,b.z+dz);
+      return new THREE.Vector3((corner.x-position.x)*inset,.085,(corner.z-position.z)*inset);
+    });
+    const groundGeometry=new THREE.BufferGeometry();
+    groundGeometry.setAttribute('position',new THREE.Float32BufferAttribute([0,2,1,0,3,2].flatMap(i=>corners[i].toArray()),3));
+    groundGeometry.computeVertexNormals();
+    const lot=new THREE.Mesh(groundGeometry,mat(kind==='urban'?'#ced2c8':kind==='suburban'?'#b3c8a0':'#b5cda3'));
+    lot.receiveShadow=true;plot.add(lot);
+    box(plot,0,.14,0,kind==='urban'?4.5:3.8,.17,kind==='urban'?4.5:3.8,'#e1dfd4',b.id);
+    if(kind==='rural'){
+      box(plot,-2.4,.36,0,.08,.55,4.6,'#c6b996');box(plot,0,.36,-2.4,4.6,.55,.08,'#c6b996');
+      box(plot,1.9,.15,-1.7,.6,.12,1.2,'#8ba374');
+    }
     const parts: {w:number;d:number;h:number;y:number}[] = b.style==='terrace'
       ? [{w:3.35,d:3.1,h:h*.48,y:.24},{w:2.65,d:2.5,h:h*.32,y:.24+h*.48},{w:1.85,d:1.85,h:h*.2,y:.24+h*.8}]
       : [{w:b.style==='modern'?2.9:2.5,d:b.style==='modern'?2.9:2.5,h,y:.24}];
@@ -192,9 +284,10 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean) {
   }
   // Keep the plaza only next to inhabited plots, and leave its lot available for expansion.
   if(!taken.has('3,0')&&buildings.some(b=>Math.abs(b.x-3)+Math.abs(b.z)<=1)){
-  box(group,3*SPACING,.1,0,5.7,.12,5.7,'#b1c6a0');
-  const fountain = new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.5,.25,8),mat('#e1e1d6')); fountain.position.set(3*SPACING,.25,0);group.add(fountain);
-  const water=new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.1,.03,8),mat('#87bcc7')); water.position.set(3*SPACING,.39,0);group.add(water);
+  const plaza=plotPosition(3,0);
+  box(group,plaza.x,.1,plaza.z,5.2,.12,5.2,'#b1c6a0');
+  const fountain = new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.5,.25,8),mat('#e1e1d6')); fountain.position.set(plaza.x,.25,plaza.z);group.add(fountain);
+  const water=new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.1,.03,8),mat('#87bcc7')); water.position.set(plaza.x,.39,plaza.z);group.add(water);
   }
   // Merge meshes by material and owner, preserving pickable towers while reducing draw calls.
   group.updateMatrixWorld(true);

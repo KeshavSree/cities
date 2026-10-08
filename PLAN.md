@@ -48,3 +48,15 @@ City-first layout with quiet white controls, pale blue sky, green terrain, viole
 - Continue the subtle plot grid over empty land; generate streets only around occupied plots.
 - Share coastline math with server plot allocation so new residents cannot be placed on the beach or in the ocean.
 - Reviewed the widest zoom and panning into empty land. Increased camera distance to keep the near plane from clipping the foreground. Vegetation stays tied to inhabited areas rather than moving with the terrain window.
+
+## Camera and local time update
+- Allow an orbit down to roughly 2.6 degrees above the ground; adapt the orthographic camera distance to preserve foreground coverage.
+- Render terrain with long strips so low angles do not allocate a full filled tile grid.
+- Follow the viewer's actual local clock with gradual dawn/dusk lighting and automatic refresh. Remove the manual lighting toggle.
+- Remove named districts and the header location selector; the city is continuous. Internal WebSocket routing remains an implementation detail.
+
+## Drawer and settlement update
+- Remove the top-left introduction overlay. Tower details now fill the right edge and slide with a draggable handle on desktop and mobile.
+- Use stable irregular plot positions, straight streets meeting at varied corner angles, and separate polygonal ground pads around rectangular, road-aligned towers; remove the regular terrain grid overlay.
+- Let nearby occupied plots drive an urban → suburban → rural transition in paving, streets, lighting, gardens, and woodland, with matching minimap rendering.
+- Show actual inviter relationships without creating synthetic social links.

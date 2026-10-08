@@ -14,7 +14,8 @@ const DAY = () => new Date().toISOString().slice(0, 10);
 const NOW = () => Math.floor(Date.now() / 1000);
 const QUERY = `SELECT u.id, u.username, u.name, u.bio, u.avatar, u.github_url, u.website, u.school,
   u.is_demo, b.x, b.z, b.level, b.resources, b.style, b.color, b.updated_at,
-  COALESCE(m.commits, 0) commits, COALESCE(m.prs, 0) prs, COALESCE(m.reviews, 0) reviews, m.synced_at
+  COALESCE(m.commits, 0) commits, COALESCE(m.prs, 0) prs, COALESCE(m.reviews, 0) reviews, m.synced_at,
+  (SELECT i.inviter_id FROM invitations i WHERE i.used_by=u.id) invited_by
   FROM buildings b JOIN users u ON b.user_id=u.id LEFT JOIN metrics m ON m.user_id=u.id`;
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers });
