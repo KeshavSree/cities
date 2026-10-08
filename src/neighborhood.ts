@@ -2,8 +2,10 @@ import type { Building } from '../shared/types';
 import { plotPosition, PLOT_SPACING } from '../shared/world';
 
 export const SETTLEMENT_THRESHOLDS={suburban:.25,urban:.72};
+export const SETTLEMENT_WEIGHTS={proximity:.6,invitations:.4};
+export const INVITATION_DEGREE_SCALE=4;
 
-/** Combine nearby occupancy (80%) with local invitation graph degree (20%). */
+/** Combine nearby occupancy (60%) with local invitation graph degree (40%). */
 export function neighborhoodDensity(buildings:Building[]) {
   const occupied=new Map(buildings.map(b=>[`${b.x},${b.z}`,b]));
   const degrees=new Map<string,number>();
@@ -23,9 +25,9 @@ export function neighborhoodDensity(buildings:Building[]) {
       const distanceSquared=((neighbor.x-center.x)**2+(neighbor.z-center.z)**2)/PLOT_SPACING**2;
       const importance=Math.exp(-distanceSquared/3.2);total+=importance;
       const b=occupied.get(`${x+k.x},${z+k.z}`);if(!b)continue;
-      weight+=importance;connections+=importance*Math.min(1,Math.max(b.invite_degree??0,degrees.get(b.id)||0)/4);
+      weight+=importance;connections+=importance*Math.min(1,Math.max(b.invite_degree??0,degrees.get(b.id)||0)/INVITATION_DEGREE_SCALE);
     }
-    const density=.8*weight/total+.2*(weight?connections/weight:0);
+    const density=SETTLEMENT_WEIGHTS.proximity*weight/total+SETTLEMENT_WEIGHTS.invitations*(weight?connections/weight:0);
     cache.set(key,density);return density;
   };
 }
