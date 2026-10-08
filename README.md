@@ -53,14 +53,16 @@ XP is permanent and levels unlock automatically. The current version has **20 le
 
 | Action | XP | Bricks |
 | --- | ---: | ---: |
-| Newly credited GitHub commit / pull request / review | 1 / 10 / 5 | 1 per five contribution XP |
-| Invited resident actually joins | 100 | — |
-| Another authenticated resident likes your tower | 15 | — |
+| Newly credited GitHub commit | 5 | 1 per five commit XP |
+| Invited resident actually joins | 200 | — |
+| Another authenticated resident likes your tower | 50 | — |
 | Nearby new construction or tier milestone | 12 | — |
-| Complete a public project, having contributed at least 25 bricks | 120 | — |
-| Daily visit, once per UTC calendar day | 10 | 30 |
+| Complete a public project, having contributed at least 25 bricks | 200 | — |
+| Daily visit, once per UTC calendar day | 30 | 30 |
 | Edit one segment's color and details | — | Costs 20 |
 | Change overall finish / default facade color | — | Costs 45 / 15 |
+
+GitHub rewards are commit-only; pull requests and reviews do not earn XP or bricks. Updated rates apply to future rewards, preserving earned XP and credited commit counts. `0003_reward_rates.sql` updates the public-project completion trigger to 200 XP.
 
 Likes are permanent, limited to one per account per tower, and cannot target yourself. Production liking requires a GitHub-connected account; local demo likes stay between demo residents. Invites only award after successful joining. Nearby construction is an event, not passive proximity income: the eight closest other residents within three plot spacings receive XP when a building is created or crosses levels 5, 9, 13, or 17. Coordinate-keyed, distance-weighted occupancy still shapes roads; it no longer determines an individual tower's model.
 
@@ -80,7 +82,7 @@ GitHub account control and provider counts are verifiable. Provider data comes f
 
 ### Public projects
 
-Riverside commons and Makers square reserve two-by-two plot zones. They cannot be allocated as private homes. Nearby residents (within 35 world units) pool bricks; funding reveals groundwork, trees, seating, and a final pavilion or sculpture at quarter-goal stages. Clicking a site or its label opens that project in the flush sidebar, with funding, contributors, and brick contributions. The Projects button opens a project directory in the same sidebar.
+Riverside commons and Makers square reserve two-by-two plot zones. They cannot be allocated as private homes. Their boundaries follow the real road shoulders, including angled segments and width transitions, rather than a fixed rectangle. Boundary streets connect to the existing network through the nearest street corner; fencing leaves a road-facing entrance and the path leads into the project. Distant, unloaded projects do not generate long access roads. Nearby residents (within 35 world units) pool bricks; funding reveals groundwork, trees, seating, and a final pavilion or sculpture at quarter-goal stages. Clicking a site or its label opens that project in the flush sidebar, with funding, contributors, and brick contributions. The Projects button opens a project directory in the same sidebar.
 
 Contributions are guarded by balance and remaining goal, with idempotent request receipts. Completion rewards each resident who contributed at least 25 bricks once. D1 triggers commit spending, funding, and completion XP together. Projects broadcast updates over a neighborhood WebSocket; completion reloads snapshots to reflect contributors' newly unlocked levels.
 

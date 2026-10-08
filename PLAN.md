@@ -20,8 +20,8 @@ Build an invitation-only 3D city: each person has a plot near their inviter and 
 
 ## Game rules for the first version
 - Twenty levels unlock automatically from permanent XP, with five model tiers of four levels. Each successive level costs more XP.
-- Daily claim awards 10 XP and 30 bricks once per UTC calendar day.
-- GitHub's authenticated contribution API supplies commit, pull request, and review counts. Reward already-credited activity only once. These counts verify provider data, not the quality or uniqueness of a person's work.
+- Daily claim awards 30 XP and 30 bricks once per UTC calendar day.
+- GitHub's authenticated contribution API supplies commit counts (5 XP each); pull requests and reviews do not award rewards. Reward already-credited activity only once. These counts verify provider data, not the quality or uniqueness of a person's work.
 - Invitation tokens are single-use. The server searches for a free plot around the inviter and retries coordinate collisions.
 - Styles, facade colors and independent segment designs cost bricks. All balances and costs are enforced by the Worker.
 - Demo residents and demo activity are visibly labeled, cannot be mistaken for verified achievements, and cannot be enabled through a production browser request.
@@ -82,8 +82,8 @@ City-first layout with quiet white controls, pale blue sky, green terrain, viole
 ## XP and bricks implementation
 
 - Migration preserves old levels and balances, introduces an idempotent XP ledger and automatic level triggers.
-- GitHub, successful invites, unique likes, daily visits, construction milestones and completed public projects award XP.
+- GitHub commits (5 XP), successful invites (200), unique likes (50), daily visits (30), construction milestones (12) and completed public projects (200) award XP.
 - Twenty levels, five model tiers, five corresponding ground treatments; ground and models are independent of road density.
 - One persistent segment per tier (one to five) uses bricks. Roads keep the existing network and blend occupancy with surrounding levels.
-- Two reserved public zones pool nearby contributions, show four construction stages, and award completion XP once.
+- Two reserved public zones pool nearby contributions, show four construction stages, and award completion XP once. Grounds follow connected road shoulders as irregular polygons, with road-facing entrances.
 - Dev mode shows level/tier/XP labels, road diagnostics, all 20 level previews and labeled sample rewards.

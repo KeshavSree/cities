@@ -17,7 +17,7 @@ export type SegmentStyle='classic'|'glass'|'balcony';
 export interface SegmentDesign{color:Color;style:SegmentStyle;}
 export const SEGMENT_STYLES:Record<SegmentStyle,string>={classic:'Classic windows',glass:'Glass facade',balcony:'Balconies'};
 export const SEGMENT_COST=20;
-export const REWARDS={invite:100,like:15,construction:12,project:120,dailyXp:10,dailyBricks:30};
+export const REWARDS={commit:5,invite:200,like:50,construction:12,project:200,dailyXp:30,dailyBricks:30};
 export function segmentDesigns(building:Building):SegmentDesign[]{
   let saved:(SegmentDesign|null)[]=[];try{saved=JSON.parse(building.segments);}catch{/* Legacy defaults. */}
   return Array.from({length:segmentCount(building.level)},(_,i)=>saved[i]||{color:building.color,style:building.style==='modern'?'glass':'classic'});

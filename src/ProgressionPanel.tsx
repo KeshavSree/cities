@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Layers, Package, Zap } from 'lucide-react';
 import type { Building, XpEvent } from '../shared/types';
-import { MAX_LEVEL, TIERS, tierIndex, tierForLevel, xpAtLevel, xpForNextLevel } from '../shared/progression';
+import { MAX_LEVEL, TIERS, REWARDS, tierIndex, tierForLevel, xpAtLevel, xpForNextLevel } from '../shared/progression';
 import { api } from './api';
 
 export function ProgressionPanel({building,own}:{building:Building;own:boolean}){
@@ -15,7 +15,7 @@ export function ProgressionPanel({building,own}:{building:Building;own:boolean})
     <div className="progress-track"><span style={{width:`${Math.min(100,Math.max(0,progress*100))}%`}}/></div>
     <p className="growth-footnote">{max?'All 20 levels unlocked. Keep making this place your own.':'Levels unlock automatically as you earn XP. Every level takes more.'}</p>
     {own&&building.bricks!==null&&<div className="brick-balance"><span><Package size={16}/> Bricks</span><strong>{building.bricks.toLocaleString()}</strong><small>For segments, finishes & public projects</small></div>}
-    {own&&<><div className="xp-sources"><h3>Ways to grow</h3><p>GitHub: 1 XP / commit, 10 / pull request, 5 / review</p><p>Invite joins: 100 XP · Tower likes: 15 XP</p><p>Nearby construction: 12 XP · Public project completion: 120 XP</p><p>Daily visit: 10 XP + 30 bricks</p></div><RecentXp building={building}/></>}
+    {own&&<><div className="xp-sources"><h3>Ways to grow</h3><p>GitHub: {REWARDS.commit} XP / commit</p><p>Invite joins: {REWARDS.invite} XP · Tower likes: {REWARDS.like} XP</p><p>Nearby construction: {REWARDS.construction} XP · Public project completion: {REWARDS.project} XP</p><p>Daily visit: {REWARDS.dailyXp} XP + {REWARDS.dailyBricks} bricks</p></div><RecentXp building={building}/></>}
   </section>;
 }
 function RecentXp({building}:{building:Building}){

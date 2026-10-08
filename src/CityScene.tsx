@@ -11,7 +11,7 @@ import { COLORS, type Building, type PublicProject } from '../shared/types';
 import { coastZ, plotPosition, worldHash, PLOT_SPACING, VIEW_RADIUS } from '../shared/world';
 import { WorldTerrain } from './WorldTerrain';
 import type { CityLighting } from './lighting';
-import { neighborhoodDensity, neighborhoodScores, settlementType, streetNetwork, streetDensity, roadWidth, roadShoulder, roadColor, shoulderColor, lotPolygon, mixGroundColor, SETTLEMENT_THRESHOLDS, type GroundPoint } from './neighborhood';
+import { neighborhoodDensity, neighborhoodScores, settlementType, streetNetwork, streetDensity, roadWidth, roadShoulder, roadColor, shoulderColor, lotPolygon, projectPolygon, mixGroundColor, SETTLEMENT_THRESHOLDS, type GroundPoint } from './neighborhood';
 import { CameraKeyboard } from './CameraKeyboard';
 import { buildingForm } from './buildingForm';
 import { plotPlan } from '../shared/plots';
@@ -269,10 +269,16 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
   };
   const taken=new Set(buildings.map(b=>`${b.x},${b.z}`));
   const {roads,junctions}=streetNetwork(buildings,densityAt);
-  const surface=(parent:THREE.Group,points:GroundPoint[],height:number,color:string)=>{
+  const surface=(parent:THREE.Group,points:GroundPoint[],height:number,color:string,concave=false)=>{
     if(points.length<3)return;
     const vertices:number[]=[];
-    for(let i=1;i<points.length-1;i++)for(const point of [points[0],points[i+1],points[i]])vertices.push(point.x,height,point.z);
+    if(concave){
+      const triangles=THREE.ShapeUtils.triangulateShape(points.map(p=>new THREE.Vector2(p.x,p.z)),[]);
+      for(const [i,j,k] of triangles){
+        const a=points[i],b=points[j],c=points[k],area=(b.x-a.x)*(c.z-a.z)-(b.z-a.z)*(c.x-a.x);
+        for(const point of area>0?[a,c,b]:[a,b,c])vertices.push(point.x,height,point.z);
+      }
+    }else for(let i=1;i<points.length-1;i++)for(const point of [points[0],points[i+1],points[i]])vertices.push(point.x,height,point.z);
     const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geometry.computeVertexNormals();
     const mesh=new THREE.Mesh(geometry,mat(color));mesh.receiveShadow=true;parent.add(mesh);
   };
@@ -459,13 +465,26 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     // A simple rooftop garden instead of a texture or subdivided material face.
     if(b.style==='terrace'&&kind!=='rural') tree(architecture,.48,-.25,.38,box,mat,h+baseY+.12);
   }
+  const residentPositions=buildings.map(b=>plotPosition(b.x,b.z));
   for(const project of projects){
     const center=plotPosition(project.x,project.z),ratio=project.funded/project.goal;
+    const boundary=projectPolygon(project.id,roads).map(p=>({x:p.x-center.x,z:p.z-center.z}));
+    if(boundary.length<3)continue;
     const site=new THREE.Group();site.position.set(center.x,0,center.z);group.add(site);
-    box(site,0,.06,0,11.5,.12,10.5,project.kind==='park'?'#afc69d':'#c6ccc1');
-    box(site,0,.15,0,8.5,.08,1,'#d5c9ae');
+    surface(site,boundary,.085,project.kind==='park'?'#afc69d':'#c6ccc1',true);
+    // Choose an entrance on the road side nearest the residents, then connect inward.
+    const midpoints=boundary.map((a,i)=>{const b=boundary[(i+1)%boundary.length];return {x:(a.x+b.x)/2,z:(a.z+b.z)/2};});
+    const distanceToResidents=(p:GroundPoint)=>Math.min(...residentPositions.map(pos=>Math.hypot(center.x+p.x-pos.x,center.z+p.z-pos.z)));
+    const entrance=midpoints.reduce((best,p)=>distanceToResidents(p)<distanceToResidents(best)?p:best);
+    const path=box(site,entrance.x/2,.11,entrance.z/2,Math.hypot(entrance.x,entrance.z),.04,.95,'#d5c9ae');
+    path.rotation.y=-Math.atan2(entrance.z,entrance.x);
     if(ratio<1){
-      for(const x of [-5.4,5.4])box(site,x,.4,0,.08,.6,9.8,'#c4aa82');
+      for(let i=0;i<boundary.length;i++){
+        const a=boundary[i],b=boundary[(i+1)%boundary.length],mid=midpoints[i];
+        if(Math.hypot(mid.x-entrance.x,mid.z-entrance.z)<1)continue;
+        const fence=box(site,mid.x,.4,mid.z,Math.hypot(b.x-a.x,b.z-a.z),.6,.07,'#c4aa82');
+        fence.rotation.y=-Math.atan2(b.z-a.z,b.x-a.x);
+      }
       // Brick stacks grow as actual contributions accumulate.
       for(let i=0;i<Math.ceil(ratio*8);i++)box(site,-4+i%4*.65,.25+Math.floor(i/4)*.3,-3,.55,.3,.4,'#b9927a');
     }

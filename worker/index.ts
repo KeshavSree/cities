@@ -99,22 +99,22 @@ async function syncGithub(env: Env, user: User) {
   if (old?.synced_at && Date.now() - new Date(old.synced_at.replace(' ', 'T') + 'Z').getTime() < 15 * 60_000) throw new ApiError('Your activity is fresh. You can sync again in 15 minutes.', 429);
   const response = await fetch('https://api.github.com/graphql', {
     method: 'POST', headers: ghHeaders(await unseal(user.github_token, env)),
-    body: JSON.stringify({ query: `query($login:String!) { user(login:$login) { contributionsCollection { totalCommitContributions totalPullRequestContributions totalPullRequestReviewContributions } } }`, variables: { login: user.username } }),
+    body: JSON.stringify({ query: `query($login:String!) { user(login:$login) { contributionsCollection { totalCommitContributions } } }`, variables: { login: user.username } }),
   });
   if (!response.ok) throw new ApiError('GitHub is unavailable or rate limited. Try syncing later.', 502);
-  const data = await response.json() as { data?: { user?: { contributionsCollection: { totalCommitContributions: number; totalPullRequestContributions: number; totalPullRequestReviewContributions: number } } }; errors?: unknown[] };
+  const data = await response.json() as { data?: { user?: { contributionsCollection: { totalCommitContributions: number } } }; errors?: unknown[] };
   const c = data.data?.user?.contributionsCollection;
   if (!c || data.errors?.length) throw new ApiError('GitHub could not return your contribution counts. Reconnect or try later.', 502);
-  const commits = c.totalCommitContributions, prs = c.totalPullRequestContributions, reviews = c.totalPullRequestReviewContributions;
-  if(![commits,prs,reviews].every(n=>Number.isSafeInteger(n)&&n>=0))throw new ApiError('GitHub returned invalid contribution counts.',502);
+  const commits = c.totalCommitContributions;
+  if(!Number.isSafeInteger(commits)||commits<0)throw new ApiError('GitHub returned an invalid commit count.',502);
   await env.DB.batch([
     env.DB.prepare(`INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description)
-      SELECT ?,user_id,'github',MAX(0,?-credited_commits)+MAX(0,?-credited_prs)*10+MAX(0,?-credited_reviews)*5,
-      CAST((MAX(credited_commits,?)+MAX(credited_prs,?)*10+MAX(credited_reviews,?)*5)/5 AS INTEGER)
-        -CAST((credited_commits+credited_prs*10+credited_reviews*5)/5 AS INTEGER),'Verified GitHub contributions'
-      FROM metrics WHERE user_id=?`).bind(`github:${user.id}:${commits}:${prs}:${reviews}`,commits,prs,reviews,commits,prs,reviews,user.id),
-    env.DB.prepare(`UPDATE metrics SET commits=?, prs=?, reviews=?, credited_commits=MAX(credited_commits, ?),
-      credited_prs=MAX(credited_prs, ?), credited_reviews=MAX(credited_reviews, ?), synced_at=datetime('now') WHERE user_id=?`).bind(commits, prs, reviews, commits, prs, reviews, user.id),
+      SELECT ?,user_id,'github',(?-credited_commits)*?,
+      CAST((?-credited_commits)*?/5 AS INTEGER),'Verified GitHub commits'
+      FROM metrics WHERE user_id=? AND ?>credited_commits`)
+      .bind(`github-commits:${user.id}:${commits}`,commits,REWARDS.commit,commits,REWARDS.commit,user.id,commits),
+    env.DB.prepare(`UPDATE metrics SET commits=?, credited_commits=MAX(credited_commits, ?),
+      synced_at=datetime('now') WHERE user_id=?`).bind(commits, commits, user.id),
   ]);
 }
 
@@ -375,7 +375,7 @@ export default {
           await env.DB.prepare('UPDATE construction_events SET processed=1 WHERE user_id=?').bind(target).run();
         }else{
           const source=typeof data.source==='string'?data.source:'github';
-          const samples:Record<string,[number,number]>={github:[250,50],invite:[100,0],like:[15,0],construction:[12,0],project:[120,0],bricks:[0,100]};
+          const samples:Record<string,[number,number]>={github:[REWARDS.commit,REWARDS.commit/5],invite:[REWARDS.invite,0],like:[REWARDS.like,0],construction:[REWARDS.construction,0],project:[REWARDS.project,0],daily:[REWARDS.dailyXp,REWARDS.dailyBricks],bricks:[0,100]};
           const sample=samples[source];if(!sample)throw new ApiError('Choose a sample reward.');
           await reward(env.DB,`demo:${uuid()}`,target,'demo',sample[0],sample[1],`Simulated ${source} reward`);
           settleConstruction(env,ctx);

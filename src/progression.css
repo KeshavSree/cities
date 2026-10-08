@@ -1,4 +1,5 @@
 .progression-panel{padding:20px 0;border-top:1px solid #e7ecec;margin-top:18px}
+.activity-grid.commits-only{grid-template-columns:1fr}
 .level-heading{display:flex;align-items:center;gap:11px}.level-heading>svg{color:#93a5ac}.level-heading>div{flex:1}.level-heading span{font-size:10px;color:#718690}.level-heading strong{display:block;font-size:24px;letter-spacing:-.7px;line-height:1.4}.level-heading strong small{font-size:12px;letter-spacing:0;font-weight:400;color:#91a2aa}.level-heading .tier-ground{max-width:82px;text-align:right;line-height:1.5;color:#7f9583}
 .tier-rail{display:flex;gap:5px;margin:16px 0}.tier-rail>div{flex:1;color:#a5b2b8;border-top:3px solid #e6eceb;padding-top:7px;text-align:center}.tier-rail .reached{color:#7869bf;border-color:#b9abdf}.tier-rail span{font-size:12px;display:block}.tier-rail small{font-size:9px}
 .xp-heading{display:flex;justify-content:space-between;gap:8px;font-size:10px;margin:12px 0 9px;color:#8a9aa2}.xp-heading>span{display:flex;gap:5px;align-items:center}.xp-heading strong{font-weight:500;color:#7c6dc2}

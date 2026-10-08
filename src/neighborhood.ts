@@ -1,6 +1,7 @@
 import type { Building } from '../shared/types';
 import { plotPosition, PLOT_SPACING } from '../shared/world';
 import { plotPlan } from '../shared/plots';
+import { PUBLIC_PROJECTS, projectBoundary } from '../shared/projects';
 
 export const SETTLEMENT_THRESHOLDS={suburban:.25,urban:.72};
 export const SETTLEMENT_WEIGHTS={density:.45,levels:.55};
@@ -74,6 +75,27 @@ export function streetNetwork(buildings:Building[],densityAt:(x:number,z:number)
       add(b.x,b.z,!horizontal);add(b.x+(horizontal?1:0),b.z+(horizontal?0:1),!horizontal);
     }
   }
+  // Shared places occupy land just like homes: give each one real boundary streets
+  // and connect its closest street corner to the existing network.
+  for(const project of PUBLIC_PROJECTS){
+    const boundary=projectBoundary(project.id),existing=[...junctions.keys()].map(key=>{
+      const [x,z]=key.split(',').map(Number);return {x,z};
+    });
+    let connection:{from:GroundPoint;to:GroundPoint;distance:number}|undefined;
+    for(const from of boundary)for(const to of existing){
+      const distance=Math.abs(from.x-to.x)+Math.abs(from.z-to.z);
+      if(!connection||distance<connection.distance)connection={from,to,distance};
+    }
+    // Far-away projects do not generate streets through the unloaded world.
+    if(!connection||connection.distance>16)continue;
+    for(let i=0;i<boundary.length;i++){
+      const a=boundary[i],b=boundary[(i+1)%boundary.length];
+      add(Math.min(a.x,b.x),Math.min(a.z,b.z),a.z===b.z);
+    }
+    let {x,z}=connection.from;
+    while(x!==connection.to.x){const next=x+Math.sign(connection.to.x-x);add(Math.min(x,next),z,true);x=next;}
+    while(z!==connection.to.z){const next=z+Math.sign(connection.to.z-z);add(x,Math.min(z,next),false);z=next;}
+  }
   return {roads,junctions};
 }
 
@@ -92,6 +114,33 @@ export function roadColor(density:number){
   return amount<.4?mixGroundColor('#b3ac91','#a8b2ad',amount/.4):mixGroundColor('#a8b2ad','#849394',(amount-.4)/.6);
 }
 export const shoulderColor=(density:number)=>mixGroundColor('#c4bd9f','#dfded3',Math.round(Math.min(1,density/SETTLEMENT_THRESHOLDS.urban)*12)/12);
+
+/** Follow every boundary road's actual shoulder, including angled corners and tapers. */
+export function projectPolygon(id:string,roads:Map<string,Street>):GroundPoint[]{
+  const nodes=projectBoundary(id),lines:{a:GroundPoint;b:GroundPoint}[]=[];
+  for(let i=0;i<nodes.length;i++){
+    const start=nodes[i],end=nodes[(i+1)%nodes.length],horizontal=start.z===end.z;
+    const road=roads.get(`${horizontal?'h':'v'}:${Math.min(start.x,end.x)},${Math.min(start.z,end.z)}`);
+    if(!road)return [];
+    const a=plotPosition(start.x-.5,start.z-.5),b=plotPosition(end.x-.5,end.z-.5);
+    const dx=b.x-a.x,dz=b.z-a.z,length=Math.hypot(dx,dz),nx=-dz/length,nz=dx/length;
+    const reversed=start.x>end.x||start.z>end.z;
+    const offset=(t:number)=>{
+      const density=streetDensity(road,reversed?1-t:t),margin=(roadWidth(density)+roadShoulder(density))/2+.035;
+      return {x:a.x+dx*t+nx*margin,z:a.z+dz*t+nz*margin};
+    };
+    for(let step=0;step<8;step++)lines.push({a:offset(step/8),b:offset((step+1)/8)});
+  }
+  return lines.flatMap((line,i)=>{
+    const previous=lines[(i+lines.length-1)%lines.length];
+    const u={x:previous.b.x-previous.a.x,z:previous.b.z-previous.a.z},v={x:line.b.x-line.a.x,z:line.b.z-line.a.z};
+    const determinant=u.x*v.z-u.z*v.x;
+    if(Math.abs(determinant)<1e-8)return [line.a];
+    const t=((line.a.x-previous.a.x)*v.z-(line.a.z-previous.a.z)*v.x)/determinant;
+    const point={x:previous.a.x+u.x*t,z:previous.a.z+u.z*t};
+    return Math.hypot(point.x-line.a.x,point.z-line.a.z)<PLOT_SPACING/2?[point]:[previous.b,line.a];
+  });
+}
 
 /** Fill the irregular lot right up to the actual bordering road shoulders. */
 export function lotPolygon(building:Building,roads:Map<string,Street>):GroundPoint[]{
