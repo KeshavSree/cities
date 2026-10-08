@@ -6,7 +6,6 @@ import { COLORS, STYLES, COLOR_COST, STYLE_COST, upgradeCost, type Bootstrap, ty
 import { VIEW_RADIUS } from '../shared/world';
 import { lightingAt } from './lighting';
 import { TowerDrawer } from './TowerDrawer';
-import { CityMap } from './CityMap';
 import { ScoreBreakdown } from './ScoreBreakdown';
 import { neighborhoodScores, settlementType } from './neighborhood';
 import { upcomingPlotPreviews } from './plotPreview';
@@ -200,8 +199,7 @@ export default function App() {
       {me && <button className={`daily-card ${snapshot?.claimedToday?'collected':''}`} disabled={Boolean(busy)||snapshot?.claimedToday} onClick={daily}>
         <span className="daily-icon">{snapshot?.claimedToday?<Check size={20}/>:<Gift size={21}/>}</span><span><strong>{snapshot?.claimedToday?'A good day to build.':'A little something for showing up.'}</strong><small>{snapshot?.claimedToday?'Today’s reward collected. See you tomorrow.':`Collect your daily ${snapshot?.dailyReward} resources`}</small></span>{!snapshot?.claimedToday && <span className="daily-action">{busy==='daily'?<LoaderCircle className="spin" size={17}/>:<Plus size={16}/>}</span>}
       </button>}
-      <div className="map-controls"><div className="map-tools"><button title="Zoom in" aria-label="Zoom in" onClick={()=>scene.current?.zoom(1.2)}><Plus size={18}/></button><button title="Zoom out" aria-label="Zoom out" onClick={()=>scene.current?.zoom(1/1.2)}><Minus size={18}/></button><span/><button title="Reset view" aria-label="Reset view" onClick={()=>{scene.current?.reset();setCenter({x:0,z:0});}}><Compass size={19}/></button><button title="How it works" aria-label="How it works" onClick={()=>setModal('help')}><HelpCircle size={18}/></button></div><span className="map-hint">WASD move <span>·</span> Q/E rotate <span>·</span> Space ↑ / Shift ↓</span></div>
-      <CityMap buildings={buildings} selected={selected} center={center}/>
+      <div className="map-controls"><div className="map-tools"><button title="Zoom in" aria-label="Zoom in" onClick={()=>scene.current?.zoom(1.2)}><Plus size={18}/></button><button title="Zoom out" aria-label="Zoom out" onClick={()=>scene.current?.zoom(1/1.2)}><Minus size={18}/></button><span/><button title="Reset view" aria-label="Reset view" onClick={()=>{scene.current?.reset();setCenter({x:0,z:0});}}><Compass size={19}/></button><button title="How it works" aria-label="How it works" onClick={()=>setModal('help')}><HelpCircle size={18}/></button></div></div>
       {snapshot?.demo && <div className="demo-label"><Sparkles size={12}/>Local demo<span>Sample people. Real building mechanics.</span></div>}
       {!snapshot && <div className="loading-screen"><span className="brand-mark"><i/><i/><i/></span><h2>{error?'The city is taking a moment.':'Making room for good ideas.'}</h2><p>{error || 'Preparing your neighborhood…'}</p>{error?<button className="primary-button" onClick={()=>location.reload()}>Try again</button>:<LoaderCircle className="spin" size={22}/>}</div>}
       {snapshot && !snapshot.buildings.length && <div className="empty-city"><h2>A city starts with someone.</h2><p>Sign in with the founding GitHub account or an invitation to place the first tower.</p><button className="primary-button" onClick={()=>setModal('login')}><Github size={16}/>Join the city</button></div>}

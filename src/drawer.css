@@ -12,9 +12,6 @@
 .drawer-handle:focus-visible{outline:2px solid #7971df;outline-offset:-3px}
 .drawer-heading-actions{display:flex;align-items:center;gap:4px}
 .tower-drawer .desktop-focus{display:inline-flex}
-.mini-map{right:25px;bottom:28px}
-.mini-map>span>svg{width:11px;height:11px;flex-shrink:0}
-.tower-drawer.is-open~.mini-map{right:365px}
 .resident-search{z-index:40}
 @media(max-width:760px){.tower-drawer{top:69px;width:min(340px,calc(100vw - 32px));z-index:50}.drawer-handle{top:32px}.tower-drawer .inspector{display:flex}.tower-drawer .profile{padding-top:12px}.tower-drawer .inspector-heading{padding-top:17px}}
 @media(prefers-reduced-motion:reduce){.tower-drawer{transition:none}}
