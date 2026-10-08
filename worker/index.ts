@@ -15,7 +15,9 @@ const NOW = () => Math.floor(Date.now() / 1000);
 const QUERY = `SELECT u.id, u.username, u.name, u.bio, u.avatar, u.github_url, u.website, u.school,
   u.is_demo, b.x, b.z, b.level, b.resources, b.style, b.color, b.updated_at,
   COALESCE(m.commits, 0) commits, COALESCE(m.prs, 0) prs, COALESCE(m.reviews, 0) reviews, m.synced_at,
-  (SELECT i.inviter_id FROM invitations i WHERE i.used_by=u.id) invited_by
+  (SELECT i.inviter_id FROM invitations i WHERE i.used_by=u.id) invited_by,
+  ((SELECT COUNT(*) FROM invitations i WHERE i.inviter_id=u.id AND i.used_by IS NOT NULL) +
+    CASE WHEN EXISTS(SELECT 1 FROM invitations i WHERE i.used_by=u.id) THEN 1 ELSE 0 END) invite_degree
   FROM buildings b JOIN users u ON b.user_id=u.id LEFT JOIN metrics m ON m.user_id=u.id`;
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers });
@@ -223,7 +225,8 @@ export default {
               env.DB.prepare('INSERT INTO metrics(user_id) VALUES(?)').bind(id),
               env.DB.prepare('UPDATE invitations SET used_by=? WHERE token=? AND used_by IS NULL').bind(id, invite),
             ]);
-            return json({ building: await changed(env, id, ctx) });
+            const neighbor=await changed(env,id,ctx),inviter=await changed(env,user.id,ctx);
+            return json({building:neighbor,inviter});
           } catch (e) { if (!String(e).includes('UNIQUE')) throw e; }
         }
         throw new ApiError('No nearby plot is available.', 409);
@@ -261,6 +264,8 @@ export default {
         const profileResponse = await fetch('https://api.github.com/user', { headers: ghHeaders(token.access_token) });
         if (!profileResponse.ok) throw new ApiError('GitHub could not return your profile. Try again.', 502);
         const id = await join(env, await profileResponse.json(), token.access_token, stored.invite);
+        const joined=await changed(env,id,ctx);
+        if(joined.invited_by)await changed(env,joined.invited_by,ctx);
         const user = await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(id).first<User>();
         if (user) ctx.waitUntil(syncGithub(env, user).then(async () => broadcast(env, await building(env, id))).catch(e => console.warn('GitHub initial sync failed:', String(e))));
         const h = new Headers({ Location: env.APP_ORIGIN, ...headers });

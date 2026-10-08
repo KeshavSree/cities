@@ -26,7 +26,7 @@ npm run preview     # Serve the built app through the local Worker on port 8787
 ## Controls
 
 - Drag to orbit, right-drag to pan, scroll or use the buttons to zoom.
-- Focus the city canvas with Tab and use arrow keys to pan with the keyboard.
+- Click the city canvas or focus it with Tab. Hold WASD to move relative to the camera, Q/E to rotate, Space to rise, and Shift to descend. Arrow keys also pan. Movement pauses while an input, button, or dialog has focus, and clears when the tab loses focus.
 - Click a tower or use the searchable resident list to inspect it.
 - Select your tower to upgrade, change architecture, or change its facade color.
 - Lighting follows the viewer's actual local clock, refreshing automatically and when the tab becomes visible. Dawn and dusk are approximate clock-based transitions, not location-based sunrise calculations. There is no day/night toggle or district selector.
@@ -132,4 +132,20 @@ Development dependencies override `sharp` and `shell-quote` to patched releases 
 
 Plot allocation uses integer keys internally, while a deterministic world projection offsets the visible plots and shared street corners. Buildings stay rectangular, with their front and back faces parallel to the frontage roads. Separate polygonal ground pads follow the irregular street corners. The terrain has no repeating square grid overlay. Existing towers stay in place when someone joins.
 
-A weighted count of occupied plots within three plots drives the surroundings: urban areas gain asphalt, pavement, street markings, lamps, cars, and pocket parks; suburban areas have narrower roads and more gardens; rural towers get gravel lanes, fences, and woodland. Density is computed locally from the loaded snapshot and updates with live arrivals. The minimap shows the same irregular streets and density. Actual invitation relationships are fetched through the indexed invitations table and appear as subtle faceted connections between loaded towers.
+Settlement classification uses **both geography and the invitation graph**, calculated over a 7 × 7 plot neighborhood (three plot keys in each direction). Spatial weights use the actual rendered world distance, in plot-spacing units: `w = exp(-distance² / 3.2)`.
+
+- `P`: occupied-neighbor weight divided by the weight of all 49 possible plots.
+- Invitation degree: the resident's inviter, if any, plus successfully invited residents. Unused invitations do not count. The server returns the total degree, including connections outside the loaded view.
+- `G`: the weighted average of `min(invitation_degree / 4, 1)` across nearby residents.
+- Settlement score: `0.8 × P + 0.2 × G`.
+- **Rural:** score below **0.25**.
+- **Suburban:** score from **0.25** up to, but excluding, **0.72**.
+- **Urban:** score **0.72 or higher**.
+
+The previous urban cutoff was 0.54 using occupancy alone. An area with no invitation edges now needs at least 90% weighted occupancy to become urban. Isolated well-connected residents cannot create an urban area alone. Scores reflect loaded nearby residents; dense scenes beyond the 250-resident snapshot limit need additional spatial paging.
+
+Urban areas gain asphalt, pavement, markings, lamps, cars, and pocket parks; suburban areas have narrower roads and more gardens; rural towers get gravel lanes, fences, and woodland. The shared street network tapers width and blends solid-color surface sections into common junctions. The minimap uses the same street network and score.
+
+Each lot is clipped against its actual road shoulders. Its ground surface responds to local grass, coastal soil, and settlement score. The tower foundation also responds to architecture, footprint, level, and facade color: modern towers have cooler raised plinths, terraced towers have warmer stone and planted borders, and spires have stone entry steps. Buildings stay rectangular while the surrounding ground fills the irregular lot.
+
+Clicking a tower selects its meshes for a white silhouette outline. Invitation connections remain violet and are only drawn for actual used invitations between loaded residents. New arrivals broadcast updates for both the neighbor and inviter so their graph degrees and surrounding land adapt live.

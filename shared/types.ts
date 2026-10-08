@@ -5,7 +5,7 @@ export interface Building {
   github_url: string | null; website: string | null; school: string | null;
   is_demo: number; x: number; z: number; level: number; resources: number;
   style: Style; color: Color; commits: number; prs: number; reviews: number;
-  synced_at: string | null; updated_at: string; invited_by?: string | null;
+  synced_at: string | null; updated_at: string; invited_by?: string | null; invite_degree?: number;
 }
 export interface Bootstrap {
   buildings: Building[]; me: string | null; demo: boolean; githubConfigured: boolean;

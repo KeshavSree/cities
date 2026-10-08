@@ -60,3 +60,14 @@ City-first layout with quiet white controls, pale blue sky, green terrain, viole
 - Use stable irregular plot positions, straight streets meeting at varied corner angles, and separate polygonal ground pads around rectangular, road-aligned towers; remove the regular terrain grid overlay.
 - Let nearby occupied plots drive an urban → suburban → rural transition in paving, streets, lighting, gardens, and woodland, with matching minimap rendering.
 - Show actual inviter relationships without creating synthetic social links.
+
+## Keyboard camera movement
+- Add continuous WASD movement relative to the camera, Q/E rotation, Space up, and Shift down.
+- Keep motion independent of frame rate, cancel automatic tower focus on manual movement, and refresh the loaded region while navigating.
+- Preserve typing and button shortcuts, release held keys on focus loss, and keep the terrain and shadows aligned with the viewed ground at changing heights.
+
+## Ground, roads, graph density, and selection
+- Clip independent lot polygons to actual road shoulders; choose ground and foundation treatments from terrain, coast distance, settlement score, tower footprint, style, level, and color.
+- Share street geometry between the 3D view and minimap. Taper widths and blend solid-color road sections into shared junction surfaces.
+- Use an 80% spatial occupancy / 20% local invitation-degree score. Rural <0.25, suburban 0.25–<0.72, urban ≥0.72. Read total invitation degrees from the server and update both endpoints on arrivals.
+- Highlight selected building silhouettes in white with a selection outline render pass.
