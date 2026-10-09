@@ -4,11 +4,13 @@
 .resident-avatar.tiny{width:27px;height:27px}
 .resident-avatar.small{width:35px;height:35px}
 .resident-avatar.profile-photo{width:47px;height:47px}
-.tower-drawer .profile-controls{justify-content:flex-end;padding-bottom:0}
-.profile-name{min-width:0}
-.profile-title-row{display:flex;align-items:center;gap:12px}
+.tower-drawer .profile{padding:20px 22px 0}
+.profile-name{min-width:0;flex:1}
+.profile-title-row{display:flex;align-items:center;gap:10px}
 .profile-title-row h2{min-width:0;overflow-wrap:anywhere}
 .profile-title-row .tower-social{margin:0;flex-shrink:0}
+.profile-title-actions{display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0}
+.profile-title-actions .icon-button{width:25px;height:25px}
 .profile-photo-edit{position:relative;display:flex;padding:0;border-radius:50%;flex-shrink:0;overflow:hidden}
 .profile-photo-overlay{position:absolute;inset:0;display:grid;place-items:center;background:#263b4d75;color:#fff;opacity:0;transition:opacity 120ms ease}
 .profile-photo-edit:hover .profile-photo-overlay,.profile-photo-edit:focus-visible .profile-photo-overlay,.profile-photo-overlay.is-saving{opacity:1}

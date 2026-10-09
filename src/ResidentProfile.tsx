@@ -31,10 +31,11 @@ async function prepareAvatar(file: File): Promise<Blob> {
   } finally { image.close(); }
 }
 
-export function ResidentProfile({ building, own, busy, onSaveBio, onUpload, nameAction }: {
+export function ResidentProfile({ building, own, busy, onSaveBio, onUpload, nameAction, headerActions }: {
   building: Building; own: boolean; busy: boolean;
   onSaveBio: (bio: string) => Promise<void>; onUpload: (image: Blob) => Promise<void>;
   nameAction: ReactNode;
+  headerActions: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(building.bio);
@@ -62,8 +63,7 @@ export function ResidentProfile({ building, own, busy, onSaveBio, onUpload, name
         </button>
         <input ref={input} type="file" hidden accept="image/jpeg,image/png,image/webp,image/gif" aria-label="Choose profile picture" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void upload(file); }} />
       </> : <ProfileAvatar avatar={building.avatar} name={building.name} className="profile-photo" />}
-      <div className="profile-name"><div className="profile-title-row"><h2>{building.name}</h2>{nameAction}</div><span>@{building.username}</span></div>
-      {own && <span className="you-label">You</span>}
+      <div className="profile-name"><div className="profile-title-row"><h2>{building.name}</h2>{nameAction}<div className="profile-title-actions">{headerActions}</div></div><span>@{building.username}</span></div>
     </div>
     {editing && own ? <form className="bio-editor" onSubmit={event => { event.preventDefault(); void save(); }}>
       <textarea autoFocus aria-label="Your bio" maxLength={BIO_MAX_LENGTH} value={draft} disabled={busy || saving} onChange={event => setDraft(event.target.value)} />
