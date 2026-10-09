@@ -184,6 +184,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
   useEffect(()=>{
     const e=engine.current;if(!e)return;e.labels.clear();
     for(const project of projects){
+      if(project.funded>=project.goal)continue;
       if(Math.abs(project.x-center.x)>VIEW_RADIUS||Math.abs(project.z-center.z)>VIEW_RADIUS)continue;
       const element=document.createElement('button');element.className='public-site-label';
       element.textContent=`${project.name} · ${Math.round(project.funded/project.goal*100)}%`;
