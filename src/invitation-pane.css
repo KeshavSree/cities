@@ -17,7 +17,7 @@
 .invite-pencil-arrow{position:absolute;top:32px;left:calc(50% - 90px);width:130px;height:90px;pointer-events:none;overflow:visible;color:var(--ink)}
 .invite-pencil-arrow path{fill:none;stroke:currentColor;stroke-opacity:.72;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 
-.topbar .invite-button{background:#dceeff;color:#438ed1;transition:background-color 120ms ease,color 120ms ease,transform 120ms ease}
+.topbar .invite-button{background:transparent;border:0;box-shadow:none;color:inherit;transition:background-color 120ms ease,color 120ms ease,transform 120ms ease}
 .topbar .invite-button:hover{background:#438ed1;color:#fff;transform:scale(1.05)}
 .topbar .invite-button:active{transform:scale(.97)}
 .topbar .invite-button:focus-visible{outline:2px solid #438ed1;outline-offset:3px}
