@@ -1,0 +1,6 @@
+.level-progress{margin:0 23px 18px}
+.level-progress-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}
+.level-progress-heading strong{font-size:14px;font-weight:650;color:#344b55}
+.level-progress-heading>span{font-size:10px;color:#8799a2;font-variant-numeric:tabular-nums}
+.level-progress-track{height:6px;overflow:hidden;border-radius:4px;background:#eeeaf7}
+.level-progress-track>span{display:block;height:100%;border-radius:inherit;background:#a89bdd;transition:width .2s ease}

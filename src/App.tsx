@@ -9,7 +9,7 @@ import { TowerDrawer } from './TowerDrawer';
 import { ScoreBreakdown } from './ScoreBreakdown';
 import { neighborhoodScores } from './neighborhood';
 import { upcomingPlotPreviews } from './plotPreview';
-import { ProgressionPanel } from './ProgressionPanel';
+import { LevelProgress, ProgressionPanel } from './ProgressionPanel';
 import { SegmentEditor } from './SegmentEditor';
 import { ProjectDetails } from './ProjectDetails';
 import { MAX_LEVEL, LEVELS_PER_TIER, TIERS, REWARDS, tierForLevel, type BuildingTheme, type SegmentStyle } from '../shared/progression';
@@ -173,13 +173,14 @@ export default function App() {
           {own && <span className="you-label">You</span>}
         </div>
         <p className="bio">{tower.bio || 'A new idea has moved into the neighborhood.'}</p>
-        <div className="profile-links">
+        {(tower.github_url||tower.website||!tower.is_demo)&&<div className="profile-links">
           {tower.github_url && <a href={tower.github_url} target="_blank" rel="noreferrer"><Github size={14}/>GitHub<ArrowUpRight size={12}/></a>}
           {tower.website && <a href={tower.website} target="_blank" rel="noreferrer">Website<ArrowUpRight size={12}/></a>}
-          <span className={`verification ${tower.is_demo?'demo':''}`}>{tower.is_demo?<Sparkles size={12}/>:<Check size={12}/>} {tower.is_demo?'Demo resident':'GitHub connected'}</span>
-        </div>
+          {!tower.is_demo&&<span className="verification"><Check size={12}/> GitHub connected</span>}
+        </div>}
         {showScores && <ScoreBreakdown score={scoreAt(tower.x,tower.z)} building={tower} editable={Boolean(snapshot?.demo&&tower.is_demo)} busy={Boolean(busy)} onDev={devProgression}/>}
         <div className="tower-social"><span>{tower.likes} likes</span>{!own&&<button aria-pressed={Boolean(snapshot?.likedIds.includes(tower.id))} title={snapshot?.likedIds.includes(tower.id)?'You liked this tower':'Like'} disabled={!me||Boolean(busy)||snapshot?.likedIds.includes(tower.id)} onClick={like}><Heart size={16} fill={snapshot?.likedIds.includes(tower.id)?'currentColor':'none'}/>Like</button>}</div>
+        <LevelProgress building={tower}/>
         <div className="inspector-tabs" role="tablist" aria-label="Tower information" onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const next=tab==='overview'?'design':'overview';setTab(next);document.getElementById(`tab-${next}`)?.focus();}}}>
           <button role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected={tab==='overview'} onClick={()=>setTab('overview')}>Overview</button>
           <button role="tab" id="tab-design" aria-controls="panel-design" aria-selected={tab==='design'} onClick={()=>setTab('design')}>Architecture{!own && <span className="tab-view">View</span>}</button>
