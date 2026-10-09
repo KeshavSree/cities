@@ -1,8 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowUpRight, Heart, Landmark, Bug, Check, Compass, Copy, Gift, Hammer, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, MapPin, Minus, Package, Plus, Search, Sparkles, Users, X } from 'lucide-react';
+import { ArrowUpRight, Heart, Landmark, Bug, Check, Compass, Copy, Gift, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, MapPin, Minus, Package, Plus, Search, Sparkles, Users, X } from 'lucide-react';
 import type { SceneHandle } from './CityScene';
-import { api } from './api';
-import { COLORS, type Bootstrap, type Building, type Color } from '../shared/types';
+import { api, uploadAvatar } from './api';
+import { type Bootstrap, type Building, type Color } from '../shared/types';
 import { VIEW_RADIUS } from '../shared/world';
 import { lightingAt } from './lighting';
 import { TowerDrawer } from './TowerDrawer';
@@ -12,6 +12,7 @@ import { upcomingPlotPreviews } from './plotPreview';
 import { LevelProgress } from './ProgressionPanel';
 import { SegmentEditor } from './SegmentEditor';
 import { ProjectDetails } from './ProjectDetails';
+import { ResidentProfile, ProfileAvatar } from './ResidentProfile';
 import { MAX_LEVEL, LEVELS_PER_TIER, TIERS, REWARDS, tierForLevel, type BuildingTheme, type SegmentStyle } from '../shared/progression';
 import './progression.css';
 import './tower-like.css';
@@ -134,6 +135,16 @@ export default function App() {
   const focusMe=()=>{if(me)select(me);else setModal('login');};
   const action=async(key:string,fn:()=>Promise<void>)=>{if(busy)return;setBusy(key);try{await fn();}catch(e){notify(e instanceof Error?e.message:'Please try again.',true);}finally{setBusy('');}};
   const daily=()=>action('daily',async()=>{const result=await api<{building:Building;reward:number}>('/daily',{});update(result.building);setSnapshot(prev=>prev?{...prev,claimedToday:true}:prev);notify(`Welcome back. ${result.reward} bricks and ${REWARDS.dailyXp} XP earned.`);});
+  const saveBio=async(bio:string)=>{
+    if(busy)throw new Error('Wait for the current change to finish.');
+    setBusy('profile');
+    try{const r=await api<{building:Building}>('/profile',{bio});update(r.building);notify('Bio updated.');}finally{setBusy('');}
+  };
+  const savePhoto=async(image:Blob)=>{
+    if(busy)throw new Error('Wait for the current change to finish.');
+    setBusy('profile-photo');
+    try{const r=await uploadAvatar<{building:Building}>(image);update(r.building);notify('Profile picture updated.');}finally{setBusy('');}
+  };
   const saveSegment=(segment:number,color:Color,style:SegmentStyle,theme:BuildingTheme)=>action('segment',async()=>{const r=await api<{building:Building}>('/segments',{segment,color,style,theme});update(r.building);notify('Segment updated.');});
   const like=()=>tower&&action('like',async()=>{const r=await api<{building:Building}>('/like',{tower:tower.id});update(r.building);setSnapshot(prev=>prev?{...prev,likedIds:[...prev.likedIds,tower.id]}:prev);notify(`You liked this tower. Its owner earned ${REWARDS.like} XP.`);});
   const devProgression=(data:{level?:number;source?:string})=>tower&&action('dev',async()=>{const r=await api<{building:Building}>('/dev/progression',{tower:tower.id,...data});update(r.building);if(data.level)scene.current?.focus(r.building);notify(data.level?'Demo model tier updated.':'Sample reward recorded.');});
@@ -155,7 +166,7 @@ export default function App() {
         <button className="invite-button" aria-label="Projects" title="Public projects" onClick={()=>selectProject('projects')}><Landmark size={16}/>Projects</button>
         <button className="invite-button" aria-label="Invite a friend" title="Invite a friend" onClick={showInvites}><Plus size={16}/> Invite a friend</button>
         {me&&me.bricks!==null&&<span className="topbar-bricks" aria-label={`${me.bricks.toLocaleString()} bricks`}><Package size={17} aria-hidden="true"/><span>{me.bricks.toLocaleString()}</span></span>}
-        <button className="user-button" onClick={focusMe} title="Your tower">{me?<span className="avatar tiny" style={{background:COLORS[me.color].hex}}>{initials(me.name)}</span>:<Github size={19}/>}<span>{me?'My tower':'Sign in'}</span></button>
+        <button className="user-button" onClick={focusMe} title="Your tower">{me?<ProfileAvatar avatar={me.avatar} name={me.name} className="tiny"/>:<Github size={19}/>}<span>{me?'My tower':'Sign in'}</span></button>
       </nav>
     </header>
 
@@ -163,25 +174,20 @@ export default function App() {
       <Suspense fallback={<div className="scene-loading"><LoaderCircle className="spin" size={24}/><span>Drawing your little city…</span></div>}><CityScene ref={scene} buildings={buildings} selected={selected} lighting={lighting} center={center} debugScores={showScores} previews={previews} projects={snapshot?.projects||[]} onProject={selectProject} onSelect={id=>{const b=buildings.find(b=>b.id===id);if(b)select(b);}} onPan={(x,z)=>setCenter({x,z})}/></Suspense>
       {searchOpen && <section className="resident-search" aria-label="Find a neighbor">
         <div className="search-input"><Search size={17}/><input autoFocus placeholder="Find a name or username" value={query} onChange={e=>setQuery(e.target.value)} aria-label="Search residents"/><button className="icon-button" aria-label="Close search" onClick={()=>setSearchOpen(false)}><X size={16}/></button></div>
-        <div className="resident-results">{filtered.length?filtered.map(b=><button key={b.id} className="resident-result" onClick={()=>select(b)}><span className="avatar small" style={{background:COLORS[b.color].hex}}>{initials(b.name)}</span><span><strong>{b.name}</strong><small>@{b.username}</small></span><span className="level-label">Lv. {b.level}</span></button>):<p className="empty-search">No neighbors match that name.</p>}</div>
+        <div className="resident-results">{filtered.length?filtered.map(b=><button key={b.id} className="resident-result" onClick={()=>select(b)}><ProfileAvatar avatar={b.avatar} name={b.name} className="small"/><span><strong>{b.name}</strong><small>@{b.username}</small></span><span className="level-label">Lv. {b.level}</span></button>):<p className="empty-search">No neighbors match that name.</p>}</div>
       </section>}
 
       {(project||selected==='projects')&&<TowerDrawer open={drawerOpen} onOpenChange={setDrawerOpen} subject="project"><ProjectDetails key={selected} project={project} projects={snapshot?.projects||[]} me={me} busy={Boolean(busy)} onSelect={selectProject} onFocus={p=>scene.current?.focus(p)} onClose={closeDrawer} onContribute={contribute}/></TowerDrawer>}
       {tower && <TowerDrawer open={drawerOpen} onOpenChange={setDrawerOpen}><aside className="inspector" aria-label={`${tower.name}'s tower`}>
-        <div className="inspector-heading"><span><span className="small-dot"/>{own?'Your little corner':'Meet your neighbor'}</span><div className="drawer-heading-actions"><button className="icon-button desktop-focus" title="Focus this tower" aria-label="Focus this tower" onClick={()=>scene.current?.focus(tower)}><LocateFixed size={17}/></button><button className="icon-button" aria-label="Close tower details" onClick={()=>{setDrawerOpen(false);document.querySelector<HTMLButtonElement>('.drawer-handle')?.focus();}}><X size={18}/></button></div></div>
-        <div className="profile">
-          <span className="avatar profile-avatar" style={{background:COLORS[tower.color].hex}}>{initials(tower.name)}<span className="profile-avatar-badge"><Hammer size={11}/></span></span>
-          <div className="profile-name"><h2>{tower.name}</h2><span>@{tower.username}</span></div>
-          {own && <span className="you-label">You</span>}
-        </div>
-        <p className="bio">{tower.bio || 'A new idea has moved into the neighborhood.'}</p>
+        <div className="inspector-heading profile-controls"><div className="drawer-heading-actions"><button className="icon-button desktop-focus" title="Focus this tower" aria-label="Focus this tower" onClick={()=>scene.current?.focus(tower)}><LocateFixed size={17}/></button><button className="icon-button" aria-label="Close tower details" onClick={()=>{setDrawerOpen(false);document.querySelector<HTMLButtonElement>('.drawer-handle')?.focus();}}><X size={18}/></button></div></div>
+        <ResidentProfile key={tower.id} building={tower} own={own} busy={Boolean(busy)} onSaveBio={saveBio} onUpload={savePhoto}/>
         {(tower.github_url||tower.website||!tower.is_demo)&&<div className="profile-links">
           {tower.github_url && <a href={tower.github_url} target="_blank" rel="noreferrer"><Github size={14}/>GitHub<ArrowUpRight size={12}/></a>}
           {tower.website && <a href={tower.website} target="_blank" rel="noreferrer">Website<ArrowUpRight size={12}/></a>}
           {!tower.is_demo&&<span className="verification"><Check size={12}/> GitHub connected</span>}
         </div>}
         {showScores && <ScoreBreakdown score={scoreAt(tower.x,tower.z)} building={tower} editable={Boolean(snapshot?.demo&&tower.is_demo)} busy={Boolean(busy)} onDev={devProgression}/>}
-        <div className="tower-social"><button className="tower-like" aria-pressed={Boolean(snapshot?.likedIds.includes(tower.id))} aria-label={own?`${tower.likes} likes on your tower`:`${snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} ${tower.name}'s tower, ${tower.likes} likes`} title={own?'Your tower’s likes':snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} disabled={own||!me||Boolean(busy)||snapshot?.likedIds.includes(tower.id)} onClick={like}><Heart className="tower-like-heart" size={17} aria-hidden="true" fill={snapshot?.likedIds.includes(tower.id)?'currentColor':'none'}/><span>{tower.likes}</span></button></div>
+        <div className="tower-social"><button className="tower-like" aria-pressed={Boolean(snapshot?.likedIds.includes(tower.id))} aria-label={`${snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} ${own?'your tower':`${tower.name}'s tower`}, ${tower.likes} likes`} title={snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} disabled={!me||Boolean(busy)||snapshot?.likedIds.includes(tower.id)} onClick={like}><Heart className="tower-like-heart" size={17} aria-hidden="true" fill={snapshot?.likedIds.includes(tower.id)?'currentColor':'none'}/><span>{tower.likes}</span></button></div>
         <LevelProgress building={tower}/>
         <div className="tower-panel">
           <SegmentEditor key={tower.id} building={tower} own={own} busy={Boolean(busy)} onSave={saveSegment}/>
@@ -216,7 +222,6 @@ export default function App() {
     </Dialog>}
   </div>;
 }
-function initials(name:string){return name.split(' ').slice(0,2).map(s=>s[0]).join('');}
 function Github({size=20}:{size?:number}){return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 19c-4.3 1.3-4.3-2-6-2m12 5v-3.8c0-1.1-.4-1.7-.8-2.1 2.7-.3 5.5-1.3 5.5-6a4.7 4.7 0 0 0-1.3-3.2 4.4 4.4 0 0 0-.1-3.2s-1-.3-3.3 1.2a11.2 11.2 0 0 0-6 0C6.7 3.4 5.7 3.7 5.7 3.7a4.4 4.4 0 0 0-.1 3.2 4.7 4.7 0 0 0-1.3 3.2c0 4.7 2.8 5.7 5.5 6-.4.4-.8 1-.8 2.1V22"/></svg>;}
 function ActivityBlocks({seed}:{seed:number}){
   return <div className="activity-blocks" aria-hidden="true">{Array.from({length:91},(_,i)=>{const value=Math.abs(Math.sin((i+1)*12.9898+seed)*43758.5453)%1;return <i key={i} className={`heat-${value>.83?4:value>.62?3:value>.4?2:value>.21?1:0}`}/>;})}</div>;

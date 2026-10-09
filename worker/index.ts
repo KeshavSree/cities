@@ -7,6 +7,8 @@ import { reward, projects, processConstruction } from './economy';
 import { REWARDS, MAX_LEVEL, TIERS, SEGMENT_COST, SEGMENT_STYLES, BUILDING_THEMES, tierStartLevel, xpAtLevel } from '../shared/progression';
 import { PROJECT_RADIUS } from '../shared/projects';
 import { plotPosition } from '../shared/world';
+import { BIO_MAX_LENGTH } from '../shared/profile';
+import { avatarResponse, saveAvatar, PhotoError } from './profile';
 
 interface Env {
   DB: D1Database; NEIGHBORHOODS: DurableObjectNamespace; ASSETS: Fetcher;
@@ -124,7 +126,10 @@ async function join(env: Env, profile: { id: number; login: string; name?: strin
   const existing = await env.DB.prepare('SELECT id FROM users WHERE github_id=?').bind(String(profile.id)).first<{ id: string }>();
   const encrypted = await seal(accessToken, env);
   if (existing) {
-    await env.DB.prepare('UPDATE users SET github_token=?, username=?, name=?, bio=?, avatar=?, github_url=? WHERE id=?').bind(encrypted, profile.login, profile.name || profile.login, profile.bio || '', profile.avatar_url || null, profile.html_url || null, existing.id).run();
+    await env.DB.prepare(`UPDATE users SET github_token=?, username=?, name=?,
+      bio=CASE WHEN bio_customized=1 THEN bio ELSE ? END,
+      avatar=CASE WHEN EXISTS(SELECT 1 FROM profile_photos WHERE user_id=users.id) THEN avatar ELSE ? END,
+      github_url=? WHERE id=?`).bind(encrypted, profile.login, profile.name || profile.login, profile.bio || '', profile.avatar_url || null, profile.html_url || null, existing.id).run();
     return existing.id;
   }
   if (env.FOUNDER_GITHUB_ID === String(profile.id)) {
@@ -199,6 +204,11 @@ export default {
       if (!['GET', 'HEAD'].includes(req.method)) {
         const origin = req.headers.get('Origin');
         if (!origin || ![env.APP_ORIGIN, url.origin].includes(origin)) throw new ApiError('Open the city in its own tab before making changes.', 403);
+      }
+      if (path.startsWith('/api/profile/avatar/') && ['GET', 'HEAD'].includes(req.method)) {
+        const id = path.slice('/api/profile/avatar/'.length);
+        if (!/^[a-zA-Z0-9-]{1,80}$/.test(id)) throw new ApiError('Profile picture not found.', 404);
+        return await avatarResponse(req, env.DB, id);
       }
       if (path === '/api/bootstrap' && req.method === 'GET') {
         if(env.DEV_MODE==='true')await ensureDemoConnections(env.DB);
@@ -303,6 +313,19 @@ export default {
       }
       const user = await requireUser(req, env);
       if(path==='/api/me'&&req.method==='GET')return json({building:await building(env,user.id)});
+      if (path === '/api/profile' && req.method === 'POST') {
+        const data = await body(req);
+        if (typeof data.bio !== 'string' || data.bio.length > BIO_MAX_LENGTH) throw new ApiError(`Keep your bio within ${BIO_MAX_LENGTH} characters.`);
+        await env.DB.batch([
+          env.DB.prepare('UPDATE users SET bio=?,bio_customized=1 WHERE id=?').bind(data.bio.trim(), user.id),
+          env.DB.prepare("UPDATE buildings SET updated_at=datetime('now') WHERE user_id=?").bind(user.id),
+        ]);
+        return json({ building: await changed(env, user.id, ctx) });
+      }
+      if (path === '/api/profile/avatar' && req.method === 'POST') {
+        await saveAvatar(req, env.DB, user.id);
+        return json({ building: await changed(env, user.id, ctx) });
+      }
       if (path === '/api/daily' && req.method === 'POST') {
         try {
           await env.DB.batch([
@@ -339,7 +362,6 @@ export default {
       }
       if(path==='/api/like'&&req.method==='POST'){
         const data=await body(req),target=typeof data.tower==='string'?data.tower:'';
-        if(target===user.id)throw new ApiError('Choose another resident’s tower.');
         if(!user.github_id&&!user.is_demo)throw new ApiError('Connect GitHub before liking a tower.',403);
         const owner=await building(env,target);
         if(Boolean(user.is_demo)!==Boolean(owner.is_demo))throw new ApiError('Demo and real likes are separate.',403);
@@ -410,6 +432,7 @@ export default {
         return new Response(null,{status:302,headers:{Location:dest.toString(),...headers}});
       }
       if (e instanceof ApiError) return json({ error: e.message }, e.status);
+      if (e instanceof PhotoError) return json({ error: e.message }, e.status);
       console.error('Worker request failed:', String(e));
       return json({ error: 'The city could not complete that request. Try again in a moment.' }, 500);
     }
