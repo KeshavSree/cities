@@ -6,7 +6,7 @@
 .level-progress-track>span{display:block;height:100%;border-radius:inherit;background:#a89bdd;transition:width .2s ease}
 .tower-panel{padding:0 22px 15px}
 .level-progress-title{display:flex;align-items:center;gap:6px;min-width:0}
-.growth-info-button{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:22px;height:22px;color:#8a9ba5}
+.growth-info-button{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:24px;height:24px;transform:translateY(2px);color:#8a9ba5}
 .growth-info-button:hover,.growth-info-button[aria-expanded=true]{color:#7864bf}
 .growth-info-button:focus-visible{outline:2px solid #a89bdd;outline-offset:2px}
 .growth-info-popover{position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:30;padding:16px;background:#fff;border:1px solid #dfe6e9;border-radius:8px;box-shadow:0 6px 24px #293f4925}
