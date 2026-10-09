@@ -74,11 +74,15 @@ export interface BuildingSection {
 
 // Themes propose a tier independently; the shared composition layer carries
 // plot geometry and the previous tier across theme boundaries.
-const MASSING_THEMES:Record<BuildingTheme,{profiles:number[][];cornerCut:number}>={
+const MASSING_THEMES:Record<BuildingTheme,{profiles:number[][];towerProfiles:number[][];cornerCut:number}>={
   contemporary:{profiles:[
     [1,1,0,0], [.94,.80,-.025,-.08], [.94,.80,-.025,-.08],
     [.77,.83,.055,-.065], [.77,.71,.055,-.12], [.82,.71,.03,-.12],
     [.67,.72,-.04,-.10], [.67,.60,-.04,-.16], [.57,.62,.005,-.15], [.49,.50,.035,-.20],
+  ],towerProfiles:[
+    [1,1,0,0], [.94,.84,-.012,-.06], [.94,.84,-.012,-.06],
+    [.80,.78,.008,-.09], [.80,.78,.008,-.09], [.80,.78,.008,-.09],
+    [.68,.67,-.006,-.13], [.68,.67,-.006,-.13], [.68,.67,-.006,-.13], [.58,.58,0,-.16],
   ],cornerCut:.23},
 };
 function composeSections(plan:PlotPlan,base:Point[],designs:SegmentDesign[],tier:number){
@@ -95,18 +99,20 @@ function composeSections(plan:PlotPlan,base:Point[],designs:SegmentDesign[],tier
   return Array.from({length:count},(_,segment)=>{
     if(segment===0)return {outline:base,supportRatio:1,overhang:0,role:tier>=3?'Street podium':'Road-facing home',loggia:false};
     const grammar=MASSING_THEMES[designs[segment].theme];
-    const [sx,sz,tx,tz]=grammar.profiles[segment];
+    const profiles=tier>=6?grammar.towerProfiles:grammar.profiles;
+    const [sx,sz,tx,tz]=profiles[segment];
+    const continuesVolume=designs[segment-1].theme===designs[segment].theme&&profiles[segment].every((value,i)=>value===profiles[segment-1][i]);
     // Plot skew survives in every candidate. The previous four-corner frame
     // contributes 35%; the design brief contributes 65%. Neither is a template.
     const strength=tier<=2?.25:1;
-    const quad=local.map((p,i)=>{
+    const quad=tier>=6&&continuesVolume?previousQuad:local.map((p,i)=>{
       const desired=toWorld({x:p.x*(1-(1-sx)*strength)+tx*w*strength*handedness,z:p.z*(1-(1-sz)*strength)+tz*d*strength});
       return {x:desired.x*.65+previousQuad[i].x*.35,z:desired.z*.65+previousQuad[i].z*.35};
     });
     let candidate=quad;
     // A chamfer is a local response to a corner, never the entire tower's plan.
-    if(tier>=6&&segment>=count-2){
-      const corner=(Math.abs(plan.x+plan.z)%2===0?0:2),t=segment===count-1?grammar.cornerCut:grammar.cornerCut*.52;
+    if(tier>=6&&(segment>=6||segment===count-1)){
+      const corner=(Math.abs(plan.x+plan.z)%2===0?0:2),t=segment===count-1?.18:.12;
       candidate=quad.flatMap((p,i)=>i!==corner?[p]:[
         {x:p.x+(quad[(i+3)%4].x-p.x)*t,z:p.z+(quad[(i+3)%4].z-p.z)*t},
         {x:p.x+(quad[(i+1)%4].x-p.x)*t,z:p.z+(quad[(i+1)%4].z-p.z)*t},
@@ -122,7 +128,7 @@ function composeSections(plan:PlotPlan,base:Point[],designs:SegmentDesign[],tier
     }
     const overhang=Math.max(0,...previous.map((a,i)=>{const b=previous[(i+1)%previous.length],dx=b.x-a.x,dz=b.z-a.z;return Math.max(...outline.map(p=>(dz*(p.x-a.x)-dx*(p.z-a.z))/Math.hypot(dx,dz)));}));
     previous=outline;previousQuad=quad;
-    return {outline,supportRatio,overhang,role:segment===count-1&&tier>=3?'Garden crown':segment<3?'Lower residential volume':segment<6?'Offset middle volume':'Upper garden volume',loggia:tier>=6&&(segment===3||segment===6)};
+    return {outline,supportRatio,overhang,role:segment===count-1&&tier>=3?'Garden crown':segment<3?'Lower residential volume':segment<6?'Continuous middle volume':'Upper garden volume',loggia:tier>=6&&segment===6};
   });
 }
 export const MODEL_SETBACKS=[0,0,0,1.2,.8,.4,.39,.38,.37,.36];

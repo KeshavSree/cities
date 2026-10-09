@@ -472,7 +472,7 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     };
     for(const p of parts){
       const design=form.segments[p.segment],bodyColor=mixGroundColor(COLORS[design.color].hex,concrete,form.tier>=3?.35:.08);
-      const loggiaHeight=p.loggia?Math.min(.65,p.h*.24):0;
+      const loggiaHeight=p.loggia?Math.min(.42,p.h*.18):0;
       const center={x:p.polygon.reduce((sum,v)=>sum+v.x,0)/p.polygon.length,z:p.polygon.reduce((sum,v)=>sum+v.z,0)/p.polygon.length};
       if(p.loggia){
         const recessed=p.polygon.map(v=>({x:center.x+(v.x-center.x)*.80,z:center.z+(v.z-center.z)*.80}));
