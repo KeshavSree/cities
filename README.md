@@ -53,10 +53,10 @@ XP is permanent and levels unlock automatically. The current version has **30 le
 
 | Action | XP | Bricks |
 | --- | ---: | ---: |
-| Newly credited GitHub commit | 5 | 1 per five commit XP |
+| Newly credited GitHub commit | 10 | 2 |
 | Invited resident actually joins | 200 | — |
 | Another authenticated resident likes your tower | 50 | — |
-| Nearby new construction or tier milestone | 12 | — |
+| Nearby tower levels up, including creation (0 → 1) | 20 | — |
 | Complete a public project, having contributed at least 25 bricks | 200 | — |
 | Daily visit, once per UTC calendar day | 30 | 30 |
 | Edit one segment's color and details | — | Costs 20 |
@@ -64,7 +64,7 @@ XP is permanent and levels unlock automatically. The current version has **30 le
 
 GitHub rewards are commit-only; pull requests and reviews do not earn XP or bricks. Updated rates apply to future rewards, preserving earned XP and credited commit counts. `0003_reward_rates.sql` updates the public-project completion trigger to 200 XP.
 
-Likes are permanent, limited to one per account per tower, and cannot target yourself. Production liking requires a GitHub-connected account; local demo likes stay between demo residents. Invites only award after successful joining. Nearby construction is an event, not passive proximity income: the eight closest other residents within three plot spacings receive XP when a building is created or crosses levels 4, 7, 10, 13, 16, 19, 22, 25, or 28. Coordinate-keyed, distance-weighted occupancy still shapes roads; it no longer determines an individual tower's model.
+Likes are permanent, limited to one per account per tower, and cannot target yourself. Production liking requires a GitHub-connected account; local demo likes stay between demo residents. Invites only award after successful joining. Nearby rewards are event-based: the eight closest other residents within three plot spacings receive 20 XP for each level a nearby tower gains. Placing a new tower counts as 0 → 1; subsequent level-ups continue through level 30. Migration `0006_level_up_rewards.sql` replaces tier-milestone rewards with individual level-up rewards while retaining creation rewards, existing XP and balances. Coordinate-keyed, distance-weighted occupancy still shapes roads; it no longer determines an individual tower's model.
 
 | Levels | Model | Ground |
 | --- | --- | --- |
@@ -101,7 +101,7 @@ Brick balances are private to their owner. Production snapshots, like responses,
 
 ### Reward accounting
 
-A unique-key XP ledger records GitHub credits, redeemed invites, likes, daily visits, nearby construction, and public project completions. SQL triggers apply XP, bricks, and automatic level changes atomically. Construction milestones are queued durably, and a bounded worker drains one milestone per active snapshot/reward request or scheduled run, broadcasting the eight recipients. Further milestones caused by those rewards remain queued. Delays are possible when nobody is active; retries cannot double-credit a milestone. Dev level previews edit sample totals directly and suppress preview-only construction; simulated rewards are labeled `demo`.
+A unique-key XP ledger records GitHub credits, redeemed invites, likes, daily visits, nearby construction, and public project completions. SQL triggers apply XP, bricks, and automatic level changes atomically. Tower level-ups are queued durably, and a bounded worker drains one level-up per active snapshot/reward request or scheduled run, broadcasting the eight recipients. Further level-ups caused by those rewards remain queued. Delays are possible when nobody is active; retries cannot double-credit a level-up. Dev level previews edit sample totals directly and suppress preview-only construction; simulated rewards are labeled `demo`.
 
 ## Architecture
 
