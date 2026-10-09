@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowUpRight, Heart, Landmark, Bug, Check, Compass, Copy, Gift, Hammer, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, MapPin, Minus, Plus, Search, Sparkles, Users, X } from 'lucide-react';
+import { ArrowUpRight, Landmark, Bug, Check, Compass, Copy, Gift, Hammer, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, MapPin, Minus, Plus, Search, Sparkles, Users, X } from 'lucide-react';
 import type { SceneHandle } from './CityScene';
 import { api } from './api';
 import { COLORS, type Bootstrap, type Building, type Color } from '../shared/types';
@@ -14,6 +14,7 @@ import { SegmentEditor } from './SegmentEditor';
 import { ProjectDetails } from './ProjectDetails';
 import { MAX_LEVEL, LEVELS_PER_TIER, TIERS, REWARDS, tierForLevel, type BuildingTheme, type SegmentStyle } from '../shared/progression';
 import './progression.css';
+import './tower-like.css';
 
 type Modal = 'invite' | 'help' | 'login' | null;
 const CityScene = lazy(()=>import('./CityScene').then(m=>({default:m.CityScene})));
@@ -179,7 +180,7 @@ export default function App() {
           {!tower.is_demo&&<span className="verification"><Check size={12}/> GitHub connected</span>}
         </div>}
         {showScores && <ScoreBreakdown score={scoreAt(tower.x,tower.z)} building={tower} editable={Boolean(snapshot?.demo&&tower.is_demo)} busy={Boolean(busy)} onDev={devProgression}/>}
-        <div className="tower-social"><span>{tower.likes} likes</span>{!own&&<button aria-pressed={Boolean(snapshot?.likedIds.includes(tower.id))} title={snapshot?.likedIds.includes(tower.id)?'You liked this tower':'Like'} disabled={!me||Boolean(busy)||snapshot?.likedIds.includes(tower.id)} onClick={like}><Heart size={16} fill={snapshot?.likedIds.includes(tower.id)?'currentColor':'none'}/>Like</button>}</div>
+        <div className="tower-social"><button className="tower-like" aria-pressed={Boolean(snapshot?.likedIds.includes(tower.id))} aria-label={own?`${tower.likes} likes on your tower`:`${snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} ${tower.name}'s tower, ${tower.likes} likes`} title={own?'Your tower’s likes':snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} disabled={own||!me||Boolean(busy)||snapshot?.likedIds.includes(tower.id)} onClick={like}><span className="tower-like-heart" aria-hidden="true">❤️</span><span>{tower.likes}</span></button></div>
         <LevelProgress building={tower}/>
         <div className="inspector-tabs" role="tablist" aria-label="Tower information" onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const next=tab==='overview'?'design':'overview';setTab(next);document.getElementById(`tab-${next}`)?.focus();}}}>
           <button role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected={tab==='overview'} onClick={()=>setTab('overview')}>Overview</button>

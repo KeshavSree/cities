@@ -1,0 +1,5 @@
+.tower-social>.tower-like{display:inline-flex;align-items:center;gap:7px;padding:4px 0;border:0;background:transparent;color:#617681;font-size:12px;font-variant-numeric:tabular-nums}
+.tower-social>.tower-like .tower-like-heart{font-size:17px;line-height:1}
+.tower-social>.tower-like:hover:not(:disabled){color:#a96075}
+.tower-social>.tower-like[aria-pressed=true]{color:#a96075;background:transparent}
+.tower-social>.tower-like:disabled{opacity:1}
