@@ -13,6 +13,7 @@ import { LevelProgress } from './ProgressionPanel';
 import { SegmentEditor } from './SegmentEditor';
 import { ProjectDetails } from './ProjectDetails';
 import { ResidentProfile, ProfileAvatar } from './ResidentProfile';
+import { BrickRewardBurst, type RewardFlight } from './BrickRewardBurst';
 import { MAX_LEVEL, LEVELS_PER_TIER, TIERS, REWARDS, tierForLevel, type BuildingTheme, type SegmentStyle } from '../shared/progression';
 import './progression.css';
 import './tower-like.css';
@@ -44,6 +45,10 @@ export default function App() {
   const [modal, setModal] = useState<Modal>(null);
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState('');
+  const [rewardFlight,setRewardFlight]=useState<RewardFlight|null>(null);
+  const dailyButton=useRef<HTMLButtonElement>(null);
+  const brickCounter=useRef<HTMLSpanElement>(null);
+  const finishRewardFlight=useCallback(()=>setRewardFlight(null),[]);
   const [center, setCenter] = useState({ x: 0, z: 0 });
   const [invites, setInvites] = useState<Invite[]>([]);
   const [copied, setCopied] = useState('');
@@ -134,7 +139,14 @@ export default function App() {
   const closeDrawer=()=>{setDrawerOpen(false);document.querySelector<HTMLButtonElement>('.drawer-handle')?.focus();};
   const focusMe=()=>{if(me)select(me);else setModal('login');};
   const action=async(key:string,fn:()=>Promise<void>)=>{if(busy)return;setBusy(key);try{await fn();}catch(e){notify(e instanceof Error?e.message:'Please try again.',true);}finally{setBusy('');}};
-  const daily=()=>action('daily',async()=>{const result=await api<{building:Building;reward:number}>('/daily',{});update(result.building);setSnapshot(prev=>prev?{...prev,claimedToday:true}:prev);notify(`Welcome back. ${result.reward} bricks and ${REWARDS.dailyXp} XP earned.`);});
+  const daily=()=>action('daily',async()=>{
+    const source=dailyButton.current?.querySelector('.daily-icon')?.getBoundingClientRect();
+    const result=await api<{building:Building;reward:number}>('/daily',{});
+    const destination=brickCounter.current?.querySelector('svg')?.getBoundingClientRect();
+    update(result.building);setSnapshot(prev=>prev?{...prev,claimedToday:true}:prev);
+    if(source&&destination)setRewardFlight({id:Date.now(),origin:{x:source.left+source.width/2,y:source.top+source.height/2},target:{x:destination.left+destination.width/2,y:destination.top+destination.height/2}});
+    notify(`Welcome back. ${result.reward} bricks and ${REWARDS.dailyXp} XP earned.`);
+  });
   const saveBio=async(bio:string)=>{
     if(busy)throw new Error('Wait for the current change to finish.');
     setBusy('profile');
@@ -165,7 +177,7 @@ export default function App() {
         <span className="nav-divider"/>
         <button className="invite-button" aria-label="Projects" title="Public projects" onClick={()=>selectProject('projects')}><Landmark size={16}/>Projects</button>
         <button className="invite-button" aria-label="Invite a friend" title="Invite a friend" onClick={showInvites}><Plus size={16}/> Invite a friend</button>
-        {me&&me.bricks!==null&&<span className="topbar-bricks" aria-label={`${me.bricks.toLocaleString()} bricks`}><Package size={17} aria-hidden="true"/><span>{me.bricks.toLocaleString()}</span></span>}
+        {me&&me.bricks!==null&&<span ref={brickCounter} className="topbar-bricks" aria-label={`${me.bricks.toLocaleString()} bricks`}><Package size={17} aria-hidden="true"/><span>{me.bricks.toLocaleString()}</span></span>}
         <button className="user-button" onClick={focusMe} title="Your tower">{me?<ProfileAvatar avatar={me.avatar} name={me.name} className="tiny"/>:<Github size={19}/>}<span>{me?'My tower':'Sign in'}</span></button>
       </nav>
     </header>
@@ -197,15 +209,15 @@ export default function App() {
         <footer className="inspector-footer"><MapPin size={13}/>Plot {tower.x}, {tower.z}<span>{tierForLevel(tower.level).name}</span>{own && <button className="account-link" onClick={()=>setModal('login')}>Account</button>}</footer>
       </aside></TowerDrawer>}
 
-      {me && <button className={`daily-card ${snapshot?.claimedToday?'collected':''}`} disabled={Boolean(busy)||snapshot?.claimedToday} onClick={daily}>
-        <span className="daily-icon">{snapshot?.claimedToday?<Check size={20}/>:<Gift size={21}/>}</span><span><strong>{snapshot?.claimedToday?'A good day to build.':'A little something for showing up.'}</strong><small>{snapshot?.claimedToday?'Today’s reward collected. See you tomorrow.':`Collect your daily ${snapshot?.dailyReward} bricks`}</small></span>{!snapshot?.claimedToday && <span className="daily-action">{busy==='daily'?<LoaderCircle className="spin" size={17}/>:<Plus size={16}/>}</span>}
+      {me && !snapshot?.claimedToday && <button ref={dailyButton} className="daily-card" disabled={Boolean(busy)} onClick={daily}>
+        <span className="daily-icon"><Gift size={21}/></span><span><strong>A little something for showing up.</strong><small>Collect your daily {snapshot?.dailyReward} bricks</small></span><span className="daily-action">{busy==='daily'?<LoaderCircle className="spin" size={17}/>:<Plus size={16}/>}</span>
       </button>}
       <div className="map-controls"><div className="map-tools"><button title="Zoom in" aria-label="Zoom in" onClick={()=>scene.current?.zoom(1.2)}><Plus size={18}/></button><button title="Zoom out" aria-label="Zoom out" onClick={()=>scene.current?.zoom(1/1.2)}><Minus size={18}/></button><span/><button title="Reset view" aria-label="Reset view" onClick={()=>{scene.current?.reset();setCenter({x:0,z:0});}}><Compass size={19}/></button><button title="How it works" aria-label="How it works" onClick={()=>setModal('help')}><HelpCircle size={18}/></button></div></div>
-      {snapshot?.demo && <div className="demo-label"><Sparkles size={12}/>Local demo<span>Sample people. Real building mechanics.</span></div>}
       {!snapshot && <div className="loading-screen"><span className="brand-mark"><i/><i/><i/></span><h2>{error?'The city is taking a moment.':'Making room for good ideas.'}</h2><p>{error || 'Preparing your neighborhood…'}</p>{error?<button className="primary-button" onClick={()=>location.reload()}>Try again</button>:<LoaderCircle className="spin" size={22}/>}</div>}
       {snapshot && !snapshot.buildings.length && <div className="empty-city"><h2>A city starts with someone.</h2><p>Sign in with the founding GitHub account or an invitation to place the first tower.</p><button className="primary-button" onClick={()=>setModal('login')}><Github size={16}/>Join the city</button></div>}
     </main>
 
+    {rewardFlight&&<BrickRewardBurst key={rewardFlight.id} flight={rewardFlight} onComplete={finishRewardFlight}/>}
     {toast && <div className={`toast ${toast.error?'error':''}`} role={toast.error?'alert':'status'}>{toast.error?<HelpCircle size={18}/>:<Check size={18}/>}<span>{toast.text}</span><button aria-label="Dismiss notification" onClick={()=>setToast(null)}><X size={15}/></button></div>}
     {modal && <Dialog onClose={()=>setModal(null)} title={modal==='invite'?'Good neighbors start with an invitation.':modal==='help'?'A city built by its people.':'Your work belongs here.'}>
       {modal==='invite' && <>
