@@ -8,7 +8,7 @@ import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { COLORS, type Building, type PublicProject } from '../shared/types';
-import { coastZ, plotPosition, worldHash, PLOT_SPACING, VIEW_RADIUS } from '../shared/world';
+import { coastZ, plotPosition, plotCoordinates, worldHash, VIEW_RADIUS } from '../shared/world';
 import { WorldTerrain } from './WorldTerrain';
 import type { CityLighting } from './lighting';
 import { neighborhoodDensity, neighborhoodScores, settlementType, streetNetwork, streetDensity, roadWidth, roadShoulder, roadColor, shoulderColor, lotPolygon, projectPolygon, mixGroundColor, SETTLEMENT_THRESHOLDS, type GroundPoint } from './neighborhood';
@@ -22,7 +22,6 @@ import { isReservedPlot } from '../shared/projects';
 
 export interface SceneHandle { focus: (b: {x:number;z:number;level?:number}) => void; reset: () => void; zoom: (amount: number) => void; }
 interface Props { buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; debugScores:boolean; previews:PlotPreview[]; projects:PublicProject[]; onProject:(id:string)=>void; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
-const SPACING = PLOT_SPACING;
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ buildings, selected, lighting, center, debugScores, previews, projects, onProject, onSelect, onPan }, ref) {
@@ -114,7 +113,8 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     };
     const panEnd = () => {
       const ground=viewedGround();
-      const x = Math.round(ground.x / SPACING / 4) * 4, z = Math.round(ground.z / SPACING / 4) * 4;
+      const position=plotCoordinates(ground.x,ground.z);
+      const x = Math.round(position.x / 4) * 4, z = Math.round(position.z / 4) * 4;
       if (`${x},${z}` !== lastPan) { lastPan = `${x},${z}`; props.current.onPan(x,z); }
     };
     const keyboard=new CameraKeyboard(camera,controls,panEnd);

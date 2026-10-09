@@ -47,8 +47,8 @@ for(const preview of upcomingPlotPreviews(existing,existing[0],[{x:0,z:2},{x:0,z
   const actual=streetNetwork([...existing,preview.resident],(x,z)=>scores(x,z).total);
   for(const street of preview.streets)assert.deepEqual(street,actual.roads.get(street.key),'Preview changed on construction');
 }
-const dense=streetNetwork(Array.from({length:25},(_,i)=>resident(i%5-2,Math.floor(i/5)-1,30)),()=>1);
-const interior='node:0,1';
+const dense=streetNetwork(Array.from({length:25},(_,i)=>resident(i%5-10,Math.floor(i/5)+2,30)),()=>1);
+const interior='node:-8,4';
 assert.equal([...dense.roads.values()].filter(r=>r.nodes.some(n=>n.key===interior)).length,3,'Dense interior T became a crossroads');
 // Plans are independent of activation order and surrounding occupancy.
 assert.deepEqual(plotStreets(0,0),plotPlan(0,0).roads);

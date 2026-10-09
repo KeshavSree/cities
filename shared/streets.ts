@@ -1,4 +1,4 @@
-import { plotPosition, worldHash } from './world';
+import { plotPosition, streetGrid, worldHash } from './world';
 import { isReservedPlot } from './projects';
 
 export const AREA_WIDTH=4,AREA_DEPTH=3,AREA_CAPACITY=AREA_WIDTH*AREA_DEPTH;
@@ -11,12 +11,23 @@ export interface PlannedStreet{
 }
 const modulo=(n:number,d:number)=>(n%d+d)%d;
 export function areaLayout(ax:number,az:number):Layout{
-  return (['t-junction','y-junction','cul-de-sac'] as const)[modulo(ax+2*az,3)];
+  if(branchNodes(ax,az).length)return 'y-junction';
+  return (['t-junction','crossroads','cul-de-sac','crossroads','crossroads'] as const)[modulo(ax+2*az,5)];
 }
-/** One planned special junction inside each area. Public project boundaries stay intact. */
+/** Forks belong to the conflict between square grids, not every regular block. */
+function branchNodes(ax:number,az:number){
+  const candidates=[[ax*AREA_WIDTH,az*AREA_DEPTH+1],[ax*AREA_WIDTH+1,az*AREA_DEPTH]];
+  // One fork location per interface area leaves most blocks square. Prefer the
+  // middle of the conflict strip instead of squeezing a lot at both corners.
+  return candidates.filter(([x,z])=>streetGrid(x-.5,z-.5).interface)
+    .sort((a,b)=>Math.abs(streetGrid(a[0]-.5,a[1]-.5).radius-5)-Math.abs(streetGrid(b[0]-.5,b[1]-.5).radius-5)).slice(0,1);
+}
+/** Public project boundaries stay intact. */
 export function junctionLayout(x:number,z:number):Layout{
   const ax=Math.floor((x+2)/AREA_WIDTH),az=Math.floor((z+1)/AREA_DEPTH),kind=areaLayout(ax,az);
-  if(x!==ax*AREA_WIDTH||z!==az*AREA_DEPTH-1+(kind==='cul-de-sac'?1:2))return 'crossroads';
+  if(kind==='y-junction'){
+    if(!branchNodes(ax,az).some(([nx,nz])=>x===nx&&z===nz))return 'crossroads';
+  }else if(x!==ax*AREA_WIDTH||z!==az*AREA_DEPTH+(kind==='cul-de-sac'?0:1))return 'crossroads';
   if([[-1,-1],[0,-1],[0,0],[-1,0]].some(([dx,dz])=>isReservedPlot(x+dx,z+dz)))return 'crossroads';
   return kind;
 }
@@ -28,8 +39,12 @@ const blocked=(x:number,z:number,port:Port)=>{
 function node(x:number,z:number,port:Port):PlannedNode{
   const position=center(x,z),kind=junctionLayout(x,z),key=`node:${x},${z}`;
   if(kind==='y-junction'){
-    const upper=port==='n'||port==='e',offset=upper?.72:-.72;
-    return {key:`${key}:${upper?'ne':'sw'}`,position:{x:position.x+offset,z:position.z-offset}};
+    const upper=port==='n'||port==='e',sign=upper?1:-1;
+    const east=center(x+1,z),west=center(x-1,z),south=center(x,z+1),north=center(x,z-1);
+    // A substantial diagonal trunk joins two three-way forks. Follow the area's
+    // road basis so the forks and their parcels turn with the surrounding grid.
+    const offset={x:(east.x-west.x-south.x+north.x)*.107,z:(east.z-west.z-south.z+north.z)*.107};
+    return {key:`${key}:${upper?'ne':'sw'}`,position:{x:position.x+sign*offset.x,z:position.z+sign*offset.z}};
   }
   return {key,position,...kind==='cul-de-sac'?{turnRadius:1.35}:{}};
 }
