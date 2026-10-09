@@ -214,7 +214,7 @@ export default {
           // Availability must include every occupied slot, even beyond the render limit.
           const occupied=await env.DB.prepare('SELECT x,z FROM buildings WHERE x BETWEEN ? AND ? AND z BETWEEN ? AND ?')
             .bind(own.x-12,own.x+12,own.z-12,own.z+12).all<{x:number;z:number}>();
-          nextPlots=availablePlotPlans(own,new Set(occupied.results.map(b=>`${b.x},${b.z}`))).slice(0,24).map(({x,z})=>({x,z}));
+          nextPlots=availablePlotPlans(own,new Set(occupied.results.map(b=>`${b.x},${b.z}`))).slice(0,48).map(({x,z})=>({x,z}));
         }
         return json({ buildings: rows.results.map(b=>visibleBuilding(env,b,user?.id??null)), nextPlots, projects:await projects(env.DB,user?.id??null), likedIds:user?(await env.DB.prepare('SELECT tower_id FROM tower_likes WHERE voter_id=?').bind(user.id).all<{tower_id:string}>()).results.map(l=>l.tower_id):[], me: user?.id ?? null, demo: env.DEV_MODE === 'true', githubConfigured: authReady(env), claimedToday: Boolean(claimed), dailyReward: DAILY_REWARD, inviteRequired: true });
       }

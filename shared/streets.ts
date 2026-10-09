@@ -1,4 +1,4 @@
-import { plotPosition, streetGrid, worldHash } from './world';
+import { GRID_FORK, plotPosition, streetGrid, worldHash } from './world';
 import { isReservedPlot } from './projects';
 
 export const AREA_WIDTH=4,AREA_DEPTH=3,AREA_CAPACITY=AREA_WIDTH*AREA_DEPTH;
@@ -16,11 +16,12 @@ export function areaLayout(ax:number,az:number):Layout{
 }
 /** Forks belong to the conflict between square grids, not every regular block. */
 function branchNodes(ax:number,az:number){
+  if(Math.floor((GRID_FORK.x+2)/AREA_WIDTH)===ax&&Math.floor((GRID_FORK.z+1)/AREA_DEPTH)===az)return [[GRID_FORK.x,GRID_FORK.z]];
   const candidates=[[ax*AREA_WIDTH,az*AREA_DEPTH+1],[ax*AREA_WIDTH+1,az*AREA_DEPTH]];
-  // One fork location per interface area leaves most blocks square. Prefer the
-  // middle of the conflict strip instead of squeezing a lot at both corners.
+  // One fork location per interface area leaves the adjoining square grids
+  // intact. Pick a stable corner; never squeeze a lot at both opposite corners.
   return candidates.filter(([x,z])=>streetGrid(x-.5,z-.5).interface)
-    .sort((a,b)=>Math.abs(streetGrid(a[0]-.5,a[1]-.5).radius-5)-Math.abs(streetGrid(b[0]-.5,b[1]-.5).radius-5)).slice(0,1);
+    .slice(0,1);
 }
 /** Public project boundaries stay intact. */
 export function junctionLayout(x:number,z:number):Layout{

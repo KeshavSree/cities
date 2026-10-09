@@ -9,40 +9,58 @@ export function worldHash(x:number,z:number) {
   return value-Math.floor(value);
 }
 
-// Independent square-grid seeds. The established grid stays at zero degrees;
-// each seed defines a square grid at +/-30 degrees. Only their interface bends.
-const GRID_REGION_SPAN=18,GRID_CORE_RADIUS=3.25,GRID_INTERFACE_RADIUS=6.75;
-const modulo=(n:number,d:number)=>(n%d+d)%d;
-export function streetGrid(x:number,z:number){
-  const rz=Math.floor((z+3.5+GRID_REGION_SPAN/2)/GRID_REGION_SPAN);
-  const stagger=modulo(rz,2)*5;
-  const rx=Math.floor((x-6.5-stagger+GRID_REGION_SPAN/2)/GRID_REGION_SPAN);
-  const center={x:rx*GRID_REGION_SPAN+6.5+stagger,z:rz*GRID_REGION_SPAN-3.5};
-  const radius=Math.hypot(x-center.x,z-center.z);
-  const t=Math.max(0,Math.min(1,(GRID_INTERFACE_RADIUS-radius)/(GRID_INTERFACE_RADIUS-GRID_CORE_RADIUS)));
-  const blend=t*t*(3-2*t);
-  const heading=(modulo(rx+rz,2)?-1:1)*Math.PI/6;
-  return {key:`${rx},${rz}`,center,radius,angle:heading*blend,heading,
-    interface:radius>GRID_CORE_RADIUS&&radius<GRID_INTERFACE_RADIUS};
+// The branch starts at a street corner. Both grids are rigid square lattices;
+// the outgoing grid continues indefinitely instead of rotating back with distance.
+export const GRID_FORK={x:2,z:2};
+const GRID_ORIGIN={x:GRID_FORK.x-.5,z:GRID_FORK.z-.5};
+const NEW_GRID_ANGLE=Math.PI/6;
+type Matrix={a:number;b:number;c:number;d:number};
+const IDENTITY:Matrix={a:1,b:0,c:0,d:1};
+const ROTATED:Matrix={a:Math.cos(NEW_GRID_ANGLE),b:-Math.sin(NEW_GRID_ANGLE),c:Math.sin(NEW_GRID_ANGLE),d:Math.cos(NEW_GRID_ANGLE)};
+const apply=(m:Matrix,x:number,z:number)=>({x:m.a*x+m.b*z,z:m.c*x+m.d*z});
+const inverse=(m:Matrix):Matrix=>{const det=m.a*m.d-m.b*m.c;return {a:m.d/det,b:-m.b/det,c:-m.c/det,d:m.a/det};};
+/** Join two rigid lattices with a linear triangular fan. Lines stay straight
+ * inside each fan, and the two boundary rays match their neighboring grids.
+ */
+function fan(start:number,end:number,startRotation:number,endRotation:number):Matrix{
+  const radians=(degrees:number)=>degrees*Math.PI/180;
+  const basis={a:Math.cos(radians(start)),b:Math.cos(radians(end)),c:Math.sin(radians(start)),d:Math.sin(radians(end))};
+  const target={a:Math.cos(radians(start+startRotation)),b:Math.cos(radians(end+endRotation)),c:Math.sin(radians(start+startRotation)),d:Math.sin(radians(end+endRotation))};
+  const from=inverse(basis);
+  return {a:target.a*from.a+target.b*from.c,b:target.a*from.b+target.b*from.d,c:target.c*from.a+target.d*from.c,d:target.c*from.b+target.d*from.d};
 }
-const rotate=(x:number,z:number,angle:number)=>({x:x*Math.cos(angle)-z*Math.sin(angle),z:x*Math.sin(angle)+z*Math.cos(angle)});
+const UPPER_FAN=fan(60,105,30,0),LOWER_FAN=fan(-105,-60,0,30);
+function gridMatrix(angle:number,world=false){
+  if(angle>=(world?-30:-60)&&angle<=(world?90:60))return ROTATED;
+  if(angle>=(world?90:60)&&angle<=105)return UPPER_FAN;
+  if(angle>=-105&&angle<=(world?-30:-60))return LOWER_FAN;
+  return IDENTITY;
+}
+export function streetGrid(x:number,z:number){
+  const bearing=Math.atan2(z-GRID_ORIGIN.z,x-GRID_ORIGIN.x)*180/Math.PI;
+  const matrix=gridMatrix(bearing),transition=matrix===UPPER_FAN||matrix===LOWER_FAN;
+  const angle=matrix===ROTATED?NEW_GRID_ANGLE:0;
+  return {key:transition?'grid-seam':angle?'outgoing-grid':'original-grid',center:GRID_ORIGIN,angle,heading:NEW_GRID_ANGLE,
+    interface:transition,matrix};
+}
 
 /** Stable irregular coordinates: adding residents never shifts an existing tower. */
 export function plotPosition(x:number,z:number) {
-  const grid=streetGrid(x,z),point=rotate(x-grid.center.x,z-grid.center.z,grid.angle);
+  const grid=streetGrid(x,z),point=apply(grid.matrix,x-grid.center.x,z-grid.center.z);
   return {
     x:(grid.center.x+point.x)*PLOT_SPACING,
     z:(grid.center.z+point.z)*PLOT_SPACING,
   };
 }
 
-/** The interface preserves radius around its grid seed, so its inverse is exact.
- * Use it for camera paging rather than assuming all streets have the root angle.
+/** Each grid/fan is linear and has a positive determinant. Invert the physical
+ * sector for camera paging, including the full indefinitely continuing new grid.
  */
 export function plotCoordinates(worldX:number,worldZ:number){
-  const x=worldX/PLOT_SPACING,z=worldZ/PLOT_SPACING,grid=streetGrid(x,z);
-  const point=rotate(x-grid.center.x,z-grid.center.z,-grid.angle);
-  return {x:grid.center.x+point.x,z:grid.center.z+point.z};
+  const x=worldX/PLOT_SPACING-GRID_ORIGIN.x,z=worldZ/PLOT_SPACING-GRID_ORIGIN.z;
+  const bearing=Math.atan2(z,x)*180/Math.PI;
+  const point=apply(inverse(gridMatrix(bearing,true)),x,z);
+  return {x:GRID_ORIGIN.x+point.x,z:GRID_ORIGIN.z+point.z};
 }
 
 /** A fixed, gently winding coast extending along the whole world x-axis. */
