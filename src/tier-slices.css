@@ -1,0 +1,17 @@
+.segment-editor .tier-slices{display:flex;flex-direction:column-reverse;gap:0;margin:12px -22px 18px;width:calc(100% + 44px);border:0;background:transparent}
+.segment-editor .tier-slice{display:block;position:relative;width:100%;min-height:0;padding:0;border:0;background:transparent;line-height:0;box-shadow:none;--tier-outline:#52676e}
+.segment-editor .tier-slice:hover{background:transparent;--tier-outline:#788388}
+.segment-editor .tier-slice[aria-pressed=true]{background:transparent;box-shadow:none;--tier-outline:#8172c5}
+.segment-editor .tier-slice:focus-visible{outline:2px solid #8172c5;outline-offset:-3px;z-index:2}
+.segment-editor .tier-slice svg{display:block;width:100%;height:72px;overflow:hidden}
+.tier-art-body{stroke:var(--tier-outline);stroke-width:1.2;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.tier-slice[aria-pressed=true] .tier-art-body{stroke-width:2.5}
+.tier-art-windows rect{fill:#eaf3ed;stroke:#60767b;stroke-width:.6}
+.tier-art-windows.glass rect{fill:#b7dce2;stroke:#526d74}
+.tier-art-windows.balcony rect{fill:#dcebed}
+.tier-art-rails{fill:none;stroke:#4e6268;stroke-width:1}
+.tier-art-earth{fill:none;stroke:#f1d7af;stroke-width:1;opacity:.7}
+.tier-art-deco{fill:none;stroke:#e3c887;stroke-width:1.4}
+.tier-art-modules{fill:none;stroke:#526b70;stroke-width:.8;opacity:.65}
+.tier-art-night{fill:none;stroke:#cfb7f1;stroke-width:1.1}
+.tier-slice.nocturne .tier-art-windows rect{fill:#dac7ff;stroke:#5f5375}

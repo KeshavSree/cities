@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { COLORS, type Building, type Color } from '../shared/types';
+import { TierSlices } from './TierSlices';
 import { segmentDesigns, SEGMENT_COST, SEGMENT_STYLES, BUILDING_THEMES, type BuildingTheme, type SegmentStyle } from '../shared/progression';
 export function SegmentEditor({building,own,busy,onSave}:{building:Building;own:boolean;busy:boolean;onSave:(segment:number,color:Color,style:SegmentStyle,theme:BuildingTheme)=>void}){
   const [selectedIndex,setIndex]=useState(0),[draftColor,setColor]=useState<Color|null>(null),[draftStyle,setStyle]=useState<SegmentStyle|null>(null),[draftTheme,setTheme]=useState<BuildingTheme|null>(null);
@@ -8,8 +9,7 @@ export function SegmentEditor({building,own,busy,onSave}:{building:Building;own:
   const different=color!==design.color||style!==design.style||theme!==design.theme;
   return <section className="segment-editor" aria-label="Customize building segments">
     <div className="section-heading"><h3>Building segments</h3><span>{SEGMENT_COST} bricks per edit</span></div>
-    <div className="segment-tabs">{designs.map((_,i)=><button key={i} aria-pressed={index===i} onClick={()=>{setIndex(i);setColor(null);setStyle(null);setTheme(null);}}>Segment {i+1}</button>)}</div>
-    <div className="segment-preview" style={{background:COLORS[color].hex}}><span>Segment {index+1}</span><strong>{SEGMENT_STYLES[style]}</strong></div>
+    <TierSlices designs={designs.map((saved,i)=>i===index?{color,style,theme}:saved)} selectedIndex={index} onSelect={i=>{setIndex(i);setColor(null);setStyle(null);setTheme(null);}}/>
     <label className="segment-label">Tier {index+1} theme<select aria-label={`Tier ${index+1} theme`} value={theme} disabled={!own||busy} onChange={e=>setTheme(e.target.value as BuildingTheme)}>{Object.entries(BUILDING_THEMES).map(([id,t])=><option key={id} value={id}>{t.label}</option>)}</select></label><p className="growth-footnote">{BUILDING_THEMES[theme].description} More themes will be available here.</p>
     <label className="segment-label">Facade color</label><div className="color-options">{(Object.keys(COLORS) as Color[]).map(c=><button key={c} aria-label={`Segment ${COLORS[c].label}`} title={COLORS[c].label} aria-pressed={color===c} disabled={!own||busy} style={{background:COLORS[c].hex}} onClick={()=>setColor(c)}/>)}</div>
     <label className="segment-label">Details</label><div className="segment-styles">{(Object.keys(SEGMENT_STYLES) as SegmentStyle[]).map(s=><button key={s} aria-pressed={style===s} disabled={!own||busy} onClick={()=>setStyle(s)}>{SEGMENT_STYLES[s]}</button>)}</div>
