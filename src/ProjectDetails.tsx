@@ -1,4 +1,4 @@
-import { ChevronRight, Landmark, LocateFixed, MapPin, TreePine, Users } from 'lucide-react';
+import { ChevronRight, Landmark, LocateFixed, TreePine, Users } from 'lucide-react';
 import type { Building, PublicProject } from '../shared/types';
 import { ProjectBoard } from './ProjectBoard';
 import './project-panel.css';
@@ -24,7 +24,6 @@ export function ProjectDetails({project,projects,me,busy,onSelect,onFocus,onCont
       <p className="project-description">{project.description}</p>
       <ProjectBoard project={project} me={me} busy={busy} onContribute={onContribute}/>
       <button className="project-directory-link" onClick={()=>onSelect('projects')}>All public projects<ChevronRight size={15}/></button>
-      <footer className="inspector-footer"><MapPin size={13}/>Plot {project.x}, {project.z}</footer>
     </>:<div className="project-list">
       {projects.length?projects.map(p=>{
         const percent=Math.min(100,p.funded/p.goal*100);

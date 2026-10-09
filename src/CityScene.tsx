@@ -10,6 +10,7 @@ import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRe
 import { COLORS, type Building, type PublicProject } from '../shared/types';
 import { coastZ, plotPosition, plotCoordinates, worldHash, VIEW_RADIUS } from '../shared/world';
 import { WorldTerrain } from './WorldTerrain';
+import { buildParkLandscape } from './ParkLandscape';
 import type { CityLighting } from './lighting';
 import { neighborhoodDensity, neighborhoodScores, settlementType, streetNetwork, streetDensity, roadWidth, roadShoulder, roadColor, shoulderColor, lotPolygon, projectPolygon, mixGroundColor, SETTLEMENT_THRESHOLDS, type GroundPoint } from './neighborhood';
 import { CameraKeyboard } from './CameraKeyboard';
@@ -634,6 +635,11 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     const midpoints=boundary.map((a,i)=>{const b=boundary[(i+1)%boundary.length];return {x:(a.x+b.x)/2,z:(a.z+b.z)/2};});
     const distanceToResidents=(p:GroundPoint)=>Math.min(...residentPositions.map(pos=>Math.hypot(center.x+p.x-pos.x,center.z+p.z-pos.z)));
     const entrance=midpoints.reduce((best,p)=>distanceToResidents(p)<distanceToResidents(best)?p:best);
+    if(project.kind==='park'){
+      buildParkLandscape(site,boundary,entrance,ratio,night,box,mat);
+      site.traverse(object=>{if(object instanceof THREE.Mesh)object.userData.project=project.id;});
+      continue;
+    }
     const path=box(site,entrance.x/2,.11,entrance.z/2,Math.hypot(entrance.x,entrance.z),.04,.95,'#d5c9ae');
     path.rotation.y=-Math.atan2(entrance.z,entrance.x);
     if(ratio<1){
