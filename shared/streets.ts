@@ -37,14 +37,37 @@ const blocked=(x:number,z:number,port:Port)=>{
   const kind=junctionLayout(x,z);
   return kind==='t-junction'&&port==='e'||kind==='cul-de-sac'&&port!=='w';
 };
+const forkOffsets=new Map<string,Point>();
+function forkOffset(x:number,z:number){
+  const key=`${x},${z}`,cached=forkOffsets.get(key);if(cached)return cached;
+  const origin=center(x,z),east=center(x+1,z),west=center(x-1,z),south=center(x,z+1),north=center(x,z-1);
+  const proposed={x:(east.x-west.x-south.x+north.x)*.107,z:(east.z-west.z-south.z+north.z)*.107};
+  // A junction crossing a triangle boundary can have very different street
+  // bases on each side. Reduce its split until all four neighboring lots stay
+  // convex and contain their building centers.
+  let scale=1,found=false;
+  for(let attempt=0;attempt<30;attempt++,scale*=.8){
+    const ne={x:origin.x+proposed.x*scale,z:origin.z+proposed.z*scale},sw={x:origin.x-proposed.x*scale,z:origin.z-proposed.z*scale};
+    const valid=[[-1,-1],[0,-1],[0,0],[-1,0]].every(([dx,dz])=>{
+      const px=x+dx,pz=z+dz,position=plotPosition(px,pz),corners=[[px,pz],[px+1,pz],[px+1,pz+1],[px,pz+1]];
+      const polygon=corners.flatMap(([nx,nz],i)=>nx!==x||nz!==z?[center(nx,nz)]:i===0?[sw,ne]:i===1?[sw]:i===2?[ne,sw]:[ne]);
+      return polygon.every((a,i)=>{
+        const b=polygon[(i+1)%polygon.length],c=polygon[(i+2)%polygon.length],ux=b.x-a.x,uz=b.z-a.z;
+        return ux*(c.z-b.z)-uz*(c.x-b.x)>=-1e-8&&ux*(position.z-a.z)-uz*(position.x-a.x)>=.7*Math.hypot(ux,uz);
+      });
+    });
+    if(valid){found=true;break;}
+  }
+  if(!found)throw new Error(`Cannot fit fork ${key} without invalidating its neighboring plots`);
+  const offset={x:proposed.x*scale,z:proposed.z*scale};forkOffsets.set(key,offset);return offset;
+}
 function node(x:number,z:number,port:Port):PlannedNode{
   const position=center(x,z),kind=junctionLayout(x,z),key=`node:${x},${z}`;
   if(kind==='y-junction'){
     const upper=port==='n'||port==='e',sign=upper?1:-1;
-    const east=center(x+1,z),west=center(x-1,z),south=center(x,z+1),north=center(x,z-1);
     // A substantial diagonal trunk joins two three-way forks. Follow the area's
     // road basis so the forks and their parcels turn with the surrounding grid.
-    const offset={x:(east.x-west.x-south.x+north.x)*.107,z:(east.z-west.z-south.z+north.z)*.107};
+    const offset=forkOffset(x,z);
     return {key:`${key}:${upper?'ne':'sw'}`,position:{x:position.x+sign*offset.x,z:position.z+sign*offset.z}};
   }
   return {key,position,...kind==='cul-de-sac'?{turnRadius:1.35}:{}};

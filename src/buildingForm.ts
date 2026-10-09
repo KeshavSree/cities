@@ -42,6 +42,10 @@ function plotFootprint(building:Building,tier:number,padding:number){
     for(const edge of edges)if(edge.depthProjection>1e-6)d=Math.min(d,2*(edge.distance-.3-padding*(edge.widthProjection+edge.depthProjection)-.8*edge.widthProjection)/edge.depthProjection);
     w=widthAt(d);
   }
+  // A turning-ring tangent can pass unusually close to the nominal plot
+  // center. Keep early rectangular homes finite there; apartment podiums use
+  // the full inset parcel polygon instead of this fallback rectangle.
+  d=Math.max(.72,d);w=Math.max(.42,w);
   const growth=[.3,.48,.59,.72,.86,1,1.005,1.01,1.015,1.02][tier];
   return {w:w*growth,d:d*growth};
 }
@@ -145,8 +149,12 @@ export function buildingForm(building:Building,roadScore=0){
   const foundationPadding=tier>=5?.1:.12+Math.min(1,roadScore/.72)*.08;
   // Use the same fit at all tiers so each successive footprint is strictly larger.
   const footprint=plotFootprint(building,tier,.1);
-  const plan=plotPlan(building.x,building.z),podiumSetback=MODEL_SETBACKS[tier];
-  const podium=tier>=3?insetPlotPolygon(plan,podiumSetback):null;
+  const plan=plotPlan(building.x,building.z);let podiumSetback=MODEL_SETBACKS[tier];
+  let podium=tier>=3?insetPlotPolygon(plan,podiumSetback):null;
+  // Irregular transition parcels and turning circles can be much narrower
+  // than the regular grid. Relax the aesthetic setback before it collapses
+  // the usable podium; the parcel and road boundaries remain authoritative.
+  while(podium&&outlineArea(podium)<2.5&&podiumSetback>.08){podiumSetback*=.65;podium=insetPlotPolygon(plan,podiumSetback);}
   const podiumFoundation=tier>=3?insetPlotPolygon(plan,podiumSetback-foundationPadding):null;
   const foundationHeight=[.045,.08,.13,.19,.25,.34,.4,.46,.52,.6][tier],baseY=.085+foundationHeight;
   const designs=segmentDesigns(building),base=podium||rectangleOutline(plan,footprint.w,footprint.d);

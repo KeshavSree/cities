@@ -9,58 +9,72 @@ export function worldHash(x:number,z:number) {
   return value-Math.floor(value);
 }
 
-// The branch starts at a street corner. Both grids are rigid square lattices;
-// the outgoing grid continues indefinitely instead of rotating back with distance.
-export const GRID_FORK={x:2,z:2};
-const GRID_ORIGIN={x:GRID_FORK.x-.5,z:GRID_FORK.z-.5};
+// A finite square annulus connects the two lattices. Outside its outer edge,
+// every direction is the same rigidly rotated square grid, forever.
+export const GRID_TRANSITION_START=3.5,GRID_TRANSITION_END=6.5;
+export const GRID_FORK={x:5,z:-3};
 const NEW_GRID_ANGLE=Math.PI/6;
+type Point={x:number;z:number};
 type Matrix={a:number;b:number;c:number;d:number};
+type Transform={matrix:Matrix;offset:Point};
 const IDENTITY:Matrix={a:1,b:0,c:0,d:1};
 const ROTATED:Matrix={a:Math.cos(NEW_GRID_ANGLE),b:-Math.sin(NEW_GRID_ANGLE),c:Math.sin(NEW_GRID_ANGLE),d:Math.cos(NEW_GRID_ANGLE)};
-const apply=(m:Matrix,x:number,z:number)=>({x:m.a*x+m.b*z,z:m.c*x+m.d*z});
+const apply=(m:Matrix,p:Point):Point=>({x:m.a*p.x+m.b*p.z,z:m.c*p.x+m.d*p.z});
 const inverse=(m:Matrix):Matrix=>{const det=m.a*m.d-m.b*m.c;return {a:m.d/det,b:-m.b/det,c:-m.c/det,d:m.a/det};};
-/** Join two rigid lattices with a linear triangular fan. Lines stay straight
- * inside each fan, and the two boundary rays match their neighboring grids.
+const span=(p:Point)=>Math.max(Math.abs(p.x),Math.abs(p.z));
+const transform=(t:Transform,p:Point)=>{const q=apply(t.matrix,p);return {x:q.x+t.offset.x,z:q.z+t.offset.z};};
+const untransform=(t:Transform,p:Point)=>apply(inverse(t.matrix),{x:p.x-t.offset.x,z:p.z-t.offset.z});
+const root:Transform={matrix:IDENTITY,offset:{x:0,z:0}};
+const outgoing:Transform={matrix:ROTATED,offset:{x:0,z:0}};
+function affine(source:Point[],target:Point[]):Transform{
+  const basis=inverse({a:source[1].x-source[0].x,b:source[2].x-source[0].x,c:source[1].z-source[0].z,d:source[2].z-source[0].z});
+  const a={x:target[1].x-target[0].x,z:target[1].z-target[0].z},b={x:target[2].x-target[0].x,z:target[2].z-target[0].z};
+  const matrix={a:a.x*basis.a+b.x*basis.c,b:a.x*basis.b+b.x*basis.d,c:a.z*basis.a+b.z*basis.c,d:a.z*basis.b+b.z*basis.d};
+  const origin=apply(matrix,source[0]);
+  return {matrix,offset:{x:target[0].x-origin.x,z:target[0].z-origin.z}};
+}
+function inTriangle(p:Point,triangle:Point[]){
+  const side=(a:Point,b:Point)=>(b.x-a.x)*(p.z-a.z)-(b.z-a.z)*(p.x-a.x);
+  const values=triangle.map((a,i)=>side(a,triangle[(i+1)%3]));
+  return values.every(v=>v>=-1e-9)||values.every(v=>v<=1e-9);
+}
+const square=(r:number)=>[[-r,-r],[r,-r],[r,r],[-r,r]].map(([x,z])=>({x,z}));
+const inner=square(GRID_TRANSITION_START),outer=square(GRID_TRANSITION_END);
+/** Eight finite triangles form the connecting ring. Each mapping preserves
+ * straight lines. The diagonal uses the preceding outer corner so no triangle
+ * folds over when the outer square rotates 30 degrees.
  */
-function fan(start:number,end:number,startRotation:number,endRotation:number):Matrix{
-  const radians=(degrees:number)=>degrees*Math.PI/180;
-  const basis={a:Math.cos(radians(start)),b:Math.cos(radians(end)),c:Math.sin(radians(start)),d:Math.sin(radians(end))};
-  const target={a:Math.cos(radians(start+startRotation)),b:Math.cos(radians(end+endRotation)),c:Math.sin(radians(start+startRotation)),d:Math.sin(radians(end+endRotation))};
-  const from=inverse(basis);
-  return {a:target.a*from.a+target.b*from.c,b:target.a*from.b+target.b*from.d,c:target.c*from.a+target.d*from.c,d:target.c*from.b+target.d*from.d};
-}
-const UPPER_FAN=fan(60,105,30,0),LOWER_FAN=fan(-105,-60,0,30);
-function gridMatrix(angle:number,world=false){
-  if(angle>=(world?-30:-60)&&angle<=(world?90:60))return ROTATED;
-  if(angle>=(world?90:60)&&angle<=105)return UPPER_FAN;
-  if(angle>=-105&&angle<=(world?-30:-60))return LOWER_FAN;
-  return IDENTITY;
-}
+const patches=inner.flatMap((a,i)=>{
+  const j=(i+1)%4;
+  return [[a,inner[j],outer[i]],[inner[j],outer[j],outer[i]]].map(source=>{
+    const target=source.map(p=>span(p)<=GRID_TRANSITION_START?p:apply(ROTATED,p));
+    return {source,target,transform:affine(source,target)};
+  });
+});
 export function streetGrid(x:number,z:number){
-  const bearing=Math.atan2(z-GRID_ORIGIN.z,x-GRID_ORIGIN.x)*180/Math.PI;
-  const matrix=gridMatrix(bearing),transition=matrix===UPPER_FAN||matrix===LOWER_FAN;
-  const angle=matrix===ROTATED?NEW_GRID_ANGLE:0;
-  return {key:transition?'grid-seam':angle?'outgoing-grid':'original-grid',center:GRID_ORIGIN,angle,heading:NEW_GRID_ANGLE,
-    interface:transition,matrix};
+  const point={x,z},extent=span(point),transition=extent>GRID_TRANSITION_START&&extent<GRID_TRANSITION_END;
+  const mapping=extent<=GRID_TRANSITION_START?root:extent>=GRID_TRANSITION_END?outgoing:patches.find(p=>inTriangle(point,p.source))!.transform;
+  return {key:transition?'grid-seam':mapping===outgoing?'outgoing-grid':'original-grid',center:{x:0,z:0},
+    angle:mapping===outgoing?NEW_GRID_ANGLE:0,heading:NEW_GRID_ANGLE,interface:transition,...mapping};
 }
 
-/** Stable irregular coordinates: adding residents never shifts an existing tower. */
+/** Stable coordinates shared by server placement, buildings and road previews. */
 export function plotPosition(x:number,z:number) {
-  const grid=streetGrid(x,z),point=apply(grid.matrix,x-grid.center.x,z-grid.center.z);
-  return {
-    x:(grid.center.x+point.x)*PLOT_SPACING,
-    z:(grid.center.z+point.z)*PLOT_SPACING,
-  };
+  const point=transform(streetGrid(x,z),{x,z});
+  return {x:point.x*PLOT_SPACING,z:point.z*PLOT_SPACING};
 }
 
-/** Each grid/fan is linear and has a positive determinant. Invert the physical
- * sector for camera paging, including the full indefinitely continuing new grid.
+/** The original square, finite connecting triangles and rotated exterior form
+ * a complete planar partition. Camera paging uses the matching exact inverse.
  */
 export function plotCoordinates(worldX:number,worldZ:number){
-  const x=worldX/PLOT_SPACING-GRID_ORIGIN.x,z=worldZ/PLOT_SPACING-GRID_ORIGIN.z;
-  const bearing=Math.atan2(z,x)*180/Math.PI;
-  const point=apply(inverse(gridMatrix(bearing,true)),x,z);
-  return {x:GRID_ORIGIN.x+point.x,z:GRID_ORIGIN.z+point.z};
+  const point={x:worldX/PLOT_SPACING,z:worldZ/PLOT_SPACING};
+  if(span(point)<=GRID_TRANSITION_START)return point;
+  const rotated=untransform(outgoing,point);
+  if(span(rotated)>=GRID_TRANSITION_END)return rotated;
+  const patch=patches.find(p=>inTriangle(point,p.target));
+  if(!patch)throw new Error('Point outside the finite grid partition');
+  return untransform(patch.transform,point);
 }
 
 /** A fixed, gently winding coast extending along the whole world x-axis. */

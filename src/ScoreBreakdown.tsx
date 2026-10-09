@@ -8,7 +8,7 @@ export function ScoreBreakdown({score,building,editable,busy,onDev}:{score:Settl
   const plan=plotPlan(building.x,building.z),facing=['south','east','north','west'][(Math.round(plan.rotation/(Math.PI/2))+4)%4],tier=tierForLevel(building.level);
   const form=buildingForm(building,score.total);
   const grid=streetGrid(building.x,building.z),heading=Math.round(grid.heading*180/Math.PI);
-  const gridDescription=grid.interface?`Grid interface: 0° meets ${heading}°`: `Square grid: ${grid.angle?heading:0}°`;
+  const gridDescription=grid.interface?`Finite transition: 0° → ${heading}°`:grid.angle?`New square grid: ${heading}° · transition complete`:'Original square grid: 0°';
   return <section className="score-breakdown" aria-label="Development diagnostics">
     <div className="score-heading"><h3>Development diagnostics</h3><strong>T{tierIndex(building.level)+1}</strong></div>
     <p>{tier.name} · Level {building.level}/{MAX_LEVEL} · {building.xp} XP{building.bricks!==null&&` · ${building.bricks} bricks`}<br/>{tier.ground} · {segmentCount(building.level)} segment{segmentCount(building.level)===1?'':'s'}</p>
