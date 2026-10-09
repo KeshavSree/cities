@@ -186,7 +186,7 @@ export default function App() {
         <div className="tower-panel">
           <SegmentEditor key={tower.id} building={tower} own={own} busy={Boolean(busy)} onSave={saveSegment}/>
           <ProgressionPanel building={tower} own={own}/>
-          <div className="section-heading"><h3>{tower.is_demo?'Sample activity':'GitHub activity'}</h3><span>{tower.is_demo?'Illustrative':'Past year'}</span></div>
+          {!tower.is_demo&&<div className="section-heading"><h3>GitHub activity</h3><span>Past year</span></div>}
           <div className="activity-grid commits-only"><div><strong>{compact(tower.commits)}</strong><span>Commits</span></div></div>
           {tower.is_demo ? <ActivityBlocks seed={tower.commits}/> : <div className="verified-activity"><Check size={15}/><span>Activity fetched directly from GitHub.<br/>Only newly credited commits earn XP and bricks.</span></div>}
           <div className="activity-caption"><span>{tower.is_demo?'Decorative activity preview':'Contribution counts from GitHub'}</span>{own && !tower.is_demo && <button disabled={Boolean(busy)} onClick={()=>action('sync',async()=>{const r=await api<{building:Building}>('/sync',{});update(r.building);notify('Your GitHub activity is up to date.');})}>{busy==='sync'?'Syncing…':'Sync activity'}</button>}</div>
