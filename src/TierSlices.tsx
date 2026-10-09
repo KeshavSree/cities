@@ -17,9 +17,9 @@ function silhouette(stacked:boolean){
 export function TierSlices({designs,selectedIndex,onSelect}:{designs:SegmentDesign[];selectedIndex:number;onSelect:(index:number)=>void}){
   const widths=designs.map((_,index)=>PROPORTIONS[index][0]);
   // Work upward from the bottom: fit each silhouette within the actual top
-  // rectangle of its supporting silhouette, including stepped silhouettes.
+  // rectangle below it. Flat silhouettes also step inward by at least 10%.
   for(let index=widths.length-2;index>=0;index--){
-    widths[index]=Math.min(widths[index],widths[index+1]*(hasShoulder(index+1)?SHOULDER_WIDTH:1));
+    widths[index]=Math.min(widths[index],widths[index+1]*(hasShoulder(index+1)?SHOULDER_WIDTH:0.9));
   }
   const bottomWidth=widths[widths.length-1];
   return <div className="tier-slices" aria-label="Select a building tier">
