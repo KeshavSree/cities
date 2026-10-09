@@ -74,8 +74,8 @@ Likes are permanent, limited to one per account per tower, and cannot target you
 | 10–12 | Apartments | Shared paved courtyard |
 | 13–15 | High-rise | Stone plaza |
 | 16–18 | Skyscraper | Raised civic terrace |
-| 19–21 | Neon tower | Illuminated plaza, cyan base band |
-| 22–24 | Prism spire | Faceted transit court, violet platform |
+| 19–21 | Skybridge tower | Illuminated plaza, cyan base band |
+| 22–24 | Vertical campus | Faceted transit court, violet platform |
 | 25–27 | Sky garden | Biosphere terrace, green base band and roof planting |
 | 28–30 | Arcology | Civic energy platform, blue base band |
 

@@ -11,8 +11,8 @@ export const TIERS=[
   {name:'Apartments',kind:'suburban',ground:'Shared courtyard',groundColor:'#c5c9b7',stone:'#c4c5b6',paving:.55},
   {name:'High-rise',kind:'urban',ground:'Stone plaza',groundColor:'#ccd0c8',stone:'#aebdbb',paving:.8},
   {name:'Skyscraper',kind:'urban',ground:'Raised civic terrace',groundColor:'#d2d7d2',stone:'#b8c7c9',paving:.95},
-  {name:'Neon tower',kind:'urban',ground:'Illuminated plaza',groundColor:'#bed1d0',stone:'#92b4b8',paving:.96},
-  {name:'Prism spire',kind:'urban',ground:'Faceted transit court',groundColor:'#c5c7da',stone:'#a6adc9',paving:.97},
+  {name:'Skybridge tower',kind:'urban',ground:'Illuminated plaza',groundColor:'#bed1d0',stone:'#92b4b8',paving:.96},
+  {name:'Vertical campus',kind:'urban',ground:'Faceted transit court',groundColor:'#c5c7da',stone:'#a6adc9',paving:.97},
   {name:'Sky garden',kind:'urban',ground:'Terraced biosphere',groundColor:'#b4caba',stone:'#9ebdb3',paving:.9},
   {name:'Arcology',kind:'urban',ground:'Civic energy platform',groundColor:'#c3d6dc',stone:'#95b5c4',paving:1},
 ] as const;
