@@ -8,7 +8,7 @@
 .segment-editor .tier-slice:hover,.segment-editor .tier-slice:focus-visible{z-index:10}
 .segment-editor .tier-slice:hover svg,.segment-editor .tier-slice:focus-visible svg{filter:brightness(1.1)}
 .segment-editor .tier-slice:hover svg path,.segment-editor .tier-slice:focus-visible svg path{stroke:#7864bf;stroke-width:2}
-.segment-editor .tier-tooltip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:4px;width:max-content;max-width:100%;padding:10px 13px;border:1px solid #ded8ee;border-radius:7px;background:#fff;color:#415863;box-shadow:0 4px 16px #293f4920;line-height:1.4;text-align:center;pointer-events:none;opacity:0;visibility:hidden}
-.segment-editor .tier-tooltip strong{font-size:11px;font-weight:650}
-.segment-editor .tier-tooltip small{font-size:10px;color:#8796a1}
-.segment-editor .tier-slice:hover .tier-tooltip,.segment-editor .tier-slice:focus-visible .tier-tooltip{opacity:1;visibility:visible}
+.segment-editor .tier-hover-label{position:absolute;top:var(--tier-label-top);bottom:0;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;justify-content:center;gap:2px;width:min(var(--tier-width),var(--tier-relative-width));padding:0 4px;color:#203b43;line-height:1.15;font-size:var(--tier-label-size);text-align:center;pointer-events:none;overflow:hidden;opacity:0;visibility:hidden}
+.segment-editor .tier-hover-label strong{font-size:inherit;font-weight:700}
+.segment-editor .tier-hover-label small{font-size:inherit;font-weight:400}
+.segment-editor .tier-slice:hover .tier-hover-label,.segment-editor .tier-slice:focus-visible .tier-hover-label{opacity:1;visibility:visible}
