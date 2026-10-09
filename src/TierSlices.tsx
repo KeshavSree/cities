@@ -4,7 +4,7 @@ import './tier-slices.css';
 
 // UI-only proportions: consistent for every resident, independent of their
 // facade customization. The single fill identifies the saved theme.
-const PROPORTIONS=[[48,24],[76,28],[112,30],[146,34],[176,38],[204,42],[220,44],[236,46],[250,48],[264,50]];
+const PROPORTIONS=[[264,24],[250,28],[236,30],[220,34],[204,38],[176,42],[146,44],[112,46],[76,48],[48,50]];
 export const THEME_COLORS:Record<string,string>={contemporary:'#98aaa2',earthen:'#bd8666',deco:'#bca36c',metabolism:'#789c9f',nocturne:'#8c78aa'};
 function silhouette(stacked:boolean){
   return stacked
