@@ -6,20 +6,20 @@ import './tier-slices.css';
 // facade customization. The single fill identifies the saved theme.
 const PROPORTIONS=[[48,24],[76,28],[112,30],[146,34],[176,38],[204,42],[220,44],[236,46],[250,48],[264,50]];
 const hasShoulder=(index:number)=>index>=3&&index%2===1;
-// The smaller top rectangle runs from x=60 to x=260 in the 320-wide SVG.
-const SHOULDER_WIDTH=200/320;
+// The smaller top rectangle is 20% narrower, with a shallow raised section.
+const SHOULDER_WIDTH=256/320;
 export const THEME_COLORS:Record<string,string>={contemporary:'#98aaa2',earthen:'#bd8666',deco:'#bca36c',metabolism:'#789c9f',nocturne:'#8c78aa'};
 function silhouette(stacked:boolean){
   return stacked
-    ?'M0 72V32Q0 24 8 24H52Q60 24 60 16V8Q60 0 68 0H252Q260 0 260 8V16Q260 24 268 24H312Q320 24 320 32V72Z'
+    ?'M0 72V20Q0 12 8 12H24Q32 12 32 8V4Q32 0 36 0H284Q288 0 288 4V8Q288 12 296 12H312Q320 12 320 20V72Z'
     :'M0 72V8Q0 0 8 0H312Q320 0 320 8V72Z';
 }
 export function TierSlices({designs,selectedIndex,onSelect}:{designs:SegmentDesign[];selectedIndex:number;onSelect:(index:number)=>void}){
   const widths=designs.map((_,index)=>PROPORTIONS[index][0]);
   // Work upward from the bottom: fit each silhouette within the actual top
-  // rectangle below it. Flat silhouettes also step inward by at least 10%.
+  // rectangle below it. Flat silhouettes also step inward by at least 20%.
   for(let index=widths.length-2;index>=0;index--){
-    widths[index]=Math.min(widths[index],widths[index+1]*(hasShoulder(index+1)?SHOULDER_WIDTH:0.9));
+    widths[index]=Math.min(widths[index],widths[index+1]*(hasShoulder(index+1)?SHOULDER_WIDTH:0.8));
   }
   const bottomWidth=widths[widths.length-1];
   return <div className="tier-slices" aria-label="Select a building tier">
