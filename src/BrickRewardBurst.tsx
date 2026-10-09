@@ -20,7 +20,7 @@ export function BrickRewardBurst({ flight, onComplete }: { flight: RewardFlight;
         '--flight-x': `${flight.target.x - x}px`, '--flight-y': `${flight.target.y - y}px`,
         animationDelay: `${i * 12}ms, ${1400 + i * 20}ms`,
       } as CSSProperties;
-      return <span className="reward-brick" key={i} style={style}><Package size={22} fill="#f3d9aa" strokeWidth={1.8}/></span>;
+      return <span className="reward-brick" key={i} style={style}><Package size={22} fill="#b9dcf7" strokeWidth={1.8}/></span>;
     })}
   </div>;
 }

@@ -174,7 +174,6 @@ export default function App() {
         {canDebug && <button className="debug-toggle" aria-pressed={showScores} onClick={toggleScores} title="Show model tiers, XP, and road diagnostics"><Bug size={14}/>Dev mode</button>}
         <button className={`icon-button search-toggle ${searchOpen?'active':''}`} title="Find a neighbor" aria-label="Find a neighbor" aria-expanded={searchOpen} onClick={()=>setSearchOpen(!searchOpen)}><Search size={19}/></button>
         <span className="nav-divider"/>
-        <button className="invite-button" aria-label="Projects" title="Public projects" onClick={()=>selectProject('projects')}><Landmark size={16}/>Projects</button>
         <button className="invite-button" aria-label="Invite a friend" title="Invite a friend" onClick={showInvites}><Plus size={16}/> Invite a friend</button>
         {me&&me.bricks!==null&&<span ref={brickCounter} className="topbar-bricks" aria-label={`${me.bricks.toLocaleString()} bricks`}><Package size={17} aria-hidden="true"/><span>{me.bricks.toLocaleString()}</span></span>}
         <button className="user-button" onClick={focusMe} title="Your tower">{me?<ProfileAvatar avatar={me.avatar} name={me.name} className="tiny"/>:<Github size={19}/>}<span>{me?'My tower':'Sign in'}</span></button>
