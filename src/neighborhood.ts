@@ -4,6 +4,7 @@ import { plotPlan } from '../shared/plots';
 import { plannedStreet, boundaryStreet, junctionStreets, parcelOutline, type PlannedStreet, type PlannedNode } from '../shared/streets';
 import { PUBLIC_PROJECTS, projectBoundary } from '../shared/projects';
 import { MAX_LEVEL } from '../shared/progression';
+import { connectStreetPlans } from '../shared/streetRoutes';
 
 export const SETTLEMENT_THRESHOLDS={suburban:.25,urban:.72};
 export const SETTLEMENT_WEIGHTS={density:.45,levels:.55};
@@ -89,6 +90,9 @@ export function streetNetwork(buildings:Building[],densityAt:(x:number,z:number)
       key=step.parent;
     }
   }
+  // Route disconnected occupied areas through their shared street blueprint.
+  // This also applies when a single new resident is simulated for a preview.
+  for(const road of connectStreetPlans(roads.values()).values())add(road);
   return {roads,junctions};
 }
 

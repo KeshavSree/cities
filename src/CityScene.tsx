@@ -247,7 +247,7 @@ function drawPlotPreviews(group:THREE.Group,previews:PlotPreview[],buildings:Bui
   const groundLine=(a:GroundPoint,b:GroundPoint)=>line(new THREE.Vector3(a.x,.135,a.z),new THREE.Vector3(b.x,.135,b.z));
   for(const {plan,form,streets,junctions} of previews){
     for(const road of streets){
-      if(shown.has(road.key)||actual.roads.has(road.key)||road.kind!=='street')continue;shown.add(road.key);
+      if(shown.has(road.key)||actual.roads.has(road.key))continue;shown.add(road.key);
       const [a,b]=road.points,dx=b.x-a.x,dz=b.z-a.z,length=Math.hypot(dx,dz),nx=-dz/length,nz=dx/length;
       for(let step=0;step<8;step++){
         const at=(t:number,sign:number)=>{const score=streetDensity(road,t),radius=(roadWidth(score)+roadShoulder(score))/2;return {x:a.x+dx*t+nx*radius*sign,z:a.z+dz*t+nz*radius*sign};};
