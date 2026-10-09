@@ -13,7 +13,8 @@
     "preview": "wrangler dev --ip 127.0.0.1 --port 8787",
     "deploy": "npm run build && wrangler deploy",
     "typecheck": "tsc -b",
-    "check:roads": "node scripts/check-roads.mjs"
+    "check:roads": "node scripts/check-roads.mjs",
+    "check:grid": "node scripts/check-roads.mjs scripts/check-grid.ts"
   },
   "dependencies": {
     "lucide-react": "^1.52.0",
