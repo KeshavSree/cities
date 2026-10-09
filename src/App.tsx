@@ -165,7 +165,6 @@ export default function App() {
   const showInvites=()=>{if(!me){setModal('login');return;}setModal('invite');api<{invites:Invite[]}>('/invites').then(r=>setInvites(r.invites.filter(i=>!i.used_by))).catch(e=>notify(e.message,true));};
   const copy=async(token:string)=>{try{await navigator.clipboard.writeText(`${location.origin}/?invite=${token}`);setCopied(token);notify('Invitation copied.');}catch{notify('Clipboard is unavailable. Select and copy the invitation link below.',true);}};
   const createInvite=()=>action('invite',async()=>{const result=await api<{token:string}>('/invites',{});setInvites(prev=>[{token:result.token,created_at:new Date().toISOString(),used_by:null},...prev]);await copy(result.token);});
-  const demoJoin=(token:string)=>action(`join-${token}`,async()=>{const result=await api<{building:Building;inviter:Building}>('/dev/join',{invite:token});update(result.building);update(result.inviter);await load().catch(()=>{});setInvites(prev=>prev.filter(i=>i.token!==token));notify('A new neighbor moved in near your tower.');setModal(null);select(result.building);});
 
   return <div className={`app ${lighting.night?'night':''}`} style={{background:`radial-gradient(ellipse at 40% 55%,${lighting.skyCenter} 0,${lighting.skyEdge} 100%)`}}>
     <header className="topbar">
@@ -220,14 +219,13 @@ export default function App() {
 
     {rewardFlight&&<BrickRewardBurst key={rewardFlight.id} flight={rewardFlight} onComplete={finishRewardFlight}/>}
     {toast && <div className={`toast ${toast.error?'error':''}`} role={toast.error?'alert':'status'}>{toast.error?<HelpCircle size={18}/>:<Check size={18}/>}<span>{toast.text}</span><button aria-label="Dismiss notification" onClick={()=>setToast(null)}><X size={15}/></button></div>}
-    {modal && <Dialog onClose={()=>setModal(null)} title={modal==='invite'?'Good neighbors start with an invitation.':modal==='help'?'A city built by its people.':'Your work belongs here.'}>
+    {modal && <Dialog showMark={modal!=='invite'} onClose={()=>setModal(null)} title={modal==='invite'?'Good neighbors start with an invitation.':modal==='help'?'A city built by its people.':'Your work belongs here.'}>
       {modal==='invite' && <>
         <div className="invite-illustration"><span className="mini-house"><i/><i/><i/></span><span className="invite-road"><Plus size={16}/></span><span className="mini-house new"><i/><i/><i/></span></div>
         <button className="primary-button full-width" disabled={Boolean(busy)} onClick={createInvite}>{busy==='invite'?<LoaderCircle className="spin" size={16}/>:<Plus size={16}/>}Create an invitation</button>
         {invites.length>0 && <div className="invitation-list"><h3>Your invitations</h3>{invites.map(i=><div className="invitation" key={i.token}>
-          <div><span>A plot is waiting</span><input readOnly aria-label="Invitation link" value={`${location.origin}/?invite=${i.token}`} onFocus={e=>e.target.select()}/></div>
+          <div><span>Invitation link</span><input readOnly aria-label="Invitation link" onClick={e=>e.currentTarget.select()} value={`${location.origin}/?invite=${i.token}`} onFocus={e=>e.target.select()}/></div>
           <button className="icon-button" title="Copy invitation" aria-label="Copy invitation" onClick={()=>copy(i.token)}>{copied===i.token?<Check size={17}/>:<Copy size={17}/>}</button>
-          {snapshot?.demo && <button className="demo-join" disabled={Boolean(busy)} onClick={()=>demoJoin(i.token)}>Try a demo join</button>}
         </div>)}</div>}
       </>}
       {modal==='help' && <><p className="modal-description">Earn XP to grow your tower through {MAX_LEVEL} levels and {TIERS.length} model tiers. Spend bricks to make it yours.</p><div className="help-item"><Github/><div><h3>Verified contributions.</h3><p>GitHub earns {REWARDS.commit} XP per newly credited commit. Five commit XP also earn one brick. Pull requests and reviews do not earn rewards.</p></div></div><div className="help-item"><Layers/><div><h3>Ten tiers. Thirty levels.</h3><p>From a shack to an arcology. Every {LEVELS_PER_TIER} levels unlock a new model, ground treatment, and editable segment. Upper sections inherit plot angles and lower alignments while making room for terraces. Choose a theme for each tier. Each new level takes more XP.</p></div></div><div className="help-item"><Users/><div><h3>Build a community.</h3><p>Invite joins earn {REWARDS.invite} XP; likes earn {REWARDS.like}. Each nearby tower level-up, including a new tower’s first level, rewards the eight closest other residents within three plot spacings with {REWARDS.construction} XP.</p></div></div><div className="help-item"><Landmark/><div><h3>Bricks build shared places.</h3><p>Unlock one editable segment per tier or contribute to nearby projects. Contribute at least 25 bricks to earn {REWARDS.project} XP when a project finishes.</p></div></div><div className="help-item"><Gift/><div><h3>A little reward for returning.</h3><p>Collect {REWARDS.dailyBricks} bricks and {REWARDS.dailyXp} XP once per UTC day.</p></div></div><div className="help-controls">Click the city to use WASD to move and Q/E to rotate.<br/>Space moves up; Shift moves down. Hold keys for continuous movement.<br/>Drag to orbit. Right-drag to pan. Scroll to zoom.<br/>Use search to select residents with your keyboard.</div>{snapshot?.demo&&<p className="demo-explanation">Local demo residents and preset XP are illustrative. Dev mode lets you preview all tiers and simulate rewards. Actual rewards and brick spending are stored by the local backend.</p>}</>}
@@ -239,7 +237,7 @@ function Github({size=20}:{size?:number}){return <svg width={size} height={size}
 function ActivityBlocks({seed}:{seed:number}){
   return <div className="activity-blocks" aria-hidden="true">{Array.from({length:91},(_,i)=>{const value=Math.abs(Math.sin((i+1)*12.9898+seed)*43758.5453)%1;return <i key={i} className={`heat-${value>.83?4:value>.62?3:value>.4?2:value>.21?1:0}`}/>;})}</div>;
 }
-function Dialog({title,onClose,children}:{title:string;onClose:()=>void;children:ReactNode}){
+function Dialog({title,onClose,children,showMark=true}:{title:string;onClose:()=>void;children:ReactNode;showMark?:boolean}){
   const panel=useRef<HTMLDivElement>(null); const closeRef=useRef(onClose);closeRef.current=onClose;
   useEffect(()=>{
     const previous=document.activeElement as HTMLElement | null;const el=panel.current!;
@@ -248,5 +246,5 @@ function Dialog({title,onClose,children}:{title:string;onClose:()=>void;children
     const handler=(e:KeyboardEvent)=>{if(e.key==='Escape')closeRef.current();if(e.key==='Tab'){const all=focusables(),first=all[0],last=all[all.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}};
     document.addEventListener('keydown',handler);return()=>{document.removeEventListener('keydown',handler);previous?.focus();};
   },[]);
-  return <div className="modal-backdrop" onClick={onClose}><div ref={panel} className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onClick={e=>e.stopPropagation()}><button className="modal-close icon-button" aria-label="Close dialog" onClick={onClose}><X size={20}/></button><span className="modal-mark"><Leaf size={23}/></span><h2 id="modal-title">{title}</h2>{children}</div></div>;
+  return <div className="modal-backdrop" onClick={onClose}><div ref={panel} className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onClick={e=>e.stopPropagation()}><button className="modal-close icon-button" aria-label="Close dialog" onClick={onClose}><X size={20}/></button>{showMark&&<span className="modal-mark"><Leaf size={23}/></span>}<h2 id="modal-title">{title}</h2>{children}</div></div>;
 }
