@@ -1,12 +1,13 @@
 .segment-editor .tier-slices{display:flex;flex-direction:column;align-items:center;gap:4px;margin:18px 0;width:100%;border:0;background:transparent}
-.segment-editor .tier-slice{display:flex;align-items:center;justify-content:center;position:relative;width:100%;min-height:0;padding:0;border:0;background:transparent;line-height:0;box-shadow:none}
-.segment-editor .tier-slice:hover,.segment-editor .tier-slice[aria-pressed=true]{background:transparent;box-shadow:none}
+.segment-editor .tier-slice{display:flex;align-items:center;justify-content:center;position:relative;width:100%;min-height:0;padding:0;border:0;background:transparent;line-height:0;box-shadow:22px 0 0 transparent,-22px 0 0 transparent;transition:background-color 120ms ease,box-shadow 120ms ease}
+.segment-editor .tier-slice:hover,.segment-editor .tier-slice[aria-pressed=true]{background:transparent;box-shadow:22px 0 0 transparent,-22px 0 0 transparent}
 .segment-editor .tier-slice svg{display:block;width:min(var(--tier-width),var(--tier-relative-width));height:var(--tier-height);overflow:visible;flex-shrink:0}
 .segment-editor .tier-slice[aria-pressed=true] svg{outline:2px solid var(--tier-color);outline-offset:4px;border-radius:6px 6px 0 0}
 .segment-editor .tier-slice:focus-visible{outline:2px solid #8172c5;outline-offset:1px}
 .segment-editor .tier-slice[role=img]{cursor:default}
 .segment-editor .tier-slice:hover,.segment-editor .tier-slice:focus-visible{z-index:10;background:#e1f1ff;box-shadow:22px 0 0 #e1f1ff,-22px 0 0 #e1f1ff}
-.segment-editor .tier-hover-label{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:2px;width:100%;padding:0 6px;color:#203b43;line-height:1.15;font-size:12px;text-align:center;pointer-events:none;overflow:hidden;opacity:0;visibility:hidden}
+.segment-editor .tier-hover-label{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:2px;width:100%;padding:0 6px;color:#203b43;line-height:1.15;font-size:12px;text-align:center;pointer-events:none;overflow:hidden;opacity:0;visibility:hidden;transition:opacity 120ms ease,visibility 0s linear 120ms}
 .segment-editor .tier-hover-label strong{font-size:inherit;font-weight:700}
 .segment-editor .tier-hover-label small{font-size:11px;font-weight:400}
-.segment-editor .tier-slice:hover .tier-hover-label,.segment-editor .tier-slice:focus-visible .tier-hover-label{opacity:1;visibility:visible}
+.segment-editor .tier-slice:hover .tier-hover-label,.segment-editor .tier-slice:focus-visible .tier-hover-label{opacity:1;visibility:visible;transition-delay:0s}
+@media(prefers-reduced-motion:reduce){.segment-editor .tier-slice,.segment-editor .tier-hover-label{transition:none}}
