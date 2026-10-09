@@ -5,7 +5,7 @@
 .segment-editor .tier-slice[aria-pressed=true] svg{outline:2px solid var(--tier-color);outline-offset:4px;border-radius:6px 6px 0 0}
 .segment-editor .tier-slice:focus-visible{outline:2px solid #8172c5;outline-offset:1px}
 .segment-editor .tier-slice[role=img]{cursor:default}
-.segment-editor .tier-slice:hover,.segment-editor .tier-slice:focus-visible{z-index:10;background:#e1f1ff}
+.segment-editor .tier-slice:hover,.segment-editor .tier-slice:focus-visible{z-index:10;background:#e1f1ff;box-shadow:22px 0 0 #e1f1ff,-22px 0 0 #e1f1ff}
 .segment-editor .tier-hover-label{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:2px;width:100%;padding:0 6px;color:#203b43;line-height:1.15;font-size:12px;text-align:center;pointer-events:none;overflow:hidden;opacity:0;visibility:hidden}
 .segment-editor .tier-hover-label strong{font-size:inherit;font-weight:700}
 .segment-editor .tier-hover-label small{font-size:11px;font-weight:400}
