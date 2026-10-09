@@ -1,7 +1,5 @@
-import { useEffect, useState } from 'react';
-import type { Building, XpEvent } from '../shared/types';
+import type { Building } from '../shared/types';
 import { MAX_LEVEL, REWARDS, xpAtLevel, xpForNextLevel } from '../shared/progression';
-import { api } from './api';
 import './level-progress.css';
 
 export function LevelProgress({building}:{building:Building}){
@@ -16,14 +14,9 @@ export function LevelProgress({building}:{building:Building}){
   </section>;
 }
 
-export function ProgressionPanel({building,own}:{building:Building;own:boolean}){
+export function ProgressionPanel({own}:{building:Building;own:boolean}){
   if(!own)return null;
   return <section className="progression-panel" aria-label="Building rewards">
-    {own&&<><div className="xp-sources"><h3>Ways to grow</h3><p>GitHub: {REWARDS.commit} XP / commit</p><p>Invite joins: {REWARDS.invite} XP · Tower likes: {REWARDS.like} XP</p><p>Nearby construction: {REWARDS.construction} XP · Public project completion: {REWARDS.project} XP</p><p>Daily visit: {REWARDS.dailyXp} XP + {REWARDS.dailyBricks} bricks</p></div><RecentXp building={building}/></>}
+    <div className="xp-sources"><h3>Ways to grow</h3><p>GitHub: {REWARDS.commit} XP / commit</p><p>Invite joins: {REWARDS.invite} XP · Tower likes: {REWARDS.like} XP</p><p>Nearby construction: {REWARDS.construction} XP · Public project completion: {REWARDS.project} XP</p><p>Daily visit: {REWARDS.dailyXp} XP + {REWARDS.dailyBricks} bricks</p></div>
   </section>;
-}
-function RecentXp({building}:{building:Building}){
-  const [events,setEvents]=useState<XpEvent[]>([]);
-  useEffect(()=>{let active=true;api<{events:XpEvent[]}>('/history').then(r=>{if(active)setEvents(r.events);}).catch(()=>{});return()=>{active=false;};},[building.id,building.xp,building.bricks]);
-  return events.length>0?<div className="xp-history"><h3>Recent rewards</h3>{events.slice(0,5).map(e=><div key={e.event_key}><span>{e.description}<small>{e.source==='demo'?'Demo simulation':e.source}</small></span><strong>{e.xp>0?`+${e.xp} XP`:''}{e.bricks>0?` · +${e.bricks} bricks`:''}</strong></div>)}</div>:null;
 }
