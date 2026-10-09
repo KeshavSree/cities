@@ -40,7 +40,6 @@ export default function App() {
   const [lighting, setLighting] = useState(()=>lightingAt(new Date()));
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [tab, setTab] = useState<'overview' | 'design'>('overview');
   const [modal, setModal] = useState<Modal>(null);
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState('');
@@ -129,7 +128,7 @@ export default function App() {
   const own=tower?.id===snapshot?.me;
   const neighbors=[...buildings].sort((a,b)=>b.level-a.level);
   const filtered=neighbors.filter(b=>`${b.name} ${b.username}`.toLowerCase().includes(query.toLowerCase()));
-  const select=(b:Building)=>{setSelected(b.id);setTab('overview');setSearchOpen(false);setDrawerOpen(true);scene.current?.focus(b);};
+  const select=(b:Building)=>{setSelected(b.id);setSearchOpen(false);setDrawerOpen(true);scene.current?.focus(b);};
   const selectProject=(id:string)=>{setSelected(id);setSearchOpen(false);setDrawerOpen(true);const p=snapshot?.projects.find(p=>p.id===id);if(p)scene.current?.focus(p);};
   const closeDrawer=()=>{setDrawerOpen(false);document.querySelector<HTMLButtonElement>('.drawer-handle')?.focus();};
   const focusMe=()=>{if(me)select(me);else setModal('login');};
@@ -184,19 +183,14 @@ export default function App() {
         {showScores && <ScoreBreakdown score={scoreAt(tower.x,tower.z)} building={tower} editable={Boolean(snapshot?.demo&&tower.is_demo)} busy={Boolean(busy)} onDev={devProgression}/>}
         <div className="tower-social"><button className="tower-like" aria-pressed={Boolean(snapshot?.likedIds.includes(tower.id))} aria-label={own?`${tower.likes} likes on your tower`:`${snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} ${tower.name}'s tower, ${tower.likes} likes`} title={own?'Your tower’s likes':snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} disabled={own||!me||Boolean(busy)||snapshot?.likedIds.includes(tower.id)} onClick={like}><Heart className="tower-like-heart" size={17} aria-hidden="true" fill={snapshot?.likedIds.includes(tower.id)?'currentColor':'none'}/><span>{tower.likes}</span></button></div>
         <LevelProgress building={tower}/>
-        <div className="inspector-tabs" role="tablist" aria-label="Tower information" onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();const next=tab==='overview'?'design':'overview';setTab(next);document.getElementById(`tab-${next}`)?.focus();}}}>
-          <button role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected={tab==='overview'} onClick={()=>setTab('overview')}>Overview</button>
-          <button role="tab" id="tab-design" aria-controls="panel-design" aria-selected={tab==='design'} onClick={()=>setTab('design')}>Architecture{!own && <span className="tab-view">View</span>}</button>
-        </div>
-        {tab==='overview'?<div id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" className="overview-panel">
+        <div className="tower-panel">
+          <SegmentEditor key={tower.id} building={tower} own={own} busy={Boolean(busy)} onSave={saveSegment}/>
           <ProgressionPanel building={tower} own={own}/>
           <div className="section-heading"><h3>{tower.is_demo?'Sample activity':'GitHub activity'}</h3><span>{tower.is_demo?'Illustrative':'Past year'}</span></div>
           <div className="activity-grid commits-only"><div><strong>{compact(tower.commits)}</strong><span>Commits</span></div></div>
           {tower.is_demo ? <ActivityBlocks seed={tower.commits}/> : <div className="verified-activity"><Check size={15}/><span>Activity fetched directly from GitHub.<br/>Only newly credited commits earn XP and bricks.</span></div>}
           <div className="activity-caption"><span>{tower.is_demo?'Decorative activity preview':'Contribution counts from GitHub'}</span>{own && !tower.is_demo && <button disabled={Boolean(busy)} onClick={()=>action('sync',async()=>{const r=await api<{building:Building}>('/sync',{});update(r.building);notify('Your GitHub activity is up to date.');})}>{busy==='sync'?'Syncing…':'Sync activity'}</button>}</div>
-        </div>:<div id="panel-design" role="tabpanel" aria-labelledby="tab-design" className="design-panel">
-          <SegmentEditor key={tower.id} building={tower} own={own} busy={Boolean(busy)} onSave={saveSegment}/>
-        </div>}
+        </div>
         <footer className="inspector-footer"><MapPin size={13}/>Plot {tower.x}, {tower.z}<span>{tierForLevel(tower.level).name}</span>{own && <button className="account-link" onClick={()=>setModal('login')}>Account</button>}</footer>
       </aside></TowerDrawer>}
 
