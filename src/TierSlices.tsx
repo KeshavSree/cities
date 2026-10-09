@@ -4,7 +4,7 @@ import './tier-slices.css';
 
 // UI-only proportions: consistent for every resident, independent of their
 // facade customization. The single fill identifies the saved theme.
-const PROPORTIONS=[[48,24],[76,28],[112,30],[146,34],[176,38],[204,42],[220,44],[236,46],[250,48],[264,50]];
+const PROPORTIONS=[[48,30],[76,35],[112,38],[146,43],[176,48],[204,53],[220,55],[236,58],[250,60],[264,63]];
 const hasShoulder=(index:number)=>index>=3&&index%2===1;
 // The smaller top rectangle is 20% narrower, with a shallow raised section.
 const SHOULDER_WIDTH=256/320;
