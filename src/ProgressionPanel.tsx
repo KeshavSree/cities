@@ -1,5 +1,5 @@
 import type { Building } from '../shared/types';
-import { MAX_LEVEL, REWARDS, xpAtLevel, xpForNextLevel } from '../shared/progression';
+import { MAX_LEVEL, REWARDS, tierForLevel, xpAtLevel, xpForNextLevel } from '../shared/progression';
 import './level-progress.css';
 
 export function LevelProgress({building}:{building:Building}){
@@ -7,7 +7,7 @@ export function LevelProgress({building}:{building:Building}){
   const required=max?1:xpForNextLevel(building.level);
   const earned=max?1:Math.min(required,Math.max(0,building.xp-xpAtLevel(building.level)));
   return <section className="level-progress" aria-label="Building level">
-    <div className="level-progress-heading"><strong>Level {building.level}</strong><span>{max?'Max level':`${earned.toLocaleString()} / ${required.toLocaleString()} XP`}</span></div>
+    <div className="level-progress-heading"><strong>Level {building.level} · {tierForLevel(building.level).name}</strong><span>{max?'Max level':`${earned.toLocaleString()} / ${required.toLocaleString()} XP`}</span></div>
     <div className="level-progress-track" role="progressbar" aria-label={max?'Maximum level reached':`XP toward level ${building.level+1}`} aria-valuemin={0} aria-valuemax={required} aria-valuenow={earned}>
       <span style={{width:`${earned/required*100}%`}}/>
     </div>
