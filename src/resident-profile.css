@@ -1,10 +1,14 @@
 .resident-avatar{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:35px;height:35px;border-radius:50%;overflow:hidden;background:#e6e9eb;color:#a1a8ae}
 .resident-avatar img{width:100%;height:100%;object-fit:cover}
-.resident-avatar>svg{width:90%;height:90%;fill:currentColor}
+.resident-avatar>svg{width:100%;height:100%;fill:currentColor}
 .resident-avatar.tiny{width:27px;height:27px}
 .resident-avatar.small{width:35px;height:35px}
 .resident-avatar.profile-photo{width:47px;height:47px}
 .tower-drawer .profile-controls{justify-content:flex-end;padding-bottom:0}
+.profile-name{min-width:0}
+.profile-title-row{display:flex;align-items:center;gap:12px}
+.profile-title-row h2{min-width:0;overflow-wrap:anywhere}
+.profile-title-row .tower-social{margin:0;flex-shrink:0}
 .profile-photo-edit{position:relative;display:flex;padding:0;border-radius:50%;flex-shrink:0;overflow:hidden}
 .profile-photo-overlay{position:absolute;inset:0;display:grid;place-items:center;background:#263b4d75;color:#fff;opacity:0;transition:opacity 120ms ease}
 .profile-photo-edit:hover .profile-photo-overlay,.profile-photo-edit:focus-visible .profile-photo-overlay,.profile-photo-overlay.is-saving{opacity:1}

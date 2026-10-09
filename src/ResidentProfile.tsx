@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { LoaderCircle, Pencil } from 'lucide-react';
 import type { Building } from '../shared/types';
 import { AVATAR_MAX_BYTES, BIO_MAX_LENGTH } from '../shared/profile';
@@ -8,7 +8,7 @@ export function ProfileAvatar({ avatar, name, className = '' }: { avatar: string
   const [failed, setFailed] = useState<string | null>(null);
   return <span className={`resident-avatar ${className}`}>
     {avatar && failed !== avatar ? <img src={avatar} alt={`${name}'s profile picture`} onError={() => setFailed(avatar)} /> :
-      <svg viewBox="0 0 48 48" aria-label="No profile picture" role="img"><circle cx="24" cy="17" r="8" /><path d="M8 44v-5a16 16 0 0 1 32 0v5Z" /></svg>}
+      <svg viewBox="0 0 48 48" aria-label="No profile picture" role="img"><circle cx="24" cy="17" r="8" /><path d="M8 48v-9a16 16 0 0 1 32 0v9Z" /></svg>}
   </span>;
 }
 
@@ -31,9 +31,10 @@ async function prepareAvatar(file: File): Promise<Blob> {
   } finally { image.close(); }
 }
 
-export function ResidentProfile({ building, own, busy, onSaveBio, onUpload }: {
+export function ResidentProfile({ building, own, busy, onSaveBio, onUpload, nameAction }: {
   building: Building; own: boolean; busy: boolean;
   onSaveBio: (bio: string) => Promise<void>; onUpload: (image: Blob) => Promise<void>;
+  nameAction: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(building.bio);
@@ -61,7 +62,7 @@ export function ResidentProfile({ building, own, busy, onSaveBio, onUpload }: {
         </button>
         <input ref={input} type="file" hidden accept="image/jpeg,image/png,image/webp,image/gif" aria-label="Choose profile picture" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void upload(file); }} />
       </> : <ProfileAvatar avatar={building.avatar} name={building.name} className="profile-photo" />}
-      <div className="profile-name"><h2>{building.name}</h2><span>@{building.username}</span></div>
+      <div className="profile-name"><div className="profile-title-row"><h2>{building.name}</h2>{nameAction}</div><span>@{building.username}</span></div>
       {own && <span className="you-label">You</span>}
     </div>
     {editing && own ? <form className="bio-editor" onSubmit={event => { event.preventDefault(); void save(); }}>
