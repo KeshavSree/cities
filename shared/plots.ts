@@ -1,12 +1,13 @@
-import { isLandPlot, plotPosition, worldHash } from './world';
+import { isLandPlot, plotPosition } from './world';
 import { isReservedPlot } from './projects';
 
-export const AREA_WIDTH=4,AREA_DEPTH=3,AREA_CAPACITY=AREA_WIDTH*AREA_DEPTH;
+import { AREA_WIDTH, AREA_DEPTH, parcelOutline, plotStreets, frontageForPlot, areaLayout, type PlannedStreet, type Layout } from './streets';
+export { AREA_WIDTH, AREA_DEPTH, AREA_CAPACITY } from './streets';
 type Point={x:number;z:number};
 export interface PlotPlan{
   x:number;z:number;area:string;axis:'horizontal'|'vertical';
-  position:Point;corners:Point[];rotation:number;
-  frontage:{x:number;z:number;horizontal:boolean;distance:number};
+  position:Point;corners:Point[];rotation:number;roads:PlannedStreet[];layout:Layout;
+  frontage:{key:string;x:number;z:number;horizontal:boolean;distance:number;points:[Point,Point]};
 }
 const areas=new Map<string,Map<string,PlotPlan>>();
 
@@ -21,16 +22,13 @@ export function plotPlan(x:number,z:number):PlotPlan{
     const horizontal=(ax+az)%2===0;
     for(let dx=0;dx<AREA_WIDTH;dx++)for(let dz=0;dz<AREA_DEPTH;dz++){
       const px=ax*AREA_WIDTH-2+dx,pz=az*AREA_DEPTH-1+dz,position=plotPosition(px,pz);
-      const corners=[[-.5,-.5],[.5,-.5],[.5,.5],[-.5,.5]].map(([cx,cz])=>plotPosition(px+cx,pz+cz));
-      // Facing is independent of the area's road family, and stable per slot.
-      const positive=worldHash(px+29,pz-17)>=.5;
-      const fx=px+(!horizontal&&positive?1:0),fz=pz+(horizontal&&positive?1:0);
-      const a=plotPosition(fx-.5,fz-.5),b=horizontal?plotPosition(fx+.5,fz-.5):plotPosition(fx-.5,fz+.5);
+      const corners=parcelOutline(px,pz),roads=plotStreets(px,pz),frontage=frontageForPlot(px,pz,roads,horizontal);
+      const [a,b]=frontage.points;
       const vx=b.x-a.x,vz=b.z-a.z,length=Math.hypot(vx,vz);
       let nx=-vz/length,nz=vx/length;
       if((a.x-position.x)*nx+(a.z-position.z)*nz<0){nx=-nx;nz=-nz;}
       plans.set(`${px},${pz}`,{x:px,z:pz,area,axis:horizontal?'horizontal':'vertical',position,corners,
-        rotation:Math.atan2(nx,nz),frontage:{x:fx,z:fz,horizontal,distance:Math.abs((a.x-position.x)*nx+(a.z-position.z)*nz)}});
+        roads,layout:areaLayout(ax,az),rotation:Math.atan2(nx,nz),frontage:{key:frontage.key,x:frontage.x,z:frontage.z,horizontal:frontage.horizontal,points:frontage.points,distance:Math.abs((a.x-position.x)*nx+(a.z-position.z)*nz)}});
     }
     // Bound the cache when the camera explores a very large world.
     if(areas.size>=512)areas.delete(areas.keys().next().value!);

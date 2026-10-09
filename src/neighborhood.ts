@@ -1,6 +1,7 @@
 import type { Building } from '../shared/types';
 import { plotPosition, PLOT_SPACING } from '../shared/world';
 import { plotPlan } from '../shared/plots';
+import { plannedStreet, boundaryStreet, junctionStreets, parcelOutline, type PlannedStreet, type PlannedNode } from '../shared/streets';
 import { PUBLIC_PROJECTS, projectBoundary } from '../shared/projects';
 import { MAX_LEVEL } from '../shared/progression';
 
@@ -39,63 +40,54 @@ export function neighborhoodDensity(buildings:Building[]) {
 }
 export const settlementType=(density:number)=>density>=SETTLEMENT_THRESHOLDS.urban?'urban':density>=SETTLEMENT_THRESHOLDS.suburban?'suburban':'rural';
 
-/** Straight streets connect shared corners at varied angles. */
-export function streetPoints(x:number,z:number,horizontal:boolean) {
-  const a=plotPosition(x-.5,z-.5);
-  const b=horizontal?plotPosition(x+.5,z-.5):plotPosition(x-.5,z+.5);
-  return [a,b];
-}
-
+/** Street geometry comes from the same immutable plan used by parcel previews. */
+export const streetPoints=(x:number,z:number,horizontal:boolean)=>boundaryStreet(x,z,horizontal).points;
 export type GroundPoint={x:number;z:number};
-export interface Street {
-  key:string;x:number;z:number;horizontal:boolean;
-  points:GroundPoint[];densities:[number,number,number];
-}
+export interface Street extends PlannedStreet{densities:[number,number,number];}
+export interface Junction extends PlannedNode{density:number;}
 export function streetNetwork(buildings:Building[],densityAt:(x:number,z:number)=>number){
-  const occupied=new Set(buildings.map(b=>`${b.x},${b.z}`));
-  const roads=new Map<string,Street>();
-  const junctions=new Map<string,{position:GroundPoint;density:number}>();
+  const roads=new Map<string,Street>(),junctions=new Map<string,Junction>();
   const nodeDensity=(x:number,z:number)=>(densityAt(x,z)+densityAt(x-1,z)+densityAt(x,z-1)+densityAt(x-1,z-1))/4;
-  const add=(x:number,z:number,horizontal:boolean)=>{
-    const key=`${horizontal?'h':'v'}:${x},${z}`;
-    if(roads.has(key))return;
-    const endX=x+(horizontal?1:0),endZ=z+(horizontal?0:1);
-    const points=streetPoints(x,z,horizontal);
-    const densities:[number,number,number]=[nodeDensity(x,z),horizontal?(densityAt(x,z)+densityAt(x,z-1))/2:(densityAt(x,z)+densityAt(x-1,z))/2,nodeDensity(endX,endZ)];
-    roads.set(key,{key,x,z,horizontal,points,densities});
-    junctions.set(`${x},${z}`,{position:points[0],density:densities[0]});
-    junctions.set(`${endX},${endZ}`,{position:points[1],density:densities[2]});
+  const densityForNode=(node:PlannedNode)=>{const [x,z]=node.key.split(':')[1].split(',').map(Number);return nodeDensity(x,z);};
+  const add=(plan:PlannedStreet)=>{
+    if(roads.has(plan.key))return;
+    const start=densityForNode(plan.nodes[0]),end=densityForNode(plan.nodes[1]);
+    const middle=plan.key.startsWith('h:')?(densityAt(plan.x,plan.z)+densityAt(plan.x,plan.z-1))/2:plan.key.startsWith('v:')?(densityAt(plan.x,plan.z)+densityAt(plan.x-1,plan.z))/2:nodeDensity(plan.x,plan.z);
+    roads.set(plan.key,{...plan,densities:[start,middle,end]});
+    plan.nodes.forEach((node,i)=>junctions.set(node.key,{...node,density:i===0?start:end}));
   };
-  for(const b of buildings){
-    const plan=plotPlan(b.x,b.z),horizontal=plan.axis==='horizontal';
-    // An occupied plot always creates its planned entrance road, even in isolation.
-    add(plan.frontage.x,plan.frontage.z,plan.frontage.horizontal);
-    add(b.x,b.z,horizontal);add(b.x+(horizontal?0:1),b.z+(horizontal?1:0),horizontal);
-    if(settlementType(densityAt(b.x,b.z))==='urban'||
-      [[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dz])=>occupied.has(`${b.x+dx},${b.z+dz}`))){
-      add(b.x,b.z,!horizontal);add(b.x+(horizontal?1:0),b.z+(horizontal?0:1),!horizontal);
-    }
-  }
-  // Shared places occupy land just like homes: give each one real boundary streets
-  // and connect its closest street corner to the existing network.
+  for(const building of buildings)for(const road of plotPlan(building.x,building.z).roads)add(road);
+  // Public sites retain their boundary streets, and use legal planned links to
+  // reach the city. A route cannot restore a deliberately absent T/dead-end arm.
   for(const project of PUBLIC_PROJECTS){
-    const boundary=projectBoundary(project.id),existing=[...junctions.keys()].map(key=>{
-      const [x,z]=key.split(',').map(Number);return {x,z};
+    const boundary=projectBoundary(project.id),existing=[...junctions.values()].filter(n=>n.cap!==false).map(n=>{
+      const [x,z]=n.key.split(':')[1].split(',').map(Number);return {x,z};
     });
     let connection:{from:GroundPoint;to:GroundPoint;distance:number}|undefined;
     for(const from of boundary)for(const to of existing){
       const distance=Math.abs(from.x-to.x)+Math.abs(from.z-to.z);
       if(!connection||distance<connection.distance)connection={from,to,distance};
     }
-    // Far-away projects do not generate streets through the unloaded world.
     if(!connection||connection.distance>16)continue;
     for(let i=0;i<boundary.length;i++){
-      const a=boundary[i],b=boundary[(i+1)%boundary.length];
-      add(Math.min(a.x,b.x),Math.min(a.z,b.z),a.z===b.z);
+      const a=boundary[i],b=boundary[(i+1)%boundary.length];add(boundaryStreet(Math.min(a.x,b.x),Math.min(a.z,b.z),a.z===b.z));
     }
-    let {x,z}=connection.from;
-    while(x!==connection.to.x){const next=x+Math.sign(connection.to.x-x);add(Math.min(x,next),z,true);x=next;}
-    while(z!==connection.to.z){const next=z+Math.sign(connection.to.z-z);add(x,Math.min(z,next),false);z=next;}
+    const queue=[connection.from],seen=new Map<string,{parent:string;road:PlannedStreet}|null>([[`${connection.from.x},${connection.from.z}`,null]]);
+    const target=`${connection.to.x},${connection.to.z}`;
+    for(let index=0;index<queue.length&&index<1600&&!seen.has(target);index++){
+      const from=queue[index];
+      for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const next={x:from.x+dx,z:from.z+dz},key=`${next.x},${next.z}`;
+        if(seen.has(key)||Math.abs(next.x-connection.from.x)+Math.abs(next.z-connection.from.z)>connection.distance+6)continue;
+        const road=plannedStreet(Math.min(from.x,next.x),Math.min(from.z,next.z),dz===0);if(!road)continue;
+        seen.set(key,{parent:`${from.x},${from.z}`,road});queue.push(next);
+      }
+    }
+    if(seen.has(target))for(let key=target;seen.get(key);){
+      const step=seen.get(key)!;add(step.road);
+      for(const node of step.road.nodes){const [x,z]=node.key.split(':')[1].split(',').map(Number);for(const extra of junctionStreets(x,z))add(extra);}
+      key=step.parent;
+    }
   }
   return {roads,junctions};
 }
@@ -145,10 +137,16 @@ export function projectPolygon(id:string,roads:Map<string,Street>):GroundPoint[]
 
 /** Fill the irregular lot right up to the actual bordering road shoulders. */
 export function lotPolygon(building:Building,roads:Map<string,Street>):GroundPoint[]{
-  const {x,z}=building,center=plotPosition(x,z);
-  let polygon=[[-.5,-.5],[.5,-.5],[.5,.5],[-.5,.5]].map(([dx,dz])=>plotPosition(x+dx,z+dz));
-  for(const key of [`h:${x},${z}`,`h:${x},${z+1}`,`v:${x},${z}`,`v:${x+1},${z}`]){
-    const road=roads.get(key);if(!road)continue;
+  const {x,z}=building,center=plotPosition(x,z),plan=plotPlan(x,z);
+  let polygon=parcelOutline(x,z);
+  for(const planned of plan.roads){
+    const road=roads.get(planned.key);if(!road)continue;
+    const [start,end]=road.points,rx=end.x-start.x,rz=end.z-start.z,roadLength=Math.hypot(rx,rz);
+    // Access links are not parcel edges. Clip only streets sharing a boundary.
+    if(!plan.corners.some((a,i)=>{
+      const b=plan.corners[(i+1)%plan.corners.length];
+      return Math.abs(rx*(a.z-start.z)-rz*(a.x-start.x))/roadLength<1e-5&&Math.abs(rx*(b.z-start.z)-rz*(b.x-start.x))/roadLength<1e-5;
+    }))continue;
     const [a,b]=road.points,dx=b.x-a.x,dz=b.z-a.z,length=Math.hypot(dx,dz);
     let nx=-dz/length,nz=dx/length;
     if((center.x-a.x)*nx+(center.z-a.z)*nz<0){nx=-nx;nz=-nz;}

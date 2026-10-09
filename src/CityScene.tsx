@@ -178,8 +178,8 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
   }, [buildings,night,center.x,center.z,projects]);
   useEffect(()=>{
     const e=engine.current;if(!e)return;disposeGroup(e.planned);
-    if(debugScores)drawPlotPreviews(e.planned,previews);
-  },[debugScores,previews]);
+    if(debugScores)drawPlotPreviews(e.planned,previews,buildings);
+  },[debugScores,previews,buildings]);
   useEffect(()=>{
     const e=engine.current;if(!e)return;e.labels.clear();
     for(const project of projects){
@@ -206,7 +206,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     if(next){
       const element=document.createElement('div');element.className='building-score plot-preview-label';
       element.textContent=`Next plot · L1 ${tierForLevel(1).name}`;
-      element.setAttribute('aria-label',`Next available plot ${next.plan.x}, ${next.plan.z}, ${next.plan.axis} frontage, predicted score ${next.score.total.toFixed(3)}`);
+      element.setAttribute('aria-label',`Next available plot ${next.plan.x}, ${next.plan.z}, ${next.plan.layout} layout, frontage ${next.plan.frontage.key}, predicted score ${next.score.total.toFixed(3)}`);
       const label=new CSS2DObject(element);label.position.set(next.plan.position.x,next.form.topY+.6,next.plan.position.z);e.labels.add(label);
     }
   },[buildings,selected,debugScores,previews,center.x,center.z,projects]);
@@ -232,11 +232,34 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
   return <div className="scene" ref={host}>{unavailable && <div className="webgl-fallback"><h2>Your city needs WebGL</h2><p>Enable hardware acceleration or open a browser that supports WebGL. You can still use the resident list and building controls.</p></div>}</div>;
 });
 
-function drawPlotPreviews(group:THREE.Group,previews:PlotPreview[]){
+function drawPlotPreviews(group:THREE.Group,previews:PlotPreview[],buildings:Building[]){
   const material=new THREE.LineBasicMaterial({color:'#a4d9df',transparent:true,opacity:.6,depthWrite:false});
   const vertices:number[]=[];
   const line=(a:THREE.Vector3,b:THREE.Vector3)=>vertices.push(...a.toArray(),...b.toArray());
-  for(const {plan,form} of previews){
+  const densityAt=neighborhoodDensity(buildings),actual=streetNetwork(buildings,densityAt),shown=new Set<string>(),shownNodes=new Set<string>();
+  const obstacles=roadObstacles(buildings,densityAt),edges=new Map<string,{a:GroundPoint;b:GroundPoint;count:number}>();
+  const outlineSurface=(polygon:GroundPoint[])=>{
+    for(const piece of clearRoadSurface(polygon,obstacles))piece.forEach((a,i)=>{
+      const b=piece[(i+1)%piece.length],key=[`${a.x.toFixed(5)},${a.z.toFixed(5)}`,`${b.x.toFixed(5)},${b.z.toFixed(5)}`].sort().join(':');
+      const previous=edges.get(key);if(previous)previous.count++;else edges.set(key,{a,b,count:1});
+    });
+  };
+  const groundLine=(a:GroundPoint,b:GroundPoint)=>line(new THREE.Vector3(a.x,.135,a.z),new THREE.Vector3(b.x,.135,b.z));
+  for(const {plan,form,streets,junctions} of previews){
+    for(const road of streets){
+      if(shown.has(road.key)||actual.roads.has(road.key)||road.kind!=='street')continue;shown.add(road.key);
+      const [a,b]=road.points,dx=b.x-a.x,dz=b.z-a.z,length=Math.hypot(dx,dz),nx=-dz/length,nz=dx/length;
+      for(let step=0;step<8;step++){
+        const at=(t:number,sign:number)=>{const score=streetDensity(road,t),radius=(roadWidth(score)+roadShoulder(score))/2;return {x:a.x+dx*t+nx*radius*sign,z:a.z+dz*t+nz*radius*sign};};
+        outlineSurface([at(step/8,1),at(step/8,-1),at((step+1)/8,-1),at((step+1)/8,1)]);
+      }
+    }
+    for(const node of junctions){
+      if(node.cap===false||shownNodes.has(node.key)||actual.junctions.has(node.key))continue;shownNodes.add(node.key);
+      const radius=(node.turnRadius||0)+(roadWidth(node.density)+roadShoulder(node.density))/2+.035;
+      const points=Array.from({length:12},(_,i)=>({x:node.position.x+Math.cos(i/12*Math.PI*2)*radius,z:node.position.z+Math.sin(i/12*Math.PI*2)*radius}));
+      outlineSurface(points);
+    }
     const rotate=(x:number,y:number,z:number)=>new THREE.Vector3(x,y,z).applyAxisAngle(new THREE.Vector3(0,1,0),plan.rotation).add(new THREE.Vector3(plan.position.x,0,plan.position.z));
     const {w,d}=form.footprint;
     const corners=[[-w/2,-d/2],[w/2,-d/2],[w/2,d/2],[-w/2,d/2]];
@@ -245,13 +268,15 @@ function drawPlotPreviews(group:THREE.Group,previews:PlotPreview[]){
       line(rotate(x,form.baseY,z),rotate(nx,form.baseY,nz));
       line(rotate(x,form.baseY+form.height,z),rotate(nx,form.baseY+form.height,nz));
       line(rotate(x,form.baseY,z),rotate(x,form.baseY+form.height,z));
-      const a=plan.corners[i],b=plan.corners[(i+1)%4];line(new THREE.Vector3(a.x,.12,a.z),new THREE.Vector3(b.x,.12,b.z));
+
     }
+    plan.corners.forEach((a,i)=>groundLine(a,plan.corners[(i+1)%plan.corners.length]));
     // Entrance arrow makes opposite-facing homes distinguishable in a top view.
     const end=Math.max(d/2+.4,plan.frontage.distance-.4);
     line(rotate(0,.15,d/2),rotate(0,.15,end));
     line(rotate(-.23,.15,end-.28),rotate(0,.15,end));line(rotate(.23,.15,end-.28),rotate(0,.15,end));
   }
+  for(const {a,b,count} of edges.values())if(count===1)groundLine(a,b);
   const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
   group.add(new THREE.LineSegments(geometry,material));
 }
@@ -314,6 +339,7 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
     for(const piece of clearRoadSurface(polygon,obstacles))surface(group,piece,height,color);
   };
   for(const road of roads.values()){
+    if(road.kind!=='street')continue;
     const [a,b]=road.points,dx=b.x-a.x,dz=b.z-a.z,length=Math.hypot(dx,dz);
     const middle={x:(a.x+b.x)/2,z:(a.z+b.z)/2},density=streetDensity(road,.5),width=roadWidth(density);
     // Taper toward the shared junction width; each small polygon has one solid color.
@@ -337,15 +363,16 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       }
     }
   }
-  for(const {position,density} of junctions.values()){
+  for(const {position,density,turnRadius=0,cap:drawCap} of junctions.values()){
+    if(drawCap===false)continue;
     const cap=(radius:number,height:number,color:string)=>{
       const polygon=Array.from({length:12},(_,i)=>({
       x:position.x+Math.cos(i/12*Math.PI*2)*radius,z:position.z+Math.sin(i/12*Math.PI*2)*radius,
       }));
       for(const piece of clearRoadSurface(polygon,obstacles))surface(group,piece,height,color);
     };
-    cap((roadWidth(density)+roadShoulder(density))/2+.035,.0555,shoulderColor(density));
-    cap(roadWidth(density)/2+.025,.079,roadColor(density));
+    cap(turnRadius+(roadWidth(density)+roadShoulder(density))/2+.035,.0555,shoulderColor(density));
+    cap(turnRadius+roadWidth(density)/2+.025,.079,roadColor(density));
   }
   const gardens=new Set<string>();
   for(const b of buildings)for(let dx=-3;dx<=3;dx++)for(let dz=-3;dz<=3;dz++)gardens.add(`${b.x+dx},${b.z+dz}`);
@@ -594,7 +621,7 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       for(const x of [-.55,.55])box(architecture,x,baseY+.52,front+.53,.07,.92,.07,'#c6b996',b.id);
     }
     const pathColor=mixGroundColor('#c7bc9e',paving,urban);
-    const frontageRoad=roads.get(`${plan.frontage.horizontal?'h':'v'}:${plan.frontage.x},${plan.frontage.z}`)!;
+    const frontageRoad=roads.get(plan.frontage.key)!;
     const [a,boundary]=frontageRoad.points,dx=boundary.x-a.x,dz=boundary.z-a.z;
     const roadT=Math.max(0,Math.min(1,((position.x-a.x)*dx+(position.z-a.z)*dz)/(dx*dx+dz*dz)));
     const frontageDensity=streetDensity(frontageRoad,roadT);

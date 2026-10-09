@@ -34,8 +34,13 @@ function plotFootprint(building:Building,tier:number,padding:number){
   for(const edge of edges)if(edge.widthProjection<1e-6){
     d=Math.min(d,2*(edge.distance-.3-padding*edge.depthProjection)/edge.depthProjection);
   }
-  for(const edge of edges)if(edge.widthProjection>=1e-6){
-    w=Math.min(w,2*(edge.distance-.3-padding*(edge.widthProjection+edge.depthProjection)-d*edge.depthProjection/2)/edge.widthProjection);
+  const widthAt=(depth:number)=>Math.min(6.4,...edges.filter(edge=>edge.widthProjection>=1e-6).map(edge=>2*(edge.distance-.3-padding*(edge.widthProjection+edge.depthProjection)-depth*edge.depthProjection/2)/edge.widthProjection));
+  w=widthAt(d);
+  // Diagonal cul-de-sac frontage can make the old full-depth rectangle too
+  // long. Trade depth for usable width while staying inside every parcel edge.
+  if(w<1.6){
+    for(const edge of edges)if(edge.depthProjection>1e-6)d=Math.min(d,2*(edge.distance-.3-padding*(edge.widthProjection+edge.depthProjection)-.8*edge.widthProjection)/edge.depthProjection);
+    w=widthAt(d);
   }
   const growth=[.3,.48,.59,.72,.86,1,1.005,1.01,1.015,1.02][tier];
   return {w:w*growth,d:d*growth};
@@ -102,7 +107,7 @@ function composeSections(plan:PlotPlan,base:Point[],designs:SegmentDesign[],tier
     const profiles=tier>=6?grammar.towerProfiles:grammar.profiles;
     const [sx,sz,tx,tz]=profiles[segment];
     const continuesVolume=designs[segment-1].theme===designs[segment].theme&&profiles[segment].every((value,i)=>value===profiles[segment-1][i]);
-    // Plot skew survives in every candidate. The previous four-corner frame
+    // Plot skew survives in every candidate. The previous parcel frame
     // contributes 35%; the design brief contributes 65%. Neither is a template.
     const strength=tier<=2?.25:1;
     const quad=tier>=6&&continuesVolume?previousQuad:local.map((p,i)=>{
@@ -114,8 +119,8 @@ function composeSections(plan:PlotPlan,base:Point[],designs:SegmentDesign[],tier
     if(tier>=6&&(segment>=6||segment===count-1)){
       const corner=(Math.abs(plan.x+plan.z)%2===0?0:2),t=segment===count-1?.18:.12;
       candidate=quad.flatMap((p,i)=>i!==corner?[p]:[
-        {x:p.x+(quad[(i+3)%4].x-p.x)*t,z:p.z+(quad[(i+3)%4].z-p.z)*t},
-        {x:p.x+(quad[(i+1)%4].x-p.x)*t,z:p.z+(quad[(i+1)%4].z-p.z)*t},
+        {x:p.x+(quad[(i+quad.length-1)%quad.length].x-p.x)*t,z:p.z+(quad[(i+quad.length-1)%quad.length].z-p.z)*t},
+        {x:p.x+(quad[(i+1)%quad.length].x-p.x)*t,z:p.z+(quad[(i+1)%quad.length].z-p.z)*t},
       ]);
     }
     // A small cantilever is permitted. At least 85% of the floor plate must
