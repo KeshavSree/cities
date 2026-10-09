@@ -3,3 +3,6 @@
 .tower-social>.tower-like:hover:not(:disabled){color:#a96075}
 .tower-social>.tower-like[aria-pressed=true]{color:#a96075;background:transparent}
 .tower-social>.tower-like:disabled{opacity:1}
+.tower-like.is-popping .tower-like-heart{animation:tower-heart-pop 380ms ease-out;transform-origin:center}
+@keyframes tower-heart-pop{0%,100%{transform:scale(1)}35%{transform:scale(1.3)}65%{transform:scale(.9)}}
+@media(prefers-reduced-motion:reduce){.tower-like.is-popping .tower-like-heart{animation:none}}

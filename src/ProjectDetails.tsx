@@ -1,22 +1,40 @@
-import { ChevronRight, Landmark, LocateFixed, MapPin, X } from 'lucide-react';
+import { ChevronRight, Landmark, LocateFixed, MapPin, TreePine, Users } from 'lucide-react';
 import type { Building, PublicProject } from '../shared/types';
 import { ProjectBoard } from './ProjectBoard';
+import './project-panel.css';
 
-export function ProjectDetails({project,projects,me,busy,onSelect,onFocus,onClose,onContribute}:{
+const projectKind = (p: PublicProject) => p.kind === 'park' ? 'Community garden' : 'Public plaza';
+
+export function ProjectDetails({project,projects,me,busy,onSelect,onFocus,onContribute}:{
   project:PublicProject|undefined;projects:PublicProject[];me:Building|undefined;busy:boolean;
-  onSelect:(id:string)=>void;onFocus:(project:PublicProject)=>void;onClose:()=>void;
+  onSelect:(id:string)=>void;onFocus:(project:PublicProject)=>void;
   onContribute:(id:string,amount:number)=>void;
 }){
+  const ProjectIcon = project?.kind === 'park' ? TreePine : Landmark;
   return <aside className="inspector project-inspector" aria-label={project?`${project.name} public project`:'Public projects'}>
-    <div className="inspector-heading"><span><span className="small-dot"/>{project?'Public project':'Public projects'}</span><div className="drawer-heading-actions">
-      {project&&<button className="icon-button" title="Focus this project" aria-label="Focus this project" onClick={()=>onFocus(project)}><LocateFixed size={17}/></button>}
-      <button className="icon-button" aria-label="Close project details" onClick={onClose}><X size={18}/></button>
-    </div></div>
-    <div className="profile"><span className="avatar profile-avatar"><Landmark size={24}/></span><div className="profile-name"><h2>{project?.name??'Build together'}</h2><span>{project?(project.kind==='park'?'Community garden':'Public plaza'):'Places made by nearby residents'}</span></div></div>
+    <div className="profile">
+      <span className="project-avatar"><ProjectIcon size={23}/></span>
+      <div className="profile-name"><div className="profile-title-row">
+        <h2>{project?.name??'Public projects'}</h2>
+        {project&&<span className="project-contributors" aria-label={`${project.contributors} contributors`} title={`${project.contributors} contributors`}><Users size={17}/><span>{project.contributors}</span></span>}
+        {project&&<div className="profile-title-actions"><button className="icon-button" title="Focus this project" aria-label="Focus this project" onClick={()=>onFocus(project)}><LocateFixed size={20}/></button></div>}
+      </div><span>{project?projectKind(project):'Shared places in your city'}</span></div>
+    </div>
     {project?<>
-      <div className="project-detail-body"><ProjectBoard projects={[project]} me={me} busy={busy} onContribute={onContribute} showHeading={false}/></div>
-      <button className="project-back" onClick={()=>onSelect('projects')}>All public projects</button>
-      <footer className="inspector-footer"><MapPin size={13}/>Plot {project.x}, {project.z}<span>{project.funded>=project.goal?'Complete':'Under construction'}</span></footer>
-    </>:<div className="project-directory"><p>Pool bricks to build shared places near your tower.</p>{projects.map(p=><button className="project-directory-item" key={p.id} onClick={()=>onSelect(p.id)}><span><strong>{p.name}</strong><small>{p.funded} / {p.goal} bricks · {p.contributors} contributors</small></span><ChevronRight size={16}/></button>)}</div>}
+      <p className="project-description">{project.description}</p>
+      <ProjectBoard project={project} me={me} busy={busy} onContribute={onContribute}/>
+      <button className="project-directory-link" onClick={()=>onSelect('projects')}>All public projects<ChevronRight size={15}/></button>
+      <footer className="inspector-footer"><MapPin size={13}/>Plot {project.x}, {project.z}</footer>
+    </>:<div className="project-list">
+      {projects.length?projects.map(p=>{
+        const percent=Math.min(100,p.funded/p.goal*100);
+        return <button className="project-list-row" key={p.id} onClick={()=>onSelect(p.id)}>
+          <div className="project-list-title"><strong>{p.name}</strong><ChevronRight size={16}/></div>
+          <div className="project-list-meta"><span>{projectKind(p)}</span><span><Users size={13}/>{p.contributors}</span></div>
+          <div className="level-progress-track" aria-hidden="true"><span style={{width:`${percent}%`}}/></div>
+          <div className="project-list-funding"><span>{p.funded.toLocaleString()} / {p.goal.toLocaleString()} bricks</span><span>{p.funded>=p.goal?'Complete':`${Math.round(percent)}%`}</span></div>
+        </button>;
+      }):<p className="project-empty">No public projects yet.</p>}
+    </div>}
   </aside>;
 }

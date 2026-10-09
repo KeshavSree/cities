@@ -1,0 +1,42 @@
+.project-avatar{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:47px;height:47px;border-radius:50%;color:#7b9185;background:#edf1ee}
+.project-contributors{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:#617681;flex-shrink:0;font-variant-numeric:tabular-nums}
+.project-description{margin:15px 22px 0;font-size:11px;line-height:1.85;color:#819199}
+.project-content{padding:16px 22px 0}
+.project-content .project-funding{margin:0 0 18px}
+.project-brick-total{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.project-milestones{margin:0 -22px}
+.project-milestone{display:flex;align-items:center;gap:12px;min-height:55px;padding:9px 22px;color:#95a5ab;transition:background-color 120ms ease,color 120ms ease;outline-offset:-2px}
+.project-milestone>svg{flex-shrink:0}
+.project-milestone>div{flex:1;min-width:0}
+.project-milestone strong{display:block;font-size:12px;font-weight:500;line-height:1.5}
+.project-milestone small{display:block;font-size:11px;line-height:1.5;color:#7a929d;opacity:0;transition:opacity 120ms ease}
+.project-milestone>span{font-size:10px;font-variant-numeric:tabular-nums;display:flex;align-items:center}
+.project-milestone.is-built{color:#698671}
+.project-milestone:hover,.project-milestone:focus-visible{background:#eaf6ff;color:#506e7f}
+.project-milestone:hover small,.project-milestone:focus-visible small{opacity:1}
+.project-milestone:focus-visible{outline:2px solid #a89bdd}
+.project-own-contribution{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#819199;margin-top:16px}
+.project-own-contribution>span:last-child{display:flex;gap:5px;align-items:center;font-variant-numeric:tabular-nums}
+.project-contribute{margin:20px 0}
+.project-contribute>label{display:block;font-size:11px;color:#718690;margin-bottom:8px}
+.project-contribute>div{display:flex;align-items:stretch;gap:10px}
+.project-contribute input{width:82px;min-width:0;padding:10px;border:1px solid #dfe5e7;border-radius:5px;font:inherit;font-size:12px;color:var(--ink);background:#fff}
+.project-contribute input:focus{outline:2px solid #b8b2ed;outline-offset:1px}
+.project-contribute .primary-button{flex:1;min-width:0;font-size:11px;padding:10px}
+.project-contribute>p{font-size:10px;line-height:1.7;color:#8799a2;margin-top:8px}
+.project-directory-link{margin:8px 22px 20px;display:flex;align-items:center;justify-content:space-between;color:#8172c5;font-size:11px;padding:10px 0;text-align:left}
+.project-directory-link:hover{color:#6658a8}
+.project-list{padding:18px 0}
+.project-list-row{display:block;width:100%;padding:16px 22px;text-align:left;transition:background-color 120ms ease}
+.project-list-row:hover,.project-list-row:focus-visible{background:#eaf6ff}
+.project-list-row:focus-visible{outline:2px solid #a89bdd;outline-offset:-2px}
+.project-list-title{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#5b727d}
+.project-list-title strong{font-size:13px;font-weight:600}
+.project-list-title>svg{color:#8e9fa8;flex-shrink:0}
+.project-list-meta,.project-list-funding{display:flex;align-items:center;justify-content:space-between;color:#8799a2;font-size:10px;margin-top:7px;gap:10px}
+.project-list-meta>span:last-child{display:flex;align-items:center;gap:5px}
+.project-list-row .level-progress-track{margin-top:13px}
+.project-list-funding{font-variant-numeric:tabular-nums}
+.project-empty{padding:0 22px;color:#8799a2;font-size:11px}
+@media(hover:none){.project-milestone small{opacity:1}}
+@media(prefers-reduced-motion:reduce){.project-milestone,.project-milestone small,.project-list-row{transition:none}}

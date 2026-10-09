@@ -45,6 +45,8 @@ export default function App() {
   const [modal, setModal] = useState<Modal>(null);
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState('');
+  const [likePulse,setLikePulse]=useState<string|null>(null);
+  useEffect(()=>{if(!likePulse)return;const timer=setTimeout(()=>setLikePulse(null),450);return()=>clearTimeout(timer);},[likePulse]);
   const [rewardFlight,setRewardFlight]=useState<RewardFlight|null>(null);
   const dailyButton=useRef<HTMLButtonElement>(null);
   const brickCounter=useRef<HTMLSpanElement>(null);
@@ -136,7 +138,6 @@ export default function App() {
   const filtered=neighbors.filter(b=>`${b.name} ${b.username}`.toLowerCase().includes(query.toLowerCase()));
   const select=(b:Building)=>{setSelected(b.id);setSearchOpen(false);setDrawerOpen(true);scene.current?.focus(b);};
   const selectProject=(id:string)=>{setSelected(id);setSearchOpen(false);setDrawerOpen(true);const p=snapshot?.projects.find(p=>p.id===id);if(p)scene.current?.focus(p);};
-  const closeDrawer=()=>{setDrawerOpen(false);document.querySelector<HTMLButtonElement>('.drawer-handle')?.focus();};
   const focusMe=()=>{if(me)select(me);else setModal('login');};
   const action=async(key:string,fn:()=>Promise<void>)=>{if(busy)return;setBusy(key);try{await fn();}catch(e){notify(e instanceof Error?e.message:'Please try again.',true);}finally{setBusy('');}};
   const daily=()=>action('daily',async()=>{
@@ -158,7 +159,7 @@ export default function App() {
     try{const r=await uploadAvatar<{building:Building}>(image);update(r.building);notify('Profile picture updated.');}finally{setBusy('');}
   };
   const saveSegment=(segment:number,color:Color,style:SegmentStyle,theme:BuildingTheme)=>action('segment',async()=>{const r=await api<{building:Building}>('/segments',{segment,color,style,theme});update(r.building);notify('Segment updated.');});
-  const like=()=>tower&&action('like',async()=>{const r=await api<{building:Building}>('/like',{tower:tower.id});update(r.building);setSnapshot(prev=>prev?{...prev,likedIds:[...prev.likedIds,tower.id]}:prev);notify(`You liked this tower. Its owner earned ${REWARDS.like} XP.`);});
+  const like=()=>tower&&action('like',async()=>{const r=await api<{building:Building}>('/like',{tower:tower.id});update(r.building);setSnapshot(prev=>prev?{...prev,likedIds:[...prev.likedIds,tower.id]}:prev);setLikePulse(tower.id);});
   const devProgression=(data:{level?:number;source?:string})=>tower&&action('dev',async()=>{const r=await api<{building:Building}>('/dev/progression',{tower:tower.id,...data});update(r.building);if(data.level)scene.current?.focus(r.building);notify(data.level?'Demo model tier updated.':'Sample reward recorded.');});
   const contribute=(project:string,amount:number)=>action('project',async()=>{const r=await api<{building:Building;project:Bootstrap['projects'][number]}>('/projects/contribute',{project,amount,requestId:crypto.randomUUID()});update(r.building);setSnapshot(prev=>prev?{...prev,projects:prev.projects.map(p=>p.id===r.project.id?r.project:p)}:prev);notify('Your bricks are building a shared place.');});
   const showInvites=()=>{if(!me){setModal('login');return;}setModal('invite');api<{invites:Invite[]}>('/invites').then(r=>setInvites(r.invites)).catch(e=>notify(e.message,true));};
@@ -189,9 +190,9 @@ export default function App() {
         <div className="resident-results">{filtered.length?filtered.map(b=><button key={b.id} className="resident-result" onClick={()=>select(b)}><ProfileAvatar avatar={b.avatar} name={b.name} className="small"/><span><strong>{b.name}</strong><small>@{b.username}</small></span><span className="level-label">Lv. {b.level}</span></button>):<p className="empty-search">No neighbors match that name.</p>}</div>
       </section>}
 
-      {(project||selected==='projects')&&<TowerDrawer open={drawerOpen} onOpenChange={setDrawerOpen} subject="project"><ProjectDetails key={selected} project={project} projects={snapshot?.projects||[]} me={me} busy={Boolean(busy)} onSelect={selectProject} onFocus={p=>scene.current?.focus(p)} onClose={closeDrawer} onContribute={contribute}/></TowerDrawer>}
+      {(project||selected==='projects')&&<TowerDrawer open={drawerOpen} onOpenChange={setDrawerOpen} subject="project"><ProjectDetails key={selected} project={project} projects={snapshot?.projects||[]} me={me} busy={Boolean(busy)} onSelect={selectProject} onFocus={p=>scene.current?.focus(p)} onContribute={contribute}/></TowerDrawer>}
       {tower && <TowerDrawer open={drawerOpen} onOpenChange={setDrawerOpen}><aside className="inspector" aria-label={`${tower.name}'s tower`}>
-        <ResidentProfile key={tower.id} building={tower} own={own} busy={Boolean(busy)} onSaveBio={saveBio} onUpload={savePhoto} nameAction={<div className="tower-social"><button className="tower-like" aria-pressed={Boolean(snapshot?.likedIds.includes(tower.id))} aria-label={`${snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} ${own?'your tower':`${tower.name}'s tower`}, ${tower.likes} likes`} title={snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} disabled={!me||Boolean(busy)||snapshot?.likedIds.includes(tower.id)} onClick={like}><Heart className="tower-like-heart" size={17} aria-hidden="true" fill={snapshot?.likedIds.includes(tower.id)?'currentColor':'none'}/><span>{tower.likes}</span></button></div>} headerActions={<button className="icon-button desktop-focus" title="Focus this tower" aria-label="Focus this tower" onClick={()=>scene.current?.focus(tower)}><LocateFixed size={20}/></button>}/>
+        <ResidentProfile key={tower.id} building={tower} own={own} busy={Boolean(busy)} onSaveBio={saveBio} onUpload={savePhoto} nameAction={<div className="tower-social"><button className={`tower-like ${likePulse===tower.id?'is-popping':''}`} aria-pressed={Boolean(snapshot?.likedIds.includes(tower.id))} aria-label={`${snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} ${own?'your tower':`${tower.name}'s tower`}, ${tower.likes} likes`} title={snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} disabled={!me||Boolean(busy)||snapshot?.likedIds.includes(tower.id)} onClick={like}><Heart className="tower-like-heart" size={17} aria-hidden="true" fill={snapshot?.likedIds.includes(tower.id)?'currentColor':'none'}/><span>{tower.likes}</span></button></div>} headerActions={<button className="icon-button desktop-focus" title="Focus this tower" aria-label="Focus this tower" onClick={()=>scene.current?.focus(tower)}><LocateFixed size={20}/></button>}/>
         {(tower.github_url||tower.website||!tower.is_demo)&&<div className="profile-links">
           {tower.github_url && <a href={tower.github_url} target="_blank" rel="noreferrer"><Github size={14}/>GitHub<ArrowUpRight size={12}/></a>}
           {tower.website && <a href={tower.website} target="_blank" rel="noreferrer">Website<ArrowUpRight size={12}/></a>}
