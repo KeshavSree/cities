@@ -26,7 +26,7 @@ const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)'
 
 export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ buildings, selected, lighting, center, debugScores, previews, projects, onProject, onSelect, onPan }, ref) {
   const host = useRef<HTMLDivElement>(null);
-  const engine = useRef<{ scene: THREE.Scene; renderer: THREE.WebGLRenderer; camera: THREE.OrthographicCamera; controls: OrbitControls; city: THREE.Group; selection: THREE.Group; planned:THREE.Group; labels:THREE.Group; outline:OutlinePass; focus: THREE.Vector3 | null; night: boolean; resize: () => void } | null>(null);
+  const engine = useRef<{ scene: THREE.Scene; renderer: THREE.WebGLRenderer; camera: THREE.OrthographicCamera; controls: OrbitControls; city: THREE.Group; planned:THREE.Group; labels:THREE.Group; outline:OutlinePass; focus: THREE.Vector3 | null; night: boolean; resize: () => void } | null>(null);
   const props = useRef({ buildings, selected, lighting, onSelect, onPan, onProject }); props.current = { buildings, selected, lighting, onSelect, onPan, onProject };
   const night=lighting.night;
   const [unavailable, setUnavailable] = useState(false);
@@ -51,7 +51,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.setClearColor(0x000000, 0);
     el.appendChild(renderer.domElement);
-    renderer.domElement.setAttribute('aria-label', 'Interactive 3D city. WASD moves, Q and E rotate, Shift moves down, and Space moves up. Drag to orbit, scroll to zoom, or select a tower. Violet links show invitation connections. Use the resident list for keyboard navigation.');
+    renderer.domElement.setAttribute('aria-label', 'Interactive 3D city. WASD moves, Q and E rotate, Shift moves down, and Space moves up. Drag to orbit, scroll to zoom, or select a tower. Use the resident list for keyboard navigation.');
     renderer.domElement.tabIndex = 0;
     const scene = new THREE.Scene();
     const terrain = new WorldTerrain(); scene.add(terrain.group);
@@ -71,7 +71,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     sun.castShadow = true; sun.shadow.mapSize.set(2048,2048);
     Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 65, bottom: -55, near: 1, far: 200 });
     sun.shadow.bias = -.001; sun.shadow.normalBias = .06; scene.add(sun);
-    const city = new THREE.Group(); const selection = new THREE.Group(); const planned=new THREE.Group(); const labels=new THREE.Group(); scene.add(city, selection, planned, labels);
+    const city = new THREE.Group(); const planned=new THREE.Group(); const labels=new THREE.Group(); scene.add(city, planned, labels);
     const labelRenderer=new CSS2DRenderer();labelRenderer.domElement.className='score-label-layer';
     el.appendChild(labelRenderer.domElement);
     const composer=new EffectComposer(renderer,new THREE.WebGLRenderTarget(el.clientWidth,el.clientHeight,{samples:4}));
@@ -86,7 +86,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
       camera.left = -view * w / h; camera.right = view * w / h; camera.top = view; camera.bottom = -view;
       camera.updateProjectionMatrix(); renderer.setSize(w,h);composer.setSize(w,h);labelRenderer.setSize(w,h);
     }
-    engine.current = { scene, renderer, camera, controls, city, selection, planned, labels, outline, focus: null, night: false, resize };
+    engine.current = { scene, renderer, camera, controls, city, planned, labels, outline, focus: null, night: false, resize };
     resize(); const observer = new ResizeObserver(resize); observer.observe(el);
     const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2();
     let down = { x: 0, y: 0 }; let lastPan = '0,0'; let pointerActive = false;
@@ -163,7 +163,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
       renderer.domElement.removeEventListener('pointerdown',pointerDown); renderer.domElement.removeEventListener('pointerup',pointerUp);
       renderer.domElement.removeEventListener('pointercancel',pointerCancel);
       renderer.domElement.removeEventListener('keyup',keyUp);
-      renderer.domElement.removeEventListener('pointermove',move); terrain.dispose(); disposeGroup(city); disposeGroup(selection);disposeGroup(planned);
+      renderer.domElement.removeEventListener('pointermove',move); terrain.dispose(); disposeGroup(city);disposeGroup(planned);
       outline.dispose();output.dispose();composer.dispose();renderer.dispose();
       labels.clear();labelRenderer.domElement.remove();
       renderer.domElement.remove(); engine.current = null;
@@ -211,23 +211,8 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ bui
     }
   },[buildings,selected,debugScores,previews,center.x,center.z,projects]);
   useEffect(() => {
-    const e = engine.current; if (!e) return; disposeGroup(e.selection);
+    const e = engine.current; if (!e) return;
     e.outline.selectedObjects=e.city.children.filter(mesh=>mesh.userData.owner===selected||mesh.userData.project===selected);
-    const b = buildings.find(b=>b.id===selected); if (!b) return;
-    const loaded=new Map(buildings.map(tower=>[tower.id,tower]));
-    const scoreAt=neighborhoodScores(buildings);
-    for(const child of buildings){
-      const parent=child.invited_by?loaded.get(child.invited_by):null;
-      if(!parent)continue;
-      const a=plotPosition(parent.x,parent.z),end=plotPosition(child.x,child.z);
-      const start=new THREE.Vector3(a.x,buildingForm(parent,scoreAt(parent.x,parent.z).total).topY+.15,a.z);
-      const finish=new THREE.Vector3(end.x,buildingForm(child,scoreAt(child.x,child.z).total).topY+.15,end.z);
-      const control=start.clone().add(finish).multiplyScalar(.5);control.y=Math.max(start.y,finish.y)+2;
-      const connected=child.id===selected||parent.id===selected;
-      const curve=new THREE.QuadraticBezierCurve3(start,control,finish);
-      const link=new THREE.Mesh(new THREE.TubeGeometry(curve,16,connected?.045:.025,4,false),new THREE.MeshBasicMaterial({color:'#b6a5ee',transparent:true,opacity:connected?.7:.18,depthWrite:false}));
-      e.selection.add(link);
-    }
   }, [selected,buildings]);
   return <div className="scene" ref={host}>{unavailable && <div className="webgl-fallback"><h2>Your city needs WebGL</h2><p>Enable hardware acceleration or open a browser that supports WebGL. You can still use the resident list and building controls.</p></div>}</div>;
 });
