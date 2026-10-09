@@ -24,12 +24,12 @@ export function LevelProgress({building}:{building:Building}){
     </div>
     {helpOpen&&<aside id={helpId} className="growth-info-popover" aria-label="How to gain XP">
       <h3>How to gain XP</h3>
-      <p>GitHub: {REWARDS.commit} XP / commit</p>
       <p>Invite joins: {REWARDS.invite} XP</p>
-      <p>Tower likes: {REWARDS.like} XP</p>
-      <p>Nearby construction: {REWARDS.construction} XP</p>
       <p>Public project completion: {REWARDS.project} XP</p>
+      <p>Tower likes: {REWARDS.like} XP</p>
       <p>Daily visit: {REWARDS.dailyXp} XP + {REWARDS.dailyBricks} bricks</p>
+      <p>Nearby construction: {REWARDS.construction} XP</p>
+      <p>GitHub: {REWARDS.commit} XP / commit</p>
     </aside>}
   </section>;
 }
