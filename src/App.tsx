@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowUpRight, Heart, Landmark, Bug, Check, Compass, Copy, Gift, Hammer, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, MapPin, Minus, Plus, Search, Sparkles, Users, X } from 'lucide-react';
+import { ArrowUpRight, Heart, Landmark, Bug, Check, Compass, Copy, Gift, Hammer, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, MapPin, Minus, Package, Plus, Search, Sparkles, Users, X } from 'lucide-react';
 import type { SceneHandle } from './CityScene';
 import { api } from './api';
 import { COLORS, type Bootstrap, type Building, type Color } from '../shared/types';
@@ -15,6 +15,7 @@ import { ProjectDetails } from './ProjectDetails';
 import { MAX_LEVEL, LEVELS_PER_TIER, TIERS, REWARDS, tierForLevel, type BuildingTheme, type SegmentStyle } from '../shared/progression';
 import './progression.css';
 import './tower-like.css';
+import './topbar-bricks.css';
 
 type Modal = 'invite' | 'help' | 'login' | null;
 const CityScene = lazy(()=>import('./CityScene').then(m=>({default:m.CityScene})));
@@ -154,6 +155,7 @@ export default function App() {
         <span className="nav-divider"/>
         <button className="invite-button" aria-label="Projects" title="Public projects" onClick={()=>selectProject('projects')}><Landmark size={16}/>Projects</button>
         <button className="invite-button" aria-label="Invite a friend" title="Invite a friend" onClick={showInvites}><Plus size={16}/> Invite a friend</button>
+        {me&&me.bricks!==null&&<span className="topbar-bricks" aria-label={`${me.bricks.toLocaleString()} bricks`}><Package size={17} aria-hidden="true"/><span>{me.bricks.toLocaleString()}</span></span>}
         <button className="user-button" onClick={focusMe} title="Your tower">{me?<span className="avatar tiny" style={{background:COLORS[me.color].hex}}>{initials(me.name)}</span>:<Github size={19}/>}<span>{me?'My tower':'Sign in'}</span></button>
       </nav>
     </header>
@@ -194,7 +196,6 @@ export default function App() {
           <div className="activity-caption"><span>{tower.is_demo?'Decorative activity preview':'Contribution counts from GitHub'}</span>{own && !tower.is_demo && <button disabled={Boolean(busy)} onClick={()=>action('sync',async()=>{const r=await api<{building:Building}>('/sync',{});update(r.building);notify('Your GitHub activity is up to date.');})}>{busy==='sync'?'Syncing…':'Sync activity'}</button>}</div>
         </div>:<div id="panel-design" role="tabpanel" aria-labelledby="tab-design" className="design-panel">
           <SegmentEditor key={tower.id} building={tower} own={own} busy={Boolean(busy)} onSave={saveSegment}/>
-          {own && <div className="resource-row"><span><Sparkles size={16}/> Available bricks</span><strong>{(tower.bricks??0).toLocaleString()}</strong></div>}
         </div>}
         <footer className="inspector-footer"><MapPin size={13}/>Plot {tower.x}, {tower.z}<span>{tierForLevel(tower.level).name}</span>{own && <button className="account-link" onClick={()=>setModal('login')}>Account</button>}</footer>
       </aside></TowerDrawer>}

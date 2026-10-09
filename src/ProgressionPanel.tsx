@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Package } from 'lucide-react';
 import type { Building, XpEvent } from '../shared/types';
 import { MAX_LEVEL, REWARDS, xpAtLevel, xpForNextLevel } from '../shared/progression';
 import { api } from './api';
@@ -20,7 +19,6 @@ export function LevelProgress({building}:{building:Building}){
 export function ProgressionPanel({building,own}:{building:Building;own:boolean}){
   if(!own)return null;
   return <section className="progression-panel" aria-label="Building rewards">
-    {own&&building.bricks!==null&&<div className="brick-balance"><span><Package size={16}/> Bricks</span><strong>{building.bricks.toLocaleString()}</strong><small>For segments, finishes & public projects</small></div>}
     {own&&<><div className="xp-sources"><h3>Ways to grow</h3><p>GitHub: {REWARDS.commit} XP / commit</p><p>Invite joins: {REWARDS.invite} XP · Tower likes: {REWARDS.like} XP</p><p>Nearby construction: {REWARDS.construction} XP · Public project completion: {REWARDS.project} XP</p><p>Daily visit: {REWARDS.dailyXp} XP + {REWARDS.dailyBricks} bricks</p></div><RecentXp building={building}/></>}
   </section>;
 }

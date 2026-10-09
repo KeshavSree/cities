@@ -1,0 +1,3 @@
+.topbar .topbar-bricks{display:inline-flex;align-items:center;gap:7px;margin-right:4px;color:#607580;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.topbar-bricks>svg{flex-shrink:0}
+@media(max-width:760px){.topbar .topbar-bricks{gap:5px;margin-right:2px;font-size:12px}.topbar-bricks>svg{width:16px;height:16px}}
