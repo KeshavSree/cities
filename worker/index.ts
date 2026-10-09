@@ -413,14 +413,11 @@ export default {
         await syncGithub(env, user);settleConstruction(env,ctx); return json({ building: await changed(env, user.id, ctx) });
       }
       if (path === '/api/invites' && req.method === 'GET') {
-        return json({ invites: (await env.DB.prepare('SELECT token,created_at,used_by FROM invitations WHERE inviter_id=? ORDER BY created_at DESC LIMIT 10').bind(user.id).all()).results });
+        return json({ invites: (await env.DB.prepare('SELECT token,created_at,used_by FROM invitations WHERE inviter_id=? AND used_by IS NULL ORDER BY created_at DESC LIMIT 10').bind(user.id).all()).results });
       }
       if (path === '/api/invites' && req.method === 'POST') {
-        // An atomic daily allowance limits accidental or abusive plot expansion.
         const token = uuid();
-        const inserted = await env.DB.prepare(`INSERT INTO invitations(token,inviter_id) SELECT ?,? WHERE
-          (SELECT COUNT(*) FROM invitations WHERE inviter_id=? AND created_at>=date('now'))<5 RETURNING token`).bind(token, user.id, user.id).first();
-        if (!inserted) throw new ApiError('You can create five invitations per day. Try again tomorrow.', 429);
+        await env.DB.prepare('INSERT INTO invitations(token,inviter_id) VALUES(?,?)').bind(token, user.id).run();
         return json({ token, url: `${env.APP_ORIGIN}/?invite=${token}` });
       }
       throw new ApiError('This route could not be found.', 404);

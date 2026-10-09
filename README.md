@@ -141,7 +141,7 @@ Before allocating a resident, `shared/plots.ts` precomputes a placement plan con
 
 Run `npm run check:roads` to check convex parcels, usable footprints across all model tiers, entrance alignment, all three junction types, and equality between preview and constructed road plans over a sample of 475 parcels.
 
-Daily rewards use a composite unique key and atomic D1 batches. Spending uses conditional SQL updates. Plot coordinates and identity are unique, and invitation allocation runs as an atomic batch that rejects used invitations and retries coordinate collisions. Changes require same-origin requests and authenticated sessions. A resident can issue at most five invitations per UTC day.
+Daily rewards use a composite unique key and atomic D1 batches. Spending uses conditional SQL updates. Plot coordinates and identity are unique, and invitation allocation runs as an atomic batch that rejects used invitations and retries coordinate collisions. Changes require same-origin requests and authenticated sessions. Residents can create invitations without a daily limit. Only unused invitations appear in the invitation menu.
 
 GitHub manual sync has a 15-minute cooldown. A six-hour Cron Trigger refreshes at most three stale accounts per invocation. This is suitable for an initial small city; use Queues and more frequent scheduled batches before supporting many active GitHub accounts. No polling of GitHub during page rendering.
 
