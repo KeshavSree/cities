@@ -2,7 +2,6 @@
 .segment-editor .tier-slice{display:flex;align-items:center;justify-content:center;position:relative;width:100%;min-height:0;padding:0;border:0;background:transparent;line-height:0;box-shadow:22px 0 0 transparent,-22px 0 0 transparent;transition:background-color 120ms ease,box-shadow 120ms ease}
 .segment-editor .tier-slice:hover,.segment-editor .tier-slice[aria-pressed=true]{background:transparent;box-shadow:22px 0 0 transparent,-22px 0 0 transparent}
 .segment-editor .tier-slice svg{display:block;width:min(var(--tier-width),var(--tier-relative-width));height:var(--tier-height);overflow:visible;flex-shrink:0}
-.segment-editor .tier-slice[aria-pressed=true] svg{outline:2px solid var(--tier-color);outline-offset:4px;border-radius:6px 6px 0 0}
 .segment-editor .tier-slice:focus-visible{outline:2px solid #8172c5;outline-offset:1px}
 .segment-editor .tier-slice[role=img]{cursor:default}
 .segment-editor .tier-slice:hover,.segment-editor .tier-slice:focus-visible{z-index:10;background:#e1f1ff;box-shadow:22px 0 0 #e1f1ff,-22px 0 0 #e1f1ff}

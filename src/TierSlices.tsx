@@ -29,7 +29,7 @@ export function TierSlices({designs,selectedIndex,onSelect,editable=true}:{desig
       const width=widths[position],height=PROPORTIONS[position][1],color=THEME_COLORS[design.theme]||THEME_COLORS.contemporary;
       const details=`${BUILDING_THEMES[design.theme].label} · ${SEGMENT_STYLES[design.style]}`;
       const Element=editable?'button':'div';
-      return <Element key={index} className="tier-slice" role={editable?undefined:'img'} aria-pressed={editable?index===selectedIndex:undefined} aria-haspopup={editable?'dialog':undefined}
+      return <Element key={index} className="tier-slice" role={editable?undefined:'img'} aria-pressed={editable?index===selectedIndex:undefined} aria-expanded={editable?index===selectedIndex:undefined}
         aria-label={`${editable?'Customize tier':'Tier'} ${index+1}, ${TIERS[index].name}, ${details}`}
         style={{'--tier-width':`${width}px`,'--tier-relative-width':`${width/bottomWidth*100}%`,'--tier-height':`${height}px`,'--tier-color':color} as CSSProperties} onClick={editable?()=>onSelect(index):undefined}>
         <svg viewBox="0 0 320 72" preserveAspectRatio="none" aria-hidden="true"><path fill={color} vectorEffect="non-scaling-stroke" d={silhouette(hasShoulder(position))}/></svg>
