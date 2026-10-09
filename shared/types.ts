@@ -6,6 +6,7 @@ export interface Building {
   is_demo: number; x: number; z: number; level: number; xp:number; bricks:number|null; segments:string; likes:number;
   style: Style; color: Color; commits: number; prs: number; reviews: number;
   synced_at: string | null; updated_at: string; invited_by?: string | null; invite_degree?: number;
+  inviter_x?:number|null; inviter_z?:number|null;
 }
 export interface Bootstrap {
   buildings: Building[]; me: string | null; demo: boolean; githubConfigured: boolean;

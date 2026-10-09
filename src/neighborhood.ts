@@ -1,10 +1,9 @@
 import type { Building } from '../shared/types';
 import { plotPosition, PLOT_SPACING } from '../shared/world';
-import { plotPlan } from '../shared/plots';
+import { plotPlan, placementPlan } from '../shared/plots';
 import { plannedStreet, boundaryStreet, junctionStreets, parcelOutline, type PlannedStreet, type PlannedNode } from '../shared/streets';
 import { PUBLIC_PROJECTS, projectBoundary } from '../shared/projects';
 import { MAX_LEVEL } from '../shared/progression';
-import { connectStreetPlans } from '../shared/streetRoutes';
 
 export const SETTLEMENT_THRESHOLDS={suburban:.25,urban:.72};
 export const SETTLEMENT_WEIGHTS={density:.45,levels:.55};
@@ -57,7 +56,13 @@ export function streetNetwork(buildings:Building[],densityAt:(x:number,z:number)
     roads.set(plan.key,{...plan,densities:[start,middle,end]});
     plan.nodes.forEach((node,i)=>junctions.set(node.key,{...node,density:i===0?start:end}));
   };
-  for(const building of buildings)for(const road of plotPlan(building.x,building.z).roads)add(road);
+  const residents=new Map(buildings.map(b=>[b.id,b]));
+  for(const building of buildings){
+    const inviter=building.inviter_x!=null&&building.inviter_z!=null?{x:building.inviter_x,z:building.inviter_z}:residents.get(building.invited_by||'');
+    const plan=inviter?placementPlan(inviter,building.x,building.z):null;
+    for(const road of plotPlan(building.x,building.z).roads)add(road);
+    for(const road of plan?.accessRoads||[])add(road);
+  }
   // Public sites retain their boundary streets, and use legal planned links to
   // reach the city. A route cannot restore a deliberately absent T/dead-end arm.
   for(const project of PUBLIC_PROJECTS){
@@ -90,9 +95,6 @@ export function streetNetwork(buildings:Building[],densityAt:(x:number,z:number)
       key=step.parent;
     }
   }
-  // Route disconnected occupied areas through their shared street blueprint.
-  // This also applies when a single new resident is simulated for a preview.
-  for(const road of connectStreetPlans(roads.values()).values())add(road);
   return {roads,junctions};
 }
 

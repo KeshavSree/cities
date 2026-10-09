@@ -22,6 +22,8 @@ const QUERY = `SELECT u.id, u.username, u.name, u.bio, u.avatar, u.github_url, u
   (SELECT COUNT(*) FROM tower_likes WHERE tower_id=u.id) likes,
   COALESCE(m.commits, 0) commits, COALESCE(m.prs, 0) prs, COALESCE(m.reviews, 0) reviews, m.synced_at,
   (SELECT i.inviter_id FROM invitations i WHERE i.used_by=u.id) invited_by,
+  (SELECT parent.x FROM invitations i JOIN buildings parent ON parent.user_id=i.inviter_id WHERE i.used_by=u.id) inviter_x,
+  (SELECT parent.z FROM invitations i JOIN buildings parent ON parent.user_id=i.inviter_id WHERE i.used_by=u.id) inviter_z,
   ((SELECT COUNT(*) FROM invitations i WHERE i.inviter_id=u.id AND i.used_by IS NOT NULL) +
     CASE WHEN EXISTS(SELECT 1 FROM invitations i WHERE i.used_by=u.id) THEN 1 ELSE 0 END) invite_degree
   FROM buildings b JOIN users u ON b.user_id=u.id LEFT JOIN metrics m ON m.user_id=u.id`;

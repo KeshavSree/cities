@@ -1,4 +1,4 @@
-import { GRID_FORK, plotPosition, streetGrid, worldHash } from './world';
+import { GRID_FORK, GRID_TRANSITION_START, plotPosition, streetGrid, worldHash } from './world';
 import { isReservedPlot } from './projects';
 
 export const AREA_WIDTH=4,AREA_DEPTH=3,AREA_CAPACITY=AREA_WIDTH*AREA_DEPTH;
@@ -10,9 +10,16 @@ export interface PlannedStreet{
   key:string;x:number;z:number;horizontal:boolean;points:[Point,Point];nodes:[PlannedNode,PlannedNode];kind:'street'|'turning-ring'|'turning-link';
 }
 const modulo=(n:number,d:number)=>(n%d+d)%d;
+export const STREET_BRANCH_SEED=7113;
+const branchRandom=(ax:number,az:number)=>worldHash(ax+STREET_BRANCH_SEED,az-STREET_BRANCH_SEED);
+// Preserve the already established starter blueprint. New planning areas use
+// coordinate-seeded branch choices, so loading or occupying them cannot reroll.
+const starterArea=(ax:number,az:number)=>ax*AREA_WIDTH-2<=GRID_TRANSITION_START&&ax*AREA_WIDTH+1>=-GRID_TRANSITION_START&&az*AREA_DEPTH-1<=GRID_TRANSITION_START&&az*AREA_DEPTH+1>=-GRID_TRANSITION_START;
 export function areaLayout(ax:number,az:number):Layout{
   if(branchNodes(ax,az).length)return 'y-junction';
-  return (['t-junction','crossroads','cul-de-sac','crossroads','crossroads'] as const)[modulo(ax+2*az,5)];
+  if(starterArea(ax,az))return (['t-junction','crossroads','cul-de-sac','crossroads','crossroads'] as const)[modulo(ax+2*az,5)];
+  const random=branchRandom(ax,az);
+  return random<.2?'t-junction':random<.35?'cul-de-sac':'crossroads';
 }
 /** Forks belong to the conflict between square grids, not every regular block. */
 function branchNodes(ax:number,az:number){
@@ -20,8 +27,9 @@ function branchNodes(ax:number,az:number){
   const candidates=[[ax*AREA_WIDTH,az*AREA_DEPTH+1],[ax*AREA_WIDTH+1,az*AREA_DEPTH]];
   // One fork location per interface area leaves the adjoining square grids
   // intact. Pick a stable corner; never squeeze a lot at both opposite corners.
-  return candidates.filter(([x,z])=>streetGrid(x-.5,z-.5).interface)
-    .slice(0,1);
+  const eligible=candidates.filter(([x,z])=>streetGrid(x-.5,z-.5).interface);
+  if(!starterArea(ax,az)&&branchRandom(ax,az)<.5)eligible.reverse();
+  return eligible.slice(0,1);
 }
 /** Public project boundaries stay intact. */
 export function junctionLayout(x:number,z:number):Layout{

@@ -21,51 +21,38 @@ function links(key:string){
   adjacency.set(key,roads);return roads;
 }
 
-function route(sources:Set<string>,targets:Set<string>,maxSteps:number){
-  const queue=[...sources].sort(),seen=new Map(queue.map(key=>[key,{depth:0,parent:null as string|null,road:null as PlannedStreet|null}]));
-  for(let i=0;i<queue.length;i++){
-    const key=queue[i],step=seen.get(key)!;
-    if(targets.has(key)){
-      const path:PlannedStreet[]=[];
-      for(let cursor=key;seen.get(cursor)!.parent;){const entry=seen.get(cursor)!;path.push(entry.road!);cursor=entry.parent!;}
-      return path.reverse();
-    }
-    if(step.depth>=maxSteps)continue;
+interface Step{depth:number;parent:string|null;road:PlannedStreet|null;}
+interface Approach{seen:Map<string,Step>;queue:string[];cursor:number;}
+const approaches=new Map<string,Approach>();
+/** Precompute a bounded expansion from the existing plot's street nodes once.
+ * Every candidate reuses this tree, before occupancy or rendering is involved.
+ */
+export function plannedApproach(existing:PlannedStreet[],frontage:PlannedStreet,maxSteps=32){
+  const sources=[...new Set(existing.flatMap(r=>r.nodes.map(n=>n.key)))].sort(),cacheKey=`${maxSteps}:${sources.join('|')}`;
+  let approach=approaches.get(cacheKey);
+  if(!approach){
+    approach={queue:[...sources],cursor:0,seen:new Map<string,Step>(sources.map(key=>[key,{depth:0,parent:null,road:null}]))};
+    if(approaches.size>=16)approaches.delete(approaches.keys().next().value!);
+    approaches.set(cacheKey,approach);
+  }
+  const {seen,queue}=approach,targets=frontage.nodes.map(n=>n.key);
+  // Expand only as far as the next requested candidate; retain the frontier
+  // for later slots so preview generation does not scan the entire region.
+  while(approach.cursor<queue.length){
+    const depth=Math.min(...targets.map(key=>seen.get(key)?.depth??Infinity));
+    // Finish the preceding layer so equal-length endpoint ties resolve the
+    // same way regardless of which other candidate was requested first.
+    if(seen.get(queue[approach.cursor])!.depth>=depth)break;
+    const key=queue[approach.cursor++],step=seen.get(key)!;if(step.depth>=maxSteps)continue;
     for(const road of links(key)){
       const next=road.nodes.find(n=>n.key!==key)!.key;if(seen.has(next))continue;
       seen.set(next,{depth:step.depth+1,parent:key,road});queue.push(next);
     }
   }
-  return [];
-}
-
-/** Activate short planned approaches between occupied road components. This
- * connects growth across the transition without paving the unused grid.
- */
-export function connectStreetPlans(plans:Iterable<PlannedStreet>,maxSteps=32){
-  const roads=new Map([...plans].map(road=>[road.key,road])),neighbors=new Map<string,Set<string>>();
-  const add=(road:PlannedStreet)=>{
-    roads.set(road.key,road);
-    const [a,b]=road.nodes;
-    for(const [from,to] of [[a.key,b.key],[b.key,a.key]]){if(!neighbors.has(from))neighbors.set(from,new Set());neighbors.get(from)!.add(to);}
-  };
-  roads.forEach(add);
-  const component=(start:string)=>{
-    const found=new Set([start]),queue=[start];
-    for(let i=0;i<queue.length;i++)for(const key of neighbors.get(queue[i])||[])if(!found.has(key)){found.add(key);queue.push(key);}
-    return found;
-  };
-  const visited=new Set<string>(),components:Set<string>[]=[];
-  for(const key of [...neighbors.keys()].sort())if(!visited.has(key)){
-    const nodes=component(key);nodes.forEach(n=>visited.add(n));components.push(nodes);
-  }
-  components.sort((a,b)=>b.size-a.size);
-  if(!components.length)return roads;
-  const anchor=components[0].values().next().value!;let connected=components[0];
-  for(const nodes of components.slice(1)){
-    if([...nodes].some(n=>connected.has(n)))continue;
-    route(nodes,connected,maxSteps).forEach(add);
-    connected=component(anchor);
-  }
-  return roads;
+  const target=frontage.nodes.map(n=>n.key).filter(key=>seen.has(key))
+    .sort((a,b)=>seen.get(a)!.depth-seen.get(b)!.depth||a.localeCompare(b))[0];
+  if(!target)return null;
+  const path:PlannedStreet[]=[];
+  for(let cursor=target;seen.get(cursor)!.parent;){const entry=seen.get(cursor)!;path.push(entry.road!);cursor=entry.parent!;}
+  return path.reverse();
 }
