@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { BUILDING_THEMES, TIERS, type SegmentDesign } from '../shared/progression';
+import { BUILDING_THEMES, SEGMENT_STYLES, TIERS, type SegmentDesign } from '../shared/progression';
 import './tier-slices.css';
 
 // UI-only proportions by visual position, from top to bottom. The single
@@ -27,9 +27,10 @@ export function TierSlices({designs,selectedIndex,onSelect,editable=true}:{desig
   return <div className="tier-slices" aria-label={editable?'Select a building tier':'Building tiers'}>
     {layers.map(({design,index},position)=>{
       const width=widths[position],height=PROPORTIONS[position][1],color=THEME_COLORS[design.theme]||THEME_COLORS.contemporary;
+      const details=`${BUILDING_THEMES[design.theme].label} · ${SEGMENT_STYLES[design.style]}`;
       const Element=editable?'button':'div';
       return <Element key={index} className="tier-slice" role={editable?undefined:'img'} aria-pressed={editable?index===selectedIndex:undefined} aria-haspopup={editable?'dialog':undefined}
-        aria-label={`${editable?'Customize tier':'Tier'} ${index+1}, ${TIERS[index].name}, ${BUILDING_THEMES[design.theme].label}`}
+        aria-label={`${editable?'Customize tier':'Tier'} ${index+1}, ${TIERS[index].name}, ${details}`} title={details}
         style={{'--tier-width':`${width}px`,'--tier-relative-width':`${width/bottomWidth*100}%`,'--tier-height':`${height}px`,'--tier-color':color} as CSSProperties} onClick={editable?()=>onSelect(index):undefined}>
         <svg viewBox="0 0 320 72" preserveAspectRatio="none" aria-hidden="true"><path fill={color} d={silhouette(hasShoulder(position))}/></svg>
       </Element>;
