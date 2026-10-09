@@ -5,8 +5,7 @@ import { VIEW_RADIUS } from '../shared/world';
 import { availablePlotPlans, previewPlotPlans } from '../shared/plots';
 import { reward, projects, processConstruction } from './economy';
 import { REWARDS, MAX_LEVEL, TIERS, SEGMENT_COST, SEGMENT_STYLES, BUILDING_THEMES, tierStartLevel, xpAtLevel } from '../shared/progression';
-import { PROJECT_RADIUS } from '../shared/projects';
-import { plotPosition } from '../shared/world';
+import { canContributeToProject } from '../shared/projects';
 import { BIO_MAX_LENGTH } from '../shared/profile';
 import { avatarResponse, saveAvatar, PhotoError } from './profile';
 
@@ -378,8 +377,8 @@ export default {
         if(!Number.isSafeInteger(amount)||amount<1||amount>10000||!/^[a-zA-Z0-9-]{16,64}$/.test(requestId))throw new ApiError('Choose a valid brick contribution.');
         const project=(await projects(env.DB,user.id)).find(p=>p.id===data.project);
         if(!project)throw new ApiError('Project not found.',404);
-        const own=await building(env,user.id),a=plotPosition(own.x,own.z),b=plotPosition(project.x,project.z);
-        if(Math.hypot(a.x-b.x,a.z-b.z)>PROJECT_RADIUS)throw new ApiError('This project is outside your neighborhood.');
+        const own=await building(env,user.id);
+        if(!canContributeToProject(own,project))throw new ApiError('This project is outside your neighborhood.');
         const id=`${user.id}:${requestId}`;
         const receipt=await env.DB.prepare('INSERT OR IGNORE INTO project_contributions(id,project_id,user_id,amount) SELECT ?,?,?,? WHERE (SELECT bricks FROM buildings WHERE user_id=?)>=? AND (SELECT funded+?<=goal FROM public_projects WHERE id=?) RETURNING id')
           .bind(id,project.id,user.id,amount,user.id,amount,amount,project.id).first();

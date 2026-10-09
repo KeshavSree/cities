@@ -1,8 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Armchair, Check, Columns3, HelpCircle, Landmark, Package, TreePine } from 'lucide-react';
 import type { Building, PublicProject } from '../shared/types';
-import { PROJECT_RADIUS } from '../shared/projects';
-import { plotPosition } from '../shared/world';
+import { canContributeToProject } from '../shared/projects';
 import { REWARDS } from '../shared/progression';
 import './level-progress.css';
 
@@ -17,8 +16,7 @@ export function ProjectBoard({project:p,me,busy,onContribute}:{project:PublicPro
     document.addEventListener('pointerdown',outside);document.addEventListener('keydown',escape);
     return()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape);};
   },[helpOpen]);
-  const own=me?plotPosition(me.x,me.z):null,center=plotPosition(p.x,p.z);
-  const nearby=own?Math.hypot(own.x-center.x,own.z-center.z)<=PROJECT_RADIUS:false;
+  const nearby=me?canContributeToProject(me,p):false;
   const completed=p.funded>=p.goal,remaining=Math.max(0,p.goal-p.funded),ratio=Math.min(1,p.funded/p.goal);
   const maximum=Math.min(remaining,me?.bricks??0),amount=draft??Math.min(25,maximum);
   const valid=typeof amount==='number'&&Number.isInteger(amount)&&amount>0&&amount<=maximum;
