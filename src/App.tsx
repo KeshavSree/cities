@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { ArrowUpRight, Heart, Landmark, Bug, Check, Compass, Copy, Gift, Hammer, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, MapPin, Minus, Plus, Search, Sparkles, Users, X } from 'lucide-react';
 import type { SceneHandle } from './CityScene';
 import { api } from './api';
-import { COLORS, STYLES, COLOR_COST, STYLE_COST, type Bootstrap, type Building, type Color, type Style } from '../shared/types';
+import { COLORS, type Bootstrap, type Building, type Color } from '../shared/types';
 import { VIEW_RADIUS } from '../shared/world';
 import { lightingAt } from './lighting';
 import { TowerDrawer } from './TowerDrawer';
@@ -132,7 +132,6 @@ export default function App() {
   const closeDrawer=()=>{setDrawerOpen(false);document.querySelector<HTMLButtonElement>('.drawer-handle')?.focus();};
   const focusMe=()=>{if(me)select(me);else setModal('login');};
   const action=async(key:string,fn:()=>Promise<void>)=>{if(busy)return;setBusy(key);try{await fn();}catch(e){notify(e instanceof Error?e.message:'Please try again.',true);}finally{setBusy('');}};
-  const customize=(kind:'style'|'color',value:Style|Color)=>action(`${kind}-${value}`,async()=>{const result=await api<{building:Building}>('/customize',{kind,value});update(result.building);notify(kind==='style'?'A fresh silhouette.':'A fresh coat of color.');});
   const daily=()=>action('daily',async()=>{const result=await api<{building:Building;reward:number}>('/daily',{});update(result.building);setSnapshot(prev=>prev?{...prev,claimedToday:true}:prev);notify(`Welcome back. ${result.reward} bricks and ${REWARDS.dailyXp} XP earned.`);});
   const saveSegment=(segment:number,color:Color,style:SegmentStyle,theme:BuildingTheme)=>action('segment',async()=>{const r=await api<{building:Building}>('/segments',{segment,color,style,theme});update(r.building);notify('Segment updated.');});
   const like=()=>tower&&action('like',async()=>{const r=await api<{building:Building}>('/like',{tower:tower.id});update(r.building);setSnapshot(prev=>prev?{...prev,likedIds:[...prev.likedIds,tower.id]}:prev);notify(`You liked this tower. Its owner earned ${REWARDS.like} XP.`);});
@@ -193,12 +192,6 @@ export default function App() {
           <div className="activity-caption"><span>{tower.is_demo?'Decorative activity preview':'Contribution counts from GitHub'}</span>{own && !tower.is_demo && <button disabled={Boolean(busy)} onClick={()=>action('sync',async()=>{const r=await api<{building:Building}>('/sync',{});update(r.building);notify('Your GitHub activity is up to date.');})}>{busy==='sync'?'Syncing…':'Sync activity'}</button>}</div>
         </div>:<div id="panel-design" role="tabpanel" aria-labelledby="tab-design" className="design-panel">
           <SegmentEditor key={tower.id} building={tower} own={own} busy={Boolean(busy)} onSave={saveSegment}/>
-          <div className="section-heading"><h3>Overall finish</h3><span>{own?`${STYLE_COST} bricks`:'Current architecture'}</span></div>
-          <div className="style-options">{(Object.keys(STYLES) as Style[]).map(style=><button key={style} className={`style-option ${tower.style===style?'selected':''}`} disabled={!own||Boolean(busy)||tower.style===style||(tower.bricks??0)<STYLE_COST} onClick={()=>customize('style',style)}><span className={`style-mini ${style}`}><i/><i/><i/></span><span>{STYLES[style].label}</span>{tower.style===style && <Check size={12}/>}</button>)}</div>
-          <p className="style-description">{STYLES[tower.style].description}</p>
-          <div className="section-heading"><h3>Facade color</h3><span>{own?`${COLOR_COST} bricks`:COLORS[tower.color].label}</span></div>
-          <div className="color-options">{(Object.keys(COLORS) as Color[]).map(color=><button key={color} aria-label={COLORS[color].label} title={COLORS[color].label} aria-pressed={tower.color===color} style={{background:COLORS[color].hex}} disabled={!own||Boolean(busy)||tower.color===color||(tower.bricks??0)<COLOR_COST} onClick={()=>customize('color',color)}>{tower.color===color && <Check size={18}/>}</button>)}</div>
-          <div className="design-note"><Leaf size={17}/><p>A shape that feels like you.<br/>Your work makes it grow.</p></div>
           {own && <div className="resource-row"><span><Sparkles size={16}/> Available bricks</span><strong>{(tower.bricks??0).toLocaleString()}</strong></div>}
         </div>}
         <footer className="inspector-footer"><MapPin size={13}/>Plot {tower.x}, {tower.z}<span>{tierForLevel(tower.level).name}</span>{own && <button className="account-link" onClick={()=>setModal('login')}>Account</button>}</footer>
