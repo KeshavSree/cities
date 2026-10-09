@@ -3,9 +3,8 @@ import { BUILDING_THEMES, TIERS, type SegmentDesign } from '../shared/progressio
 import './tier-slices.css';
 
 // UI-only proportions: consistent for every resident, independent of their
-// facade customization. Ascending tiers taper in width; the single fill
-// identifies the saved theme.
-const PROPORTIONS=[[264,24],[250,28],[236,30],[224,34],[212,38],[200,42],[188,44],[176,46],[164,48],[152,50]];
+// facade customization. The single fill identifies the saved theme.
+const PROPORTIONS=[[48,24],[76,28],[112,30],[146,34],[176,38],[204,42],[220,44],[236,46],[250,48],[264,50]];
 export const THEME_COLORS:Record<string,string>={contemporary:'#98aaa2',earthen:'#bd8666',deco:'#bca36c',metabolism:'#789c9f',nocturne:'#8c78aa'};
 function silhouette(stacked:boolean){
   return stacked
