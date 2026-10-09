@@ -9,7 +9,7 @@ import { TowerDrawer } from './TowerDrawer';
 import { ScoreBreakdown } from './ScoreBreakdown';
 import { neighborhoodScores } from './neighborhood';
 import { upcomingPlotPreviews } from './plotPreview';
-import { LevelProgress, ProgressionPanel } from './ProgressionPanel';
+import { LevelProgress } from './ProgressionPanel';
 import { SegmentEditor } from './SegmentEditor';
 import { ProjectDetails } from './ProjectDetails';
 import { MAX_LEVEL, LEVELS_PER_TIER, TIERS, REWARDS, tierForLevel, type BuildingTheme, type SegmentStyle } from '../shared/progression';
@@ -185,7 +185,6 @@ export default function App() {
         <LevelProgress building={tower}/>
         <div className="tower-panel">
           <SegmentEditor key={tower.id} building={tower} own={own} busy={Boolean(busy)} onSave={saveSegment}/>
-          <ProgressionPanel building={tower} own={own}/>
           {!tower.is_demo&&<div className="section-heading"><h3>GitHub activity</h3><span>Past year</span></div>}
           <div className="activity-grid commits-only"><div><strong>{compact(tower.commits)}</strong><span>Commits</span></div></div>
           {tower.is_demo ? <ActivityBlocks seed={tower.commits}/> : <div className="verified-activity"><Check size={15}/><span>Activity fetched directly from GitHub.<br/>Only newly credited commits earn XP and bricks.</span></div>}

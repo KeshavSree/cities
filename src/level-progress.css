@@ -1,9 +1,14 @@
-.level-progress{margin:0 23px 18px}
+.level-progress{position:relative;margin:0 23px 18px}
 .level-progress-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}
 .level-progress-heading strong{font-size:14px;font-weight:650;color:#344b55}
 .level-progress-heading>span{font-size:10px;color:#8799a2;font-variant-numeric:tabular-nums}
 .level-progress-track{height:6px;overflow:hidden;border-radius:4px;background:#eeeaf7}
 .level-progress-track>span{display:block;height:100%;border-radius:inherit;background:#a89bdd;transition:width .2s ease}
-.tower-panel>.progression-panel{margin-top:0;padding-top:0;border-top:0}
-.progression-panel>.xp-sources:first-child{margin-top:0}
 .tower-panel{padding:0 22px 15px}
+.level-progress-title{display:flex;align-items:center;gap:6px;min-width:0}
+.growth-info-button{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:22px;height:22px;color:#8a9ba5}
+.growth-info-button:hover,.growth-info-button[aria-expanded=true]{color:#7864bf}
+.growth-info-button:focus-visible{outline:2px solid #a89bdd;outline-offset:2px}
+.growth-info-popover{position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:30;padding:16px;background:#fff;border:1px solid #dfe6e9;border-radius:8px;box-shadow:0 6px 24px #293f4925}
+.growth-info-popover h3{font-size:12px;margin-bottom:10px;color:#344b55}
+.growth-info-popover p{font-size:11px;line-height:1.7;color:#7b8f99;margin:5px 0}
