@@ -4,3 +4,5 @@
 .level-progress-heading>span{font-size:10px;color:#8799a2;font-variant-numeric:tabular-nums}
 .level-progress-track{height:6px;overflow:hidden;border-radius:4px;background:#eeeaf7}
 .level-progress-track>span{display:block;height:100%;border-radius:inherit;background:#a89bdd;transition:width .2s ease}
+.overview-panel>.progression-panel{margin-top:0;padding-top:0;border-top:0}
+.progression-panel>.brick-balance:first-child{margin-top:0;padding-top:0;border-top:0}
