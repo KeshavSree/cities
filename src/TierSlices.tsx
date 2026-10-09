@@ -14,7 +14,7 @@ function silhouette(stacked:boolean){
     ?'M0 72V20Q0 12 8 12H24Q32 12 32 8V4Q32 0 36 0H284Q288 0 288 4V8Q288 12 296 12H312Q320 12 320 20V72Z'
     :'M0 72V8Q0 0 8 0H312Q320 0 320 8V72Z';
 }
-export function TierSlices({designs,selectedIndex,onSelect}:{designs:SegmentDesign[];selectedIndex:number;onSelect:(index:number)=>void}){
+export function TierSlices({designs,selectedIndex,onSelect,editable=true}:{designs:SegmentDesign[];selectedIndex:number;onSelect:(index:number)=>void;editable?:boolean}){
   // Tower tiers count upward from the base; display the highest one first.
   const layers=designs.map((design,index)=>({design,index})).reverse();
   const widths=designs.map((_,index)=>PROPORTIONS[index][0]);
@@ -24,14 +24,15 @@ export function TierSlices({designs,selectedIndex,onSelect}:{designs:SegmentDesi
     widths[index]=Math.min(widths[index],widths[index+1]*(hasShoulder(index+1)?SHOULDER_WIDTH:0.8));
   }
   const bottomWidth=widths[widths.length-1];
-  return <div className="tier-slices" aria-label="Select a building tier">
+  return <div className="tier-slices" aria-label={editable?'Select a building tier':'Building tiers'}>
     {layers.map(({design,index},position)=>{
       const width=widths[position],height=PROPORTIONS[position][1],color=THEME_COLORS[design.theme]||THEME_COLORS.contemporary;
-      return <button key={index} className="tier-slice" aria-pressed={index===selectedIndex} aria-haspopup="dialog"
-        aria-label={`Customize tier ${index+1}, ${TIERS[index].name}, ${BUILDING_THEMES[design.theme].label}`}
-        style={{'--tier-width':`${width}px`,'--tier-relative-width':`${width/bottomWidth*100}%`,'--tier-height':`${height}px`,'--tier-color':color} as CSSProperties} onClick={()=>onSelect(index)}>
+      const Element=editable?'button':'div';
+      return <Element key={index} className="tier-slice" role={editable?undefined:'img'} aria-pressed={editable?index===selectedIndex:undefined} aria-haspopup={editable?'dialog':undefined}
+        aria-label={`${editable?'Customize tier':'Tier'} ${index+1}, ${TIERS[index].name}, ${BUILDING_THEMES[design.theme].label}`}
+        style={{'--tier-width':`${width}px`,'--tier-relative-width':`${width/bottomWidth*100}%`,'--tier-height':`${height}px`,'--tier-color':color} as CSSProperties} onClick={editable?()=>onSelect(index):undefined}>
         <svg viewBox="0 0 320 72" preserveAspectRatio="none" aria-hidden="true"><path fill={color} d={silhouette(hasShoulder(position))}/></svg>
-      </button>;
+      </Element>;
     })}
   </div>;
 }

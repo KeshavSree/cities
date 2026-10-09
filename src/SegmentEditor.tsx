@@ -10,10 +10,10 @@ export function SegmentEditor({building,own,busy,onSave}:{building:Building;own:
   const designs=segmentDesigns(building),index=Math.min(selectedIndex,designs.length-1);
   const design=designs[index],color=draftColor??design.color,style=draftStyle??design.style,theme=draftTheme??design.theme;
   const different=color!==design.color||style!==design.style||theme!==design.theme;
-  return <section className="segment-editor" aria-label="Customize building segments">
+  return <section className="segment-editor" aria-label={own?"Customize building segments":"Building segments"}>
     <div className="section-heading"><h3>Building segments</h3></div>
-    <TierSlices designs={designs.map((saved,i)=>menuOpen&&i===index?{color,style,theme}:saved)} selectedIndex={menuOpen?index:-1} onSelect={i=>{setIndex(i);setColor(null);setStyle(null);setTheme(null);setMenuOpen(true);}}/>
-    {menuOpen&&<SegmentMenu title={`Tier ${index+1}`} onClose={closeMenu}>
+    <TierSlices editable={own} designs={designs.map((saved,i)=>own&&menuOpen&&i===index?{color,style,theme}:saved)} selectedIndex={own&&menuOpen?index:-1} onSelect={i=>{if(!own)return;setIndex(i);setColor(null);setStyle(null);setTheme(null);setMenuOpen(true);}}/>
+    {own&&menuOpen&&<SegmentMenu title={`Tier ${index+1}`} onClose={closeMenu}>
     <label className="segment-label">Tier {index+1} theme<select aria-label={`Tier ${index+1} theme`} value={theme} disabled={!own||busy} onChange={e=>setTheme(e.target.value as BuildingTheme)}>{Object.entries(BUILDING_THEMES).map(([id,t])=><option key={id} value={id}>{t.label}</option>)}</select></label><p className="growth-footnote">{BUILDING_THEMES[theme].description} More themes will be available here.</p>
     <label className="segment-label">Facade color</label><div className="color-options">{(Object.keys(COLORS) as Color[]).map(c=><button key={c} aria-label={`Segment ${COLORS[c].label}`} title={COLORS[c].label} aria-pressed={color===c} disabled={!own||busy} style={{background:COLORS[c].hex}} onClick={()=>setColor(c)}/>)}</div>
     <label className="segment-label">Details</label><div className="segment-styles">{(Object.keys(SEGMENT_STYLES) as SegmentStyle[]).map(s=><button key={s} aria-pressed={style===s} disabled={!own||busy} onClick={()=>setStyle(s)}>{SEGMENT_STYLES[s]}</button>)}</div>

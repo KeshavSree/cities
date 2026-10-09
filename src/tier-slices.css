@@ -4,3 +4,4 @@
 .segment-editor .tier-slice svg{display:block;width:min(var(--tier-width),var(--tier-relative-width));height:var(--tier-height);overflow:visible;flex-shrink:0}
 .segment-editor .tier-slice[aria-pressed=true] svg{outline:2px solid var(--tier-color);outline-offset:4px;border-radius:6px 6px 0 0}
 .segment-editor .tier-slice:focus-visible{outline:2px solid #8172c5;outline-offset:1px}
+.segment-editor .tier-slice[role=img]{cursor:default}
