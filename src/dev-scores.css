@@ -6,7 +6,6 @@
 .building-score[data-settlement=rural]{border-color:#b4ce9c}
 .building-score.is-selected{background:#fff;color:#293e47;border-color:#fff;font-weight:700}
 .plot-preview-label{color:#b6edf0;border-color:#99d4db;background:#203d46e0}
-.plot-preview-legend{position:absolute;left:28px;top:98px;max-width:320px;font-size:10px;line-height:1.6;color:#d5edef;background:#233b43cc;padding:6px 10px;pointer-events:none}
 .score-breakdown{margin:6px 20px 0;padding:16px 0;border-top:1px solid #e7ecec;font-size:11px;font-variant-numeric:tabular-nums}
 .score-heading{display:flex;align-items:center;gap:7px;margin-bottom:14px}
 .score-heading h3{font-size:12px;font-weight:650;margin:0;flex:1}
