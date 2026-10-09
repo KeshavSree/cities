@@ -15,6 +15,8 @@
 .profile-photo-edit:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .profile-bio-row{display:flex;align-items:flex-start;gap:8px;margin:15px 22px 0}
 .profile-bio-row p{flex:1;min-width:0;font-size:11px;color:#819199;line-height:1.85;white-space:pre-wrap;overflow-wrap:anywhere}
+.profile-bio-row.is-empty{align-items:center;gap:4px}
+.profile-bio-row.is-empty p{flex:none}
 .bio-edit-button{width:24px;height:24px;display:grid;place-items:center;flex-shrink:0;color:#819199;border-radius:4px}
 .bio-edit-button:hover{color:var(--accent);background:#f0eef8}
 .bio-editor{margin:15px 22px 0}

@@ -68,7 +68,7 @@ export function ResidentProfile({ building, own, busy, onSaveBio, onUpload, name
     {editing && own ? <form className="bio-editor" onSubmit={event => { event.preventDefault(); void save(); }}>
       <textarea autoFocus aria-label="Your bio" maxLength={BIO_MAX_LENGTH} value={draft} disabled={busy || saving} onChange={event => setDraft(event.target.value)} />
       <div className="bio-editor-actions"><span>{draft.length}/{BIO_MAX_LENGTH}</span><button type="button" disabled={busy || saving} onClick={() => { setEditing(false); setError(''); }}>Cancel</button><button className="bio-save" type="submit" disabled={busy || saving}>{saving ? 'Saving…' : 'Save'}</button></div>
-    </form> : <div className="profile-bio-row"><p>{building.bio || (own ? 'Add a bio' : 'A new idea has moved into the neighborhood.')}</p>{own && <button type="button" className="bio-edit-button" aria-label="Edit your bio" title="Edit bio" disabled={busy || saving} onClick={() => { setDraft(building.bio); setEditing(true); setError(''); }}><Pencil size={14} /></button>}</div>}
+    </form> : <div className={`profile-bio-row ${own && !building.bio ? 'is-empty' : ''}`}><p>{building.bio || (own ? 'Add a bio' : 'A new idea has moved into the neighborhood.')}</p>{own && <button type="button" className="bio-edit-button" aria-label="Edit your bio" title="Edit bio" disabled={busy || saving} onClick={() => { setDraft(building.bio); setEditing(true); setError(''); }}><Pencil size={14} /></button>}</div>}
     {error && <p className="profile-error" role="alert">{error}</p>}
   </>;
 }
