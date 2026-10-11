@@ -4,9 +4,10 @@ import { seedDemo, ensureDemoConnections } from './demo';
 import { VIEW_RADIUS } from '../shared/world';
 import { availablePlotPlans, previewPlotPlans } from '../shared/plots';
 import { reward, projects, processConstruction } from './economy';
-import { REWARDS, MAX_LEVEL, TIERS, SEGMENT_COST, SEGMENT_STYLES, BUILDING_THEMES, tierStartLevel, xpAtLevel } from '../shared/progression';
+import { GITHUB_DAILY_COMMIT_LIMIT, REWARDS, MAX_LEVEL, TIERS, SEGMENT_STYLES, BUILDING_THEMES, DEFAULT_UNLOCKED_THEMES, tierStartLevel, xpAtLevel, type BuildingTheme } from '../shared/progression';
 import { canContributeToProject } from '../shared/projects';
 import { BIO_MAX_LENGTH } from '../shared/profile';
+import type { ContributionCalendar } from '../shared/github';
 import { avatarResponse, saveAvatar, PhotoError } from './profile';
 
 interface Env {
@@ -18,22 +19,21 @@ interface Env {
 interface User { id: string; github_id: string | null; username: string; name: string; is_demo: number; github_token: string | null; }
 const DAY = () => new Date().toISOString().slice(0, 10);
 const NOW = () => Math.floor(Date.now() / 1000);
-const QUERY = `SELECT u.id, u.username, u.name, u.bio, u.avatar, u.github_url, u.website, u.school,
+const QUERY = `SELECT u.id, u.username, u.name, u.bio, u.avatar, u.linkedin_url, u.github_url, u.website, u.school,
   u.is_demo, b.x, b.z, b.level, b.xp, b.bricks, b.segments, b.style, b.color, b.updated_at,
   (SELECT COUNT(*) FROM tower_likes WHERE tower_id=u.id) likes,
   COALESCE(m.commits, 0) commits, COALESCE(m.prs, 0) prs, COALESCE(m.reviews, 0) reviews, m.synced_at,
-  (SELECT i.inviter_id FROM invitations i WHERE i.used_by=u.id) invited_by,
-  (SELECT parent.x FROM invitations i JOIN buildings parent ON parent.user_id=i.inviter_id WHERE i.used_by=u.id) inviter_x,
-  (SELECT parent.z FROM invitations i JOIN buildings parent ON parent.user_id=i.inviter_id WHERE i.used_by=u.id) inviter_z,
-  ((SELECT COUNT(*) FROM invitations i WHERE i.inviter_id=u.id AND i.used_by IS NOT NULL) +
-    CASE WHEN EXISTS(SELECT 1 FROM invitations i WHERE i.used_by=u.id) THEN 1 ELSE 0 END) invite_degree
+  (SELECT i.inviter_id FROM invitation_redemptions r JOIN invitations i ON i.token=r.token WHERE r.user_id=u.id) invited_by,
+  (SELECT parent.x FROM invitation_redemptions r JOIN invitations i ON i.token=r.token JOIN buildings parent ON parent.user_id=i.inviter_id WHERE r.user_id=u.id) inviter_x,
+  (SELECT parent.z FROM invitation_redemptions r JOIN invitations i ON i.token=r.token JOIN buildings parent ON parent.user_id=i.inviter_id WHERE r.user_id=u.id) inviter_z,
+  ((SELECT COUNT(*) FROM invitation_redemptions r JOIN invitations i ON i.token=r.token WHERE i.inviter_id=u.id) +
+    CASE WHEN EXISTS(SELECT 1 FROM invitation_redemptions r WHERE r.user_id=u.id) THEN 1 ELSE 0 END) invite_degree
   FROM buildings b JOIN users u ON b.user_id=u.id LEFT JOIN metrics m ON m.user_id=u.id`;
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers });
-class ApiError extends Error { constructor(message: string, public status = 400) { super(message); } }
+class ApiError extends Error { constructor(message: string, public status = 400, public code?:string) { super(message); } }
 const cookieValue = (req: Request, name: string) => req.headers.get('Cookie')?.split(';').map(s => s.trim()).find(s => s.startsWith(`${name}=`))?.slice(name.length + 1);
 const cookie = (req: Request, name: string, value: string, age: number) => `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${new URL(req.url).protocol === 'https:' ? '; Secure' : ''}`;
-const roomName = (b: { x: number; z: number }) => `${Math.floor(b.x / 8)},${Math.floor(b.z / 8)}`;
 const uuid = () => crypto.randomUUID();
 const hex = (a: ArrayBuffer) => [...new Uint8Array(a)].map(v => v.toString(16).padStart(2, '0')).join('');
 const hash = async (s: string) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
@@ -67,16 +67,22 @@ async function building(env: Env, id: string) {
   if (!row) throw new ApiError('This tower could not be found.', 404);
   return row;
 }
+async function unlockedThemes(env:Env,id:string|null):Promise<BuildingTheme[]>{
+  if(!id)return DEFAULT_UNLOCKED_THEMES;
+  const rows=await env.DB.prepare('SELECT theme FROM theme_unlocks WHERE user_id=? ORDER BY created_at,theme').bind(id).all<{theme:string}>();
+  const joins=await env.DB.prepare('SELECT COUNT(DISTINCT r.user_id) count FROM invitation_redemptions r JOIN invitations i ON i.token=r.token JOIN users u ON u.id=r.user_id JOIN buildings b ON b.user_id=r.user_id WHERE i.inviter_id=? AND u.is_demo=0').bind(id).first<{count:number}>();
+  return [...new Set([...DEFAULT_UNLOCKED_THEMES,...((joins?.count??0)>=3?['cyberpunk' as BuildingTheme]:[]),...rows.results.map(r=>r.theme).filter((theme):theme is BuildingTheme=>Object.hasOwn(BUILDING_THEMES,theme))])];
+}
 // Local dev diagnostics may inspect balances. Public snapshots and events cannot.
 const visibleBuilding=(env:Env,b:Building,viewer:string|null=null):Building=>
   env.DEV_MODE==='true'||b.id===viewer?b:{...b,bricks:null};
 async function broadcast(env: Env, b: Building, extra: Record<string,unknown> = {}) {
-  const room = env.NEIGHBORHOODS.get(env.NEIGHBORHOODS.idFromName(roomName(b)));
-  await room.fetch('https://neighborhood.internal/update', { method: 'POST', body: JSON.stringify({ type: 'building.changed', building: visibleBuilding(env,b), ...extra }) });
+  const room = env.NEIGHBORHOODS.get(env.NEIGHBORHOODS.idFromName('city-hub-v1'));
+  await room.fetch('https://neighborhood.internal/update', { method: 'POST', body: JSON.stringify({ type: 'building.changed', building:{...b,bricks:null}, ownerBuilding:b, ...extra }) });
 }
 async function changed(env: Env, id: string, ctx: ExecutionContext, extra: Record<string,unknown> = {}) {
   const b = await building(env, id);
-  ctx.waitUntil(broadcast(env, b, extra));
+  await broadcast(env,b,extra);
   return b;
 }
 function settleConstruction(env:Env,ctx:ExecutionContext){
@@ -95,27 +101,52 @@ async function unseal(value: string, env: Env) {
   return new TextDecoder().decode(decoded);
 }
 const ghHeaders = (token: string) => ({ Authorization: `Bearer ${token}`, 'User-Agent': 'cities', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' });
-async function syncGithub(env: Env, user: User) {
-  if (user.is_demo) throw new ApiError('Demo activity is illustrative. Connect a real GitHub account to sync.');
-  if (!user.github_token) throw new ApiError('Reconnect your GitHub account to sync activity.', 401);
-  const old = await env.DB.prepare('SELECT synced_at FROM metrics WHERE user_id=?').bind(user.id).first<{ synced_at: string | null }>();
-  if (old?.synced_at && Date.now() - new Date(old.synced_at.replace(' ', 'T') + 'Z').getTime() < 15 * 60_000) throw new ApiError('Your activity is fresh. You can sync again in 15 minutes.', 429);
+// Calendar layout adapted from kdkasad/website; license in public/licenses/kasad-website.txt.
+async function fetchGithubActivity(env: Env, user: User) {
+  if (!user.github_token) throw new ApiError('Reconnect GitHub to load activity.',401,'GITHUB_RECONNECT_REQUIRED');
   const response = await fetch('https://api.github.com/graphql', {
-    method: 'POST', headers: ghHeaders(await unseal(user.github_token, env)),
-    body: JSON.stringify({ query: `query($login:String!) { user(login:$login) { contributionsCollection { totalCommitContributions } } }`, variables: { login: user.username } }),
+    method:'POST', headers:ghHeaders(await unseal(user.github_token,env)),
+    body:JSON.stringify({query:`query($login:String!) { user(login:$login) { contributionsCollection { totalCommitContributions contributionCalendar { totalContributions weeks { contributionDays { date contributionCount } } } } } }`,variables:{login:user.username}}),
   });
-  if (!response.ok) throw new ApiError('GitHub is unavailable or rate limited. Try syncing later.', 502);
-  const data = await response.json() as { data?: { user?: { contributionsCollection: { totalCommitContributions: number } } }; errors?: unknown[] };
-  const c = data.data?.user?.contributionsCollection;
-  if (!c || data.errors?.length) throw new ApiError('GitHub could not return your contribution counts. Reconnect or try later.', 502);
+  if(!response.ok){
+    console.warn('GitHub activity request rejected',JSON.stringify({status:response.status,remaining:response.headers.get('x-ratelimit-remaining'),reset:response.headers.get('x-ratelimit-reset')}));
+    if(response.status===401){
+      // Only clear the rejected token; a simultaneous reconnect may already have replaced it.
+      await env.DB.prepare('UPDATE users SET github_token=NULL WHERE id=? AND github_token=?').bind(user.id,user.github_token).run();
+      throw new ApiError('GitHub authorization is no longer valid. Reconnect GitHub to resume activity sync.',401,'GITHUB_RECONNECT_REQUIRED');
+    }
+    if(response.status===429||response.headers.get('x-ratelimit-remaining')==='0'||response.headers.has('retry-after'))throw new ApiError('GitHub has rate limited activity requests. Try again later.',429);
+    if(response.status===403)throw new ApiError('GitHub denied access to activity. Check your GitHub app permissions.',502);
+    throw new ApiError(`GitHub activity request failed (HTTP ${response.status}). Try again later.`,502);
+  }
+  const result=await response.json() as {data?:{user?:{contributionsCollection:{totalCommitContributions:number;contributionCalendar:ContributionCalendar}}};errors?:unknown[]};
+  const activity=result.data?.user?.contributionsCollection;
+  if(result.errors?.length||!activity||!Array.isArray(activity.contributionCalendar?.weeks))throw new ApiError('GitHub could not return activity. Reconnect your account or try later.',502);
+  return activity;
+}
+function calendarStatement(env: Env, id: string, calendar: ContributionCalendar) {
+  return env.DB.prepare("INSERT INTO github_calendars(user_id,calendar) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET calendar=excluded.calendar,fetched_at=datetime('now')").bind(id,JSON.stringify(calendar));
+}
+async function syncGithub(env: Env, user: User, automatic=false) {
+  if (user.is_demo) throw new ApiError('Demo activity is illustrative. Connect a real GitHub account to sync.');
+  if (!user.github_token) throw new ApiError('Reconnect GitHub to resume activity sync.',401,'GITHUB_RECONNECT_REQUIRED');
+  const old = await env.DB.prepare('SELECT synced_at FROM metrics WHERE user_id=?').bind(user.id).first<{ synced_at: string | null }>();
+  if (old?.synced_at && Date.now() - new Date(old.synced_at.replace(' ', 'T') + 'Z').getTime() < 15 * 60_000) {if(automatic)return;throw new ApiError('Your activity is fresh. You can sync again in 15 minutes.',429);}
+  const c = await fetchGithubActivity(env, user);
   const commits = c.totalCommitContributions;
   if(!Number.isSafeInteger(commits)||commits<0)throw new ApiError('GitHub returned an invalid commit count.',502);
   await env.DB.batch([
+    calendarStatement(env,user.id,c.contributionCalendar),
     env.DB.prepare(`INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description)
-      SELECT ?,user_id,'github',(?-credited_commits)*?,
-      CAST((?-credited_commits)*?/5 AS INTEGER),'Verified GitHub commits'
-      FROM metrics WHERE user_id=? AND ?>credited_commits`)
-      .bind(`github-commits:${user.id}:${commits}`,commits,REWARDS.commit,commits,REWARDS.commit,user.id,commits),
+      SELECT ?,user_id,'github',eligible*?,eligible*?,'Verified GitHub commits (daily cap)'
+      FROM (
+        SELECT user_id,MIN(?-credited_commits,MAX(0,?-(
+          SELECT COALESCE(SUM(xp),0)/? FROM xp_events
+          WHERE user_id=metrics.user_id AND source='github' AND date(created_at)=?
+        ))) eligible
+        FROM metrics WHERE user_id=? AND synced_at IS NOT NULL AND ?>credited_commits
+      ) WHERE eligible>0`)
+      .bind(`github-commits:${user.id}:${commits}`,REWARDS.commit,REWARDS.commitBricks,commits,GITHUB_DAILY_COMMIT_LIMIT,REWARDS.commit,DAY(),user.id,commits),
     env.DB.prepare(`UPDATE metrics SET commits=?, credited_commits=MAX(credited_commits, ?),
       synced_at=datetime('now') WHERE user_id=?`).bind(commits, commits, user.id),
   ]);
@@ -128,7 +159,7 @@ async function join(env: Env, profile: { id: number; login: string; name?: strin
     await env.DB.prepare(`UPDATE users SET github_token=?, username=?, name=?,
       bio=CASE WHEN bio_customized=1 THEN bio ELSE ? END,
       avatar=CASE WHEN EXISTS(SELECT 1 FROM profile_photos WHERE user_id=users.id) THEN avatar ELSE ? END,
-      github_url=? WHERE id=?`).bind(encrypted, profile.login, profile.name || profile.login, profile.bio || '', profile.avatar_url || null, profile.html_url || null, existing.id).run();
+      github_url=CASE WHEN github_url_customized=1 THEN github_url ELSE ? END WHERE id=?`).bind(encrypted, profile.login, profile.name || profile.login, profile.bio || '', profile.avatar_url || null, profile.html_url || null, existing.id).run();
     return existing.id;
   }
   if (env.FOUNDER_GITHUB_ID === String(profile.id)) {
@@ -140,84 +171,174 @@ async function join(env: Env, profile: { id: number; login: string; name?: strin
     ]);
     return id;
   }
-  const invitation = invite ? await env.DB.prepare('SELECT i.*, b.x, b.z FROM invitations i JOIN buildings b ON b.user_id=i.inviter_id WHERE i.token=? AND i.used_by IS NULL').bind(invite).first<{ x: number; z: number; inviter_id: string }>() : null;
+  const invitation = invite ? await env.DB.prepare("SELECT i.*, b.x, b.z FROM invitations i JOIN buildings b ON b.user_id=i.inviter_id WHERE i.token=?").bind(invite).first<{ x: number; z: number; inviter_id: string }>() : null;
   // The founding account must be explicitly configured server-side; never open public signups.
-  if (!invitation) throw new ApiError('A valid, unused invitation is required to join this city.', 403);
+  if (!invitation) throw new ApiError(invite?'This invitation is invalid.':'You have not been invited',403,invite?'INVALID_INVITATION':'NOT_INVITED');
   const id = uuid();
-  const occupied = new Set((await env.DB.prepare('SELECT x,z FROM buildings WHERE x BETWEEN ? AND ? AND z BETWEEN ? AND ?').bind(invitation.x - 12, invitation.x + 12, invitation.z - 12, invitation.z + 12).all<{ x: number; z: number }>()).results.map(p => `${p.x},${p.z}`));
-  let attempts = 0;
-  const plannedSlots=availablePlotPlans(invitation,occupied);
-  for (const {x,z} of plannedSlots) {
-    // A guard table's UNIQUE(token) is represented by the conditional claim below plus
-    // a NOT NULL assertion in the insert. A competing invite redemption rolls back the batch.
-    try {
-      await env.DB.batch([
-        env.DB.prepare(`INSERT INTO users(id, github_id, username, name, bio, avatar, github_url, website, github_token)
-          VALUES((SELECT ? WHERE EXISTS(SELECT 1 FROM invitations WHERE token=? AND used_by IS NULL)), ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, invite, String(profile.id), profile.login, profile.name || profile.login, profile.bio || '', profile.avatar_url || null, profile.html_url || null, /^https?:\/\//.test(profile.blog || '') ? profile.blog : null, encrypted),
-        env.DB.prepare('INSERT INTO buildings(user_id,x,z) VALUES(?,?,?)').bind(id, x, z),
-        env.DB.prepare('INSERT INTO metrics(user_id) VALUES(?)').bind(id),
-        env.DB.prepare('UPDATE invitations SET used_by=? WHERE token=? AND used_by IS NULL').bind(id, invite),
-        env.DB.prepare(`INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description) SELECT ?,inviter_id,'invite',?,0,'An invited resident joined' FROM invitations WHERE token=? AND used_by=?`).bind(`invite:${id}`,REWARDS.invite,invite,id),
-      ]);
-      return id;
-    } catch (error) {
-      const used = await env.DB.prepare('SELECT used_by FROM invitations WHERE token=?').bind(invite).first<{ used_by: string | null }>();
-      if (used?.used_by) throw new ApiError('This invitation has already been used.', 409);
-      const found = await env.DB.prepare('SELECT id FROM users WHERE github_id=?').bind(String(profile.id)).first<{ id: string }>();
-      if (found) return found.id;
-      if (!String(error).includes('UNIQUE') || ++attempts > 5) throw error;
-      occupied.add(`${x},${z}`);
-    }
+  try {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO users(id, github_id, username, name, bio, avatar, github_url, website, github_token)
+        VALUES((SELECT ? WHERE EXISTS(SELECT 1 FROM invitations WHERE token=?)), ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, invite, String(profile.id), profile.login, profile.name || profile.login, profile.bio || '', profile.avatar_url || null, profile.html_url || null, /^https?:\/\//.test(profile.blog || '') ? profile.blog : null, encrypted),
+      env.DB.prepare('INSERT INTO metrics(user_id) VALUES(?)').bind(id),
+      env.DB.prepare('INSERT INTO pending_placements(user_id,inviter_id) VALUES(?,?)').bind(id,invitation.inviter_id),
+      env.DB.prepare('INSERT INTO invitation_redemptions(token,user_id) VALUES(?,?)').bind(invite,id),
+    ]);
+    return id;
+  } catch(error) {
+    const existing=await env.DB.prepare('SELECT id FROM users WHERE github_id=?').bind(String(profile.id)).first<{id:string}>();
+    if(existing)return existing.id;
+    const valid=await env.DB.prepare("SELECT 1 FROM invitations WHERE token=?").bind(invite).first();
+    if(!valid)throw new ApiError('This invitation is invalid. Ask for a new link.',409);
+    throw error;
   }
-  throw new ApiError('This neighborhood is full. Ask for an invitation from another neighbor.', 409);
+}
+
+async function pendingPlacement(env:Env,userId:string){
+  const pending=await env.DB.prepare('SELECT inviter_id FROM pending_placements WHERE user_id=?').bind(userId).first<{inviter_id:string}>();
+  if(!pending)return null;
+  const origin=await building(env,pending.inviter_id);
+  const occupied=new Set((await env.DB.prepare('SELECT x,z FROM buildings WHERE x BETWEEN ? AND ? AND z BETWEEN ? AND ?')
+    .bind(origin.x-48,origin.x+48,origin.z-48,origin.z+48).all<{x:number;z:number}>()).results.map(p=>`${p.x},${p.z}`));
+  let options:{x:number;z:number}[]=[];
+  for(const radius of [5,12,24,48]){
+    const plans=availablePlotPlans(origin,occupied,radius,512);
+    const eligible=radius===5?plans.filter(p=>Math.hypot(p.x-origin.x,p.z-origin.z)<=5):plans;
+    if(eligible.length){options=eligible.sort((a,b)=>Math.hypot(a.x-origin.x,a.z-origin.z)-Math.hypot(b.x-origin.x,b.z-origin.z)).slice(0,8).map(({x,z})=>({x,z}));break;}
+  }
+  return {origin:visibleBuilding(env,origin,userId),options};
 }
 
 export class Neighborhood {
-  constructor(private ctx: DurableObjectState) {}
-  async fetch(req: Request) {
-    if (req.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
-      const pair = new WebSocketPair();
-      this.ctx.acceptWebSocket(pair[1]);
-      return new Response(null, { status: 101, webSocket: pair[0] });
+  private snapshots=new Map<string,{expires:number;value:unknown}>();
+  private pending=new Map<string,Promise<unknown>>();
+  private revision=0;
+  constructor(private ctx:DurableObjectState,private env:Env) {}
+  async fetch(req:Request){
+    const url=new URL(req.url);
+    if(url.pathname==='/snapshot'){
+      const x=Math.floor(Number(url.searchParams.get('x')||0)/8)*8;
+      const z=Math.floor(Number(url.searchParams.get('z')||0)/8)*8;
+      const key=`${x},${z}`,cached=this.snapshots.get(key);
+      if(cached&&cached.expires>Date.now())return json(cached.value);
+      let work=this.pending.get(key);
+      if(!work){
+        const revision=this.revision;
+        work=(async()=>{
+          const r=VIEW_RADIUS+8;
+          const rows=await this.env.DB.prepare(`${QUERY} WHERE b.x BETWEEN ? AND ? AND b.z BETWEEN ? AND ? ORDER BY ((b.x-?)*(b.x-?)+(b.z-?)*(b.z-?)) LIMIT 250`).bind(x-r,x+r,z-r,z+r,x,x,z,z).all<Building>();
+          const value={buildings:rows.results.map(b=>({...b,bricks:null})),projects:await projects(this.env.DB,null)};
+          if(this.revision===revision){
+            if(this.snapshots.size>=64)this.snapshots.delete(this.snapshots.keys().next().value!);
+            this.snapshots.set(key,{expires:Date.now()+30_000,value});
+          }
+          return value;
+        })();
+        this.pending.set(key,work);
+        work.finally(()=>{if(this.pending.get(key)===work)this.pending.delete(key);}).catch(()=>{});
+      }
+      return json(await work);
     }
-    if (req.method === 'POST') {
-      const text = await req.text();
-      for (const ws of this.ctx.getWebSockets()) { try { ws.send(text); } catch { ws.close(1011, 'Reconnect to refresh the city.'); } }
+    if(req.headers.get('Upgrade')?.toLowerCase()==='websocket'){
+      const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);
+      pair[1].serializeAttachment({viewer:req.headers.get('X-Cities-Viewer'),x:0,z:0});
+      return new Response(null,{status:101,webSocket:pair[0]});
+    }
+    if(req.method==='POST'){
+      if(url.pathname==='/invalidate'){this.revision++;this.snapshots.clear();this.pending.clear();return new Response('ok');}
+      const event=await req.json() as {type:string;building?:Building;ownerBuilding?:Building;project?:{x:number;z:number};[key:string]:unknown};
+      this.revision++;this.snapshots.clear();this.pending.clear();
+      const {ownerBuilding,...publicEvent}=event;
+      for(const ws of this.ctx.getWebSockets()){
+        const interest=ws.deserializeAttachment() as {viewer:string|null;x:number;z:number}|null;
+        const b=event.building;
+        if(b&&b.id!==interest?.viewer&&(Math.abs(b.x-(interest?.x||0))>VIEW_RADIUS+8||Math.abs(b.z-(interest?.z||0))>VIEW_RADIUS+8))continue;
+        const payload=b&&b.id===interest?.viewer&&ownerBuilding?{...publicEvent,building:ownerBuilding}:publicEvent;
+        try{ws.send(JSON.stringify(payload));}catch{ws.close(1011,'Reconnect to refresh the city.');}
+      }
     }
     return new Response('ok');
   }
-  webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) { if (message === 'ping') ws.send('pong'); }
-  webSocketClose(ws: WebSocket, code: number, reason: string) {
-    // Abnormal-close sentinel values cannot be transmitted in a close frame.
-    const safeCode = code === 1000 || code === 1001 || (code >= 3000 && code <= 4999) ? code : 1000;
-    try { ws.close(safeCode, reason.slice(0,60)); } catch { /* Already closed. */ }
+  webSocketMessage(ws:WebSocket,message:string|ArrayBuffer){
+    if(message==='ping'){ws.send('pong');return;}
+    if(typeof message!=='string'||message.length>256)return;
+    try{
+      const data=JSON.parse(message);
+      if(data.type!=='subscribe'||!Number.isFinite(data.x)||!Number.isFinite(data.z)||Math.abs(data.x)>1e6||Math.abs(data.z)>1e6)return;
+      const prior=ws.deserializeAttachment() as {viewer:string|null};
+      ws.serializeAttachment({...prior,x:data.x,z:data.z});
+    }catch{/* Invalid subscriptions cannot alter identity. */}
   }
-  webSocketError(ws: WebSocket) { ws.close(1011, 'Reconnect to refresh the city.'); }
+  webSocketClose(ws:WebSocket,code:number,reason:string){
+    const safeCode=code===1000||code===1001||(code>=3000&&code<=4999)?code:1000;
+    try{ws.close(safeCode,reason.slice(0,60));}catch{/* Already closed. */}
+  }
+  webSocketError(ws:WebSocket){ws.close(1011,'Reconnect to refresh the city.');}
 }
 
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url), path = url.pathname;
+    if(env.DEV_MODE!=='true' && url.hostname.endsWith('.workers.dev') && url.origin!==env.APP_ORIGIN){
+      return Response.redirect(new URL(url.pathname+url.search,env.APP_ORIGIN).href,307);
+    }
     if (!path.startsWith('/api/')) return env.ASSETS.fetch(req);
     try {
       if (!['GET', 'HEAD'].includes(req.method)) {
         const origin = req.headers.get('Origin');
         if (!origin || ![env.APP_ORIGIN, url.origin].includes(origin)) throw new ApiError('Open the city in its own tab before making changes.', 403);
       }
+      if (path.startsWith('/api/invites/') && req.method === 'GET') {
+        const token = path.slice('/api/invites/'.length);
+        if (!/^[a-zA-Z0-9-]{1,80}$/.test(token)) throw new ApiError('This invitation is invalid.', 404);
+        const invitation = await env.DB.prepare("SELECT u.name FROM invitations i JOIN users u ON u.id=i.inviter_id WHERE i.token=?").bind(token).first<{name:string}>();
+        if (!invitation) throw new ApiError('This invitation is invalid.', 404);
+        return json({name:invitation.name});
+      }
       if (path.startsWith('/api/profile/avatar/') && ['GET', 'HEAD'].includes(req.method)) {
         const id = path.slice('/api/profile/avatar/'.length);
         if (!/^[a-zA-Z0-9-]{1,80}$/.test(id)) throw new ApiError('Profile picture not found.', 404);
         return await avatarResponse(req, env.DB, id);
       }
+      if (path.startsWith('/api/github/calendar/') && req.method === 'GET') {
+        const id=path.slice('/api/github/calendar/'.length);
+        if(!/^[a-zA-Z0-9-]{1,80}$/.test(id))throw new ApiError('Resident not found.',404);
+        const owner=await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(id).first<User>();
+        if(!owner||owner.is_demo)throw new ApiError('Connect a real GitHub account to see activity.',404);
+        const cached=await env.DB.prepare('SELECT calendar,fetched_at FROM github_calendars WHERE user_id=?').bind(id).first<{calendar:string;fetched_at:string}>();
+        // Scheduled and manual GitHub sync refresh the cached graph.
+        if(cached)return json({calendar:JSON.parse(cached.calendar),syncedAt:cached.fetched_at});
+        const activity=await fetchGithubActivity(env,owner);
+        await calendarStatement(env,id,activity.contributionCalendar).run();
+        return json({calendar:activity.contributionCalendar,syncedAt:new Date().toISOString()});
+      }
+      if(path==='/api/neighborhood'&&req.method==='GET'){
+        const x=Number(url.searchParams.get('x')||0),z=Number(url.searchParams.get('z')||0);
+        if(!Number.isFinite(x)||!Number.isFinite(z)||Math.abs(x)>1e6||Math.abs(z)>1e6)throw new ApiError('Choose a valid neighborhood.');
+        return env.NEIGHBORHOODS.get(env.NEIGHBORHOODS.idFromName('city-hub-v1')).fetch(`https://neighborhood.internal/snapshot?x=${x}&z=${z}`);
+      }
+      if(path==='/api/self'&&req.method==='GET'){
+        if(env.DEV_MODE==='true')await ensureDemoConnections(env.DB);
+        const user=await currentUser(req,env),placement=user?await pendingPlacement(env,user.id):null;
+        const own=user&&!placement?await building(env,user.id):null;
+        let nextPlots:{x:number;z:number}[]=[];
+        if(own){
+          const occupied=await env.DB.prepare('SELECT x,z FROM buildings WHERE x BETWEEN ? AND ? AND z BETWEEN ? AND ?').bind(own.x-12,own.x+12,own.z-12,own.z+12).all<{x:number;z:number}>();
+          nextPlots=previewPlotPlans(own,new Set(occupied.results.map(b=>`${b.x},${b.z}`))).map(({x,z})=>({x,z}));
+        }
+        const contributions=user?(await env.DB.prepare('SELECT project_id,SUM(amount) amount FROM project_contributions WHERE user_id=? GROUP BY project_id').bind(user.id).all<{project_id:string;amount:number}>()).results:[];
+        return json({onboardingCompleted:Boolean(user&&await env.DB.prepare('SELECT 1 FROM xp_events WHERE event_key=?').bind(`onboarding-complete:${user.id}`).first()),own,pendingPlacement:placement,nextPlots,projectContributions:Object.fromEntries(contributions.map(p=>[p.project_id,p.amount])),githubReconnectRequired:Boolean(user&&!user.is_demo&&!user.github_token),me:user?.id??null,demo:env.DEV_MODE==='true',githubConfigured:authReady(env),claimedToday:Boolean(user&&await env.DB.prepare('SELECT 1 FROM daily_claims WHERE user_id=? AND day=?').bind(user.id,DAY()).first()),dailyReward:DAILY_REWARD,inviteRequired:true,likedIds:user?(await env.DB.prepare('SELECT tower_id FROM tower_likes WHERE voter_id=?').bind(user.id).all<{tower_id:string}>()).results.map(l=>l.tower_id):[],unlockedThemes:await unlockedThemes(env,user?.id??null)});
+      }
       if (path === '/api/bootstrap' && req.method === 'GET') {
         if(env.DEV_MODE==='true')await ensureDemoConnections(env.DB);
         settleConstruction(env,ctx);
         const user = await currentUser(req, env);
+        const placement=user?await pendingPlacement(env,user.id):null;
         // A bounded snapshot of the viewed neighborhood. Client requests another on pan.
         const centerX = Math.max(-1e6, Math.min(1e6, Number(url.searchParams.get('x')) || 0));
         const centerZ = Math.max(-1e6, Math.min(1e6, Number(url.searchParams.get('z')) || 0));
         const rows = await env.DB.prepare(`${QUERY} WHERE b.x BETWEEN ? AND ? AND b.z BETWEEN ? AND ? ORDER BY ((b.x-?)*(b.x-?)+(b.z-?)*(b.z-?)) LIMIT 250`).bind(centerX - VIEW_RADIUS, centerX + VIEW_RADIUS, centerZ - VIEW_RADIUS, centerZ + VIEW_RADIUS, centerX, centerX, centerZ, centerZ).all<Building>();
-        if (user && !rows.results.find(b => b.id === user.id)) rows.results.push(await building(env, user.id));
+        if (user && !placement && !rows.results.find(b => b.id === user.id)) rows.results.push(await building(env, user.id));
+        if(placement && !rows.results.some(b=>b.id===placement.origin.id))rows.results.push(placement.origin);
         const claimed = user ? await env.DB.prepare('SELECT 1 FROM daily_claims WHERE user_id=? AND day=?').bind(user.id, DAY()).first() : null;
         const own=rows.results.find(b=>b.id===user?.id);
         let nextPlots:{x:number;z:number}[]=[];
@@ -227,7 +348,7 @@ export default {
             .bind(own.x-12,own.x+12,own.z-12,own.z+12).all<{x:number;z:number}>();
           nextPlots=previewPlotPlans(own,new Set(occupied.results.map(b=>`${b.x},${b.z}`))).map(({x,z})=>({x,z}));
         }
-        return json({ buildings: rows.results.map(b=>visibleBuilding(env,b,user?.id??null)), nextPlots, projects:await projects(env.DB,user?.id??null), likedIds:user?(await env.DB.prepare('SELECT tower_id FROM tower_likes WHERE voter_id=?').bind(user.id).all<{tower_id:string}>()).results.map(l=>l.tower_id):[], me: user?.id ?? null, demo: env.DEV_MODE === 'true', githubConfigured: authReady(env), claimedToday: Boolean(claimed), dailyReward: DAILY_REWARD, inviteRequired: true });
+        return json({ githubReconnectRequired:Boolean(user&&!user.is_demo&&!user.github_token), pendingPlacement:placement, buildings: rows.results.map(b=>visibleBuilding(env,b,user?.id??null)), nextPlots, projects:await projects(env.DB,user?.id??null), likedIds:user?(await env.DB.prepare('SELECT tower_id FROM tower_likes WHERE voter_id=?').bind(user.id).all<{tower_id:string}>()).results.map(l=>l.tower_id):[], unlockedThemes:await unlockedThemes(env,user?.id??null), me: user?.id ?? null, demo: env.DEV_MODE === 'true', githubConfigured: authReady(env), claimedToday: Boolean(claimed), dailyReward: DAILY_REWARD, inviteRequired: true });
       }
       if (path === '/api/dev/start' && req.method === 'POST') {
         if (env.DEV_MODE !== 'true') throw new ApiError('Demo mode is not enabled.', 404);
@@ -236,25 +357,26 @@ export default {
         const statements = await seedDemo(env.DB);
         await env.DB.batch(statements.slice(batch * 21, (batch + 1) * 21));
         if(batch===2)await ensureDemoConnections(env.DB);
+        await env.NEIGHBORHOODS.get(env.NEIGHBORHOODS.idFromName('city-hub-v1')).fetch('https://neighborhood.internal/invalidate',{method:'POST'});
         return Response.json({ ok: true }, { headers: { ...headers, 'Set-Cookie': await session(req, env, 'demo-you') } });
       }
       if (path === '/api/dev/join' && req.method === 'POST') {
         if (env.DEV_MODE !== 'true') throw new ApiError('Demo mode is not enabled.', 404);
         const user = await requireUser(req, env);
         const data = await body(req); const invite = typeof data.invite === 'string' ? data.invite : '';
-        const invitation = await env.DB.prepare('SELECT i.*,b.x,b.z FROM invitations i JOIN buildings b ON b.user_id=i.inviter_id WHERE token=? AND used_by IS NULL AND inviter_id=?').bind(invite, user.id).first<{ x: number; z: number }>();
-        if (!invitation) throw new ApiError('Choose an unused invitation you created.', 409);
+        const invitation = await env.DB.prepare("SELECT i.*,b.x,b.z FROM invitations i JOIN buildings b ON b.user_id=i.inviter_id WHERE token=? AND inviter_id=?").bind(invite, user.id).first<{ x: number; z: number }>();
+        if (!invitation) throw new ApiError('Choose an invitation you created.', 409);
         const id = `demo-${uuid()}`, username = `neighbor-${id.slice(-6)}`;
         const taken = new Set((await env.DB.prepare('SELECT x,z FROM buildings').all<{ x: number; z: number }>()).results.map(b => `${b.x},${b.z}`));
         const plannedSlots=availablePlotPlans(invitation,taken);
         for (const {x,z} of plannedSlots) {
           try {
             await env.DB.batch([
-              env.DB.prepare(`INSERT INTO users(id,username,name,bio,is_demo) VALUES((SELECT ? WHERE EXISTS(SELECT 1 FROM invitations WHERE token=? AND used_by IS NULL)), ?, 'New neighbor', 'A new idea has moved into the neighborhood.', 1)`).bind(id, invite, username),
+              env.DB.prepare(`INSERT INTO users(id,username,name,bio,is_demo) VALUES((SELECT ? WHERE EXISTS(SELECT 1 FROM invitations WHERE token=?)), ?, 'New neighbor', 'A new idea has moved into the neighborhood.', 1)`).bind(id, invite, username),
               env.DB.prepare('INSERT INTO buildings(user_id,x,z,bricks) VALUES(?,?,?,0)').bind(id, x, z),
               env.DB.prepare('INSERT INTO metrics(user_id) VALUES(?)').bind(id),
-              env.DB.prepare('UPDATE invitations SET used_by=? WHERE token=? AND used_by IS NULL').bind(id, invite),
-          env.DB.prepare(`INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description) SELECT ?,inviter_id,'invite',?,0,'An invited resident joined' FROM invitations WHERE token=? AND used_by=?`).bind(`invite:${id}`,REWARDS.invite,invite,id),
+              env.DB.prepare('INSERT INTO invitation_redemptions(token,user_id) VALUES(?,?)').bind(invite,id),
+          env.DB.prepare(`INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description) SELECT ?,i.inviter_id,'invite',?,0,'An invited resident joined' FROM invitations i JOIN invitation_redemptions r ON r.token=i.token WHERE i.token=? AND r.user_id=?`).bind(`invite:${id}`,REWARDS.invite,invite,id),
             ]);
             const neighbor=await changed(env,id,ctx),inviter=await changed(env,user.id,ctx);settleConstruction(env,ctx);
             return json({building:neighbor,inviter});
@@ -270,7 +392,7 @@ export default {
       if (path === '/api/auth/github' && req.method === 'GET') {
         if (!authReady(env)) throw new ApiError('GitHub login needs server credentials. See the local setup guide.', 503);
         const invite = url.searchParams.get('invite');
-        if (invite && !await env.DB.prepare('SELECT token FROM invitations WHERE token=? AND used_by IS NULL').bind(invite).first()) throw new ApiError('This invitation is invalid or has already been used.', 403);
+        if (invite && !await env.DB.prepare("SELECT token FROM invitations WHERE token=?").bind(invite).first()) throw new ApiError('This invitation is invalid.', 403);
         const state = uuid();
         const verifier = uuid().replaceAll('-', '') + uuid().replaceAll('-', '');
         const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
@@ -295,10 +417,13 @@ export default {
         const profileResponse = await fetch('https://api.github.com/user', { headers: ghHeaders(token.access_token) });
         if (!profileResponse.ok) throw new ApiError('GitHub could not return your profile. Try again.', 502);
         const id = await join(env, await profileResponse.json(), token.access_token, stored.invite);
-        const joined=await changed(env,id,ctx);
-        if(joined.invited_by)await changed(env,joined.invited_by,ctx);
-        const user = await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(id).first<User>();
-        if (user) ctx.waitUntil(syncGithub(env, user).then(async () => broadcast(env, await building(env, id))).catch(e => console.warn('GitHub initial sync failed:', String(e))).finally(()=>settleConstruction(env,ctx)));
+        const pending=await env.DB.prepare('SELECT 1 FROM pending_placements WHERE user_id=?').bind(id).first();
+        if(!pending){
+          const joined=await changed(env,id,ctx);
+          if(joined.invited_by)await changed(env,joined.invited_by,ctx);
+          const user=await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(id).first<User>();
+          if(user)ctx.waitUntil(syncGithub(env,user).then(async()=>broadcast(env,await building(env,id))).catch(e=>console.warn('GitHub initial sync failed:',String(e))).finally(()=>settleConstruction(env,ctx)));
+        }
         const h = new Headers({ Location: env.APP_ORIGIN, ...headers });
         h.append('Set-Cookie', await session(req, env, id)); h.append('Set-Cookie', cookie(req, 'cities_oauth', '', 0));
         return new Response(null, { status: 302, headers: h });
@@ -306,17 +431,58 @@ export default {
       if (path === '/api/live' && req.method === 'GET') {
         if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket') throw new ApiError('A WebSocket connection is required.', 426);
         if (![env.APP_ORIGIN, url.origin].includes(req.headers.get('Origin') || '')) throw new ApiError('Connection origin is not allowed.', 403);
-        const room = url.searchParams.get('room') || '0,0';
-        if (!/^-?\d{1,7},-?\d{1,7}$/.test(room)) throw new ApiError('Choose a valid neighborhood.');
-        return env.NEIGHBORHOODS.get(env.NEIGHBORHOODS.idFromName(room)).fetch(req);
+        const viewer=await currentUser(req,env);
+        const h=new Headers(req.headers);h.delete('X-Cities-Viewer');
+        if(viewer)h.set('X-Cities-Viewer',viewer.id);
+        return env.NEIGHBORHOODS.get(env.NEIGHBORHOODS.idFromName('city-hub-v1')).fetch(new Request(req,{headers:h}));
       }
       const user = await requireUser(req, env);
+      if(path==='/api/placement' && req.method==='POST'){
+        const data=await body(req);
+        if(!Number.isInteger(data.x)||!Number.isInteger(data.z))throw new ApiError('Select an available plot.');
+        const placement=await pendingPlacement(env,user.id);
+        if(!placement)return json({building:await building(env,user.id)});
+        if(!placement.options.some(p=>p.x===data.x&&p.z===data.z))throw new ApiError('That plot is no longer available. Choose another hologram.',409);
+        try{
+          await env.DB.batch([
+            env.DB.prepare('INSERT INTO buildings(user_id,x,z) SELECT user_id,?,? FROM pending_placements WHERE user_id=?').bind(data.x as number,data.z as number,user.id),
+            env.DB.prepare(`INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description) SELECT ?,inviter_id,'invite',?,0,'An invited resident joined' FROM pending_placements WHERE user_id=?`).bind(`invite:${user.id}`,REWARDS.invite,user.id),
+            env.DB.prepare('DELETE FROM pending_placements WHERE user_id=?').bind(user.id),
+          ]);
+        }catch(error){
+          if(String(error).includes('UNIQUE'))throw new ApiError('That plot was just taken. Choose another hologram.',409);
+          throw error;
+        }
+        const placed=await changed(env,user.id,ctx);await changed(env,placement.origin.id,ctx);settleConstruction(env,ctx);
+        ctx.waitUntil(syncGithub(env,user).then(async()=>broadcast(env,await building(env,user.id))).catch(e=>console.warn('GitHub initial sync failed:',String(e))));
+        return json({building:placed});
+      }
+      if(await env.DB.prepare('SELECT 1 FROM pending_placements WHERE user_id=?').bind(user.id).first())throw new ApiError('Choose your tower location first.',409);
       if(path==='/api/me'&&req.method==='GET')return json({building:await building(env,user.id)});
       if (path === '/api/profile' && req.method === 'POST') {
         const data = await body(req);
         if (typeof data.bio !== 'string' || data.bio.length > BIO_MAX_LENGTH) throw new ApiError(`Keep your bio within ${BIO_MAX_LENGTH} characters.`);
         await env.DB.batch([
           env.DB.prepare('UPDATE users SET bio=?,bio_customized=1 WHERE id=?').bind(data.bio.trim(), user.id),
+          env.DB.prepare("UPDATE buildings SET updated_at=datetime('now') WHERE user_id=?").bind(user.id),
+        ]);
+        return json({ building: await changed(env, user.id, ctx) });
+      }
+      if (path === '/api/profile/links' && req.method === 'POST') {
+        const data = await body(req);
+        const link = (key: string, host?: string) => {
+          const value = data[key];
+          if (typeof value !== 'string' || value.length > 2048) throw new ApiError('Enter a valid profile link.');
+          if (!value.trim()) return null;
+          let url: URL;
+          try { url = new URL(/^https?:\/\//i.test(value.trim()) ? value.trim() : `https://${value.trim()}`); }
+          catch { throw new ApiError('Enter a valid website address.'); }
+          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || (host && url.hostname !== host && !url.hostname.endsWith(`.${host}`))) throw new ApiError(`Enter a valid ${host || 'website'} link.`);
+          return url.href;
+        };
+        const linkedin = link('linkedin_url', 'linkedin.com'), github = link('github_url', 'github.com'), website = link('website');
+        await env.DB.batch([
+          env.DB.prepare('UPDATE users SET linkedin_url=?,github_url=?,website=?,github_url_customized=1 WHERE id=?').bind(linkedin, github, website, user.id),
           env.DB.prepare("UPDATE buildings SET updated_at=datetime('now') WHERE user_id=?").bind(user.id),
         ]);
         return json({ building: await changed(env, user.id, ctx) });
@@ -345,18 +511,42 @@ export default {
         if (!result) throw new ApiError('You need more bricks, or this design is already selected.', 409);
         return json({ building: await changed(env, user.id, ctx) });
       }
+      if(path==='/api/onboarding/gift'&&req.method==='POST'){
+        const gift=await env.DB.prepare("INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description) VALUES(?,?,'onboarding',0,100,'Welcome gift') RETURNING event_key").bind(`onboarding-gift:${user.id}`,user.id).first();
+        return json({building:await changed(env,user.id,ctx),awarded:gift?100:0});
+      }
+      if(path==='/api/onboarding/complete'&&req.method==='POST'){
+        await env.DB.prepare("INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description) VALUES(?,?,'onboarding',0,0,'Onboarding completed')").bind(`onboarding-complete:${user.id}`,user.id).run();
+        return json({ok:true});
+      }
+      if(path==='/api/themes/unlock'&&req.method==='POST'){
+        const data=await body(req),theme=typeof data.theme==='string'?data.theme:'';
+        if(!Object.hasOwn(BUILDING_THEMES,theme)||theme==='contemporary')throw new ApiError('Choose a purchasable architectural theme.');
+        if(theme==='cyberpunk')throw new ApiError('Invite three residents to unlock Cyberpunk.',403);
+        const definition=BUILDING_THEMES[theme as BuildingTheme];
+        try{
+          await env.DB.prepare('INSERT INTO theme_unlocks(user_id,theme,cost) VALUES(?,?,?)').bind(user.id,theme,definition.cost).run();
+        }catch(e){
+          const message=String(e);
+          if(message.includes('UNIQUE'))throw new ApiError('You already unlocked this theme.',409);
+          if(message.includes('not enough bricks'))throw new ApiError(`You need ${definition.cost} bricks to unlock ${definition.label}.`,409);
+          throw e;
+        }
+        return json({building:await changed(env,user.id,ctx),unlockedThemes:await unlockedThemes(env,user.id)});
+      }
       if(path==='/api/segments'&&req.method==='POST'){
         const data=await body(req),index=Number(data.segment);
         if(!Number.isInteger(index)||index<0||index>=TIERS.length||typeof data.color!=='string'||!Object.hasOwn(COLORS,data.color)||typeof data.style!=='string'||!Object.hasOwn(SEGMENT_STYLES,data.style))throw new ApiError('Choose a valid segment design.');
         const theme=data.theme??'contemporary';
         if(typeof theme!=='string'||!Object.hasOwn(BUILDING_THEMES,theme))throw new ApiError('Choose an available architectural theme.');
+        if(!(await unlockedThemes(env,user.id)).includes(theme as BuildingTheme))throw new ApiError('Unlock this architectural theme before applying it.',403);
         const design=JSON.stringify({color:data.color,style:data.style,theme});
-        const result=await env.DB.prepare(`UPDATE buildings SET segments=json_set(segments,?,json(?)),bricks=bricks-?,updated_at=datetime('now')
-          WHERE user_id=? AND bricks>=? AND level>=? AND (COALESCE(json_extract(segments,?),color)<>?
+        const result=await env.DB.prepare(`UPDATE buildings SET segments=json_set(segments,?,json(?)),updated_at=datetime('now')
+          WHERE user_id=? AND level>=? AND (COALESCE(json_extract(segments,?),color)<>?
             OR COALESCE(json_extract(segments,?),CASE WHEN style='modern' OR level>=19 THEN 'glass' ELSE 'classic' END)<>?
             OR COALESCE(json_extract(segments,?),'contemporary')<>?) RETURNING user_id`)
-          .bind(`$[${index}]`,design,SEGMENT_COST,user.id,SEGMENT_COST,tierStartLevel(index),`$[${index}].color`,data.color,`$[${index}].style`,data.style,`$[${index}].theme`,theme).first();
-        if(!result)throw new ApiError('That segment is locked, you need more bricks, or that design is already selected.',409);
+          .bind(`$[${index}]`,design,user.id,tierStartLevel(index),`$[${index}].color`,data.color,`$[${index}].style`,data.style,`$[${index}].theme`,theme).first();
+        if(!result)throw new ApiError('That segment is locked or that design is already selected.',409);
         return json({building:await changed(env,user.id,ctx)});
       }
       if(path==='/api/like'&&req.method==='POST'){
@@ -388,7 +578,7 @@ export default {
         }
         const updated=(await projects(env.DB,user.id)).find(p=>p.id===project.id)!;
         const message={type:'project.changed',project:{...updated,myContribution:0}};
-        ctx.waitUntil(env.NEIGHBORHOODS.get(env.NEIGHBORHOODS.idFromName(roomName(project))).fetch('https://neighborhood.internal/update',{method:'POST',body:JSON.stringify(message)}));
+        await env.NEIGHBORHOODS.get(env.NEIGHBORHOODS.idFromName('city-hub-v1')).fetch('https://neighborhood.internal/update',{method:'POST',body:JSON.stringify(message)});
         settleConstruction(env,ctx);return json({project:updated,building:await changed(env,user.id,ctx)});
       }
       if(path==='/api/dev/progression'&&req.method==='POST'){
@@ -402,7 +592,7 @@ export default {
           await env.DB.prepare('UPDATE construction_events SET processed=1 WHERE user_id=?').bind(target).run();
         }else{
           const source=typeof data.source==='string'?data.source:'github';
-          const samples:Record<string,[number,number]>={github:[REWARDS.commit,REWARDS.commit/5],invite:[REWARDS.invite,0],like:[REWARDS.like,0],construction:[REWARDS.construction,0],project:[REWARDS.project,0],daily:[REWARDS.dailyXp,REWARDS.dailyBricks],bricks:[0,100]};
+          const samples:Record<string,[number,number]>={github:[REWARDS.commit,REWARDS.commitBricks],invite:[REWARDS.invite,0],like:[REWARDS.like,0],construction:[REWARDS.construction,0],project:[REWARDS.project,0],daily:[REWARDS.dailyXp,REWARDS.dailyBricks],bricks:[0,100]};
           const sample=samples[source];if(!sample)throw new ApiError('Choose a sample reward.');
           await reward(env.DB,`demo:${uuid()}`,target,'demo',sample[0],sample[1],`Simulated ${source} reward`);
           settleConstruction(env,ctx);
@@ -410,25 +600,28 @@ export default {
         return json({building:await changed(env,target,ctx)});
       }
       if (path === '/api/sync' && req.method === 'POST') {
-        await syncGithub(env, user);settleConstruction(env,ctx); return json({ building: await changed(env, user.id, ctx) });
+        const data=await body(req);await syncGithub(env,user,data.automatic===true);settleConstruction(env,ctx); return json({ building: await changed(env, user.id, ctx) });
       }
       if (path === '/api/invites' && req.method === 'GET') {
-        return json({ invites: (await env.DB.prepare('SELECT token,created_at,used_by FROM invitations WHERE inviter_id=? AND used_by IS NULL ORDER BY created_at DESC LIMIT 10').bind(user.id).all()).results });
+        return json({ invites: (await env.DB.prepare("SELECT i.token,i.created_at,(SELECT COUNT(*) FROM invitation_redemptions r WHERE r.token=i.token) use_count FROM invitations i WHERE inviter_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1").bind(user.id).all()).results });
       }
       if (path === '/api/invites' && req.method === 'POST') {
-        const token = uuid();
-        await env.DB.prepare('INSERT INTO invitations(token,inviter_id) VALUES(?,?)').bind(token, user.id).run();
-        return json({ token, url: `${env.APP_ORIGIN}/?invite=${token}` });
+        await env.DB.prepare("INSERT INTO invitations(token,inviter_id) SELECT ?,? WHERE NOT EXISTS (SELECT 1 FROM invitations WHERE inviter_id=?)").bind(uuid(),user.id,user.id).run();
+        const invitation=await env.DB.prepare('SELECT i.token,i.created_at,(SELECT COUNT(*) FROM invitation_redemptions r WHERE r.token=i.token) use_count FROM invitations i WHERE inviter_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1').bind(user.id).first<{token:string;created_at:string;use_count:number}>();
+        if(!invitation)throw new ApiError('Could not create an invitation. Try again.',500);
+        const token=invitation.token;
+        return json({ token, invitation, url: `${env.APP_ORIGIN}/?invite=${token}` });
       }
       throw new ApiError('This route could not be found.', 404);
     } catch (e) {
       if (path === '/api/auth/github' || path === '/api/auth/github/callback') {
         const dest = new URL(env.APP_ORIGIN);
         dest.searchParams.set('auth_error', e instanceof ApiError ? e.message : 'GitHub login could not be completed. Try again.');
+        if(e instanceof ApiError&&e.code)dest.searchParams.set('auth_error_code',e.code);
         return new Response(null,{status:302,headers:{Location:dest.toString(),...headers}});
       }
-      if (e instanceof ApiError) return json({ error: e.message }, e.status);
-      if (e instanceof PhotoError) return json({ error: e.message }, e.status);
+      if (e instanceof ApiError) return json({ error:e.message, code:e.code },e.status);
+      if (e instanceof PhotoError) return json({ error:e.message },e.status);
       console.error('Worker request failed:', String(e));
       return json({ error: 'The city could not complete that request. Try again in a moment.' }, 500);
     }
@@ -439,10 +632,16 @@ export default {
       env.DB.prepare('DELETE FROM oauth_states WHERE expires_at<?').bind(NOW()),
     ]);
     if (!authReady(env)){settleConstruction(env,ctx);return;}
-    const users = await env.DB.prepare(`SELECT u.* FROM users u JOIN metrics m ON m.user_id=u.id WHERE u.is_demo=0 AND u.github_token IS NOT NULL
-      AND (m.synced_at IS NULL OR m.synced_at<datetime('now','-1 day')) ORDER BY m.synced_at LIMIT 3`).all<User>();
-    ctx.waitUntil(Promise.all(users.results.map(user=>syncGithub(env,user).then(async()=>broadcast(env,await building(env,user.id)))
-      .catch(e=>console.warn('Scheduled GitHub sync failed:',String(e))))).then(()=>settleConstruction(env,ctx)));
+    const users = await env.DB.prepare(`SELECT u.* FROM users u JOIN metrics m ON m.user_id=u.id JOIN buildings b ON b.user_id=u.id WHERE u.is_demo=0 AND u.github_token IS NOT NULL
+      AND (m.synced_at IS NULL OR m.synced_at<datetime('now','-15 minutes')) ORDER BY m.synced_at`).all<User>();
+    ctx.waitUntil((async()=>{
+      for(let offset=0;offset<users.results.length;offset+=10){
+        await Promise.all(users.results.slice(offset,offset+10).map(user=>syncGithub(env,user,true)
+          .then(async()=>broadcast(env,await building(env,user.id)))
+          .catch(e=>console.warn('Scheduled GitHub sync failed:',String(e)))));
+      }
+      settleConstruction(env,ctx);
+    })());
 
   },
 } satisfies ExportedHandler<Env>;

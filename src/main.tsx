@@ -4,4 +4,5 @@ import App from './App';
 import './styles.css';
 import './drawer.css';
 import './dev-scores.css';
+import './mobile.css';
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>);

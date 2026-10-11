@@ -1,0 +1,3 @@
+.xp-reward-pop{position:fixed;left:50%;top:43%;z-index:90;color:#6b60d8;font-size:28px;font-weight:750;text-shadow:0 2px 12px #ffffff;pointer-events:none;animation:xp-reward-pop 2.6s ease-out both}
+@keyframes xp-reward-pop{0%{opacity:0;transform:translate(-50%,12px) scale(.85)}15%,65%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-35px) scale(1)}}
+@media(prefers-reduced-motion:reduce){.xp-reward-pop{animation:none;transform:translateX(-50%)}}

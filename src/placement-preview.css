@@ -1,0 +1,10 @@
+.placement-preview{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);z-index:30;width:min(660px,calc(100vw - 32px));display:flex;align-items:stretch;background:#fffffff2;border:1px solid #d5e8f4;border-radius:20px;overflow:hidden;box-shadow:0 8px 35px #304b5c20}
+.placement-message{flex:1;min-width:0;padding:22px 24px}
+.placement-preview h2{font-size:26px;letter-spacing:-.5px}
+.placement-preview p{font-size:12px;line-height:1.7;color:#758b96;margin-top:6px}
+.placement-confirm{flex:0 0 25%;border-left:1px solid #d5e8f4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:12px 8px;color:#438ed1;background:#e4f2ff;font-size:13px;font-weight:650;transition:background-color 120ms ease,color 120ms ease}
+.placement-confirm:hover{background:#438ed1;color:#fff}
+.placement-confirm:active{background:#347cbf}
+.placement-confirm:focus-visible{outline-offset:-4px}
+@media(max-width:480px){.placement-message{padding:18px 16px}.placement-preview h2{font-size:20px}.placement-confirm{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.placement-confirm{transition:none}}

@@ -1,0 +1,4 @@
+.daily-card.daily-bonus{gap:24px;width:auto;right:auto}
+.daily-bonus strong{font-size:14px}
+.daily-bonus-reward{display:flex;align-items:center;gap:7px;color:#438ed1;font-size:15px;font-weight:650}
+.daily-bonus .daily-icon{background:none;color:inherit;width:24px;height:24px;border-radius:0}

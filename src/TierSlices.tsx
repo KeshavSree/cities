@@ -8,7 +8,7 @@ const PROPORTIONS=[[48,30],[76,35],[112,38],[146,43],[176,48],[204,53],[220,55],
 const hasShoulder=(index:number)=>index>=3&&index%2===1;
 // The smaller top rectangle is 20% narrower, with a shallow raised section.
 const SHOULDER_WIDTH=256/320;
-export const THEME_COLORS:Record<string,string>={contemporary:'#98aaa2',earthen:'#bd8666',deco:'#bca36c',metabolism:'#789c9f',nocturne:'#8c78aa'};
+export const THEME_COLORS:Record<string,string>={contemporary:'#98aaa2',earthen:'#bd8666',deco:'#bca36c',metabolism:'#789c9f',nocturne:'#8c78aa',cyberpunk:'#9564c8'};
 function silhouette(stacked:boolean){
   return stacked
     ?'M0 72V20Q0 12 8 12H24Q32 12 32 8V4Q32 0 36 0H284Q288 0 288 4V8Q288 12 296 12H312Q320 12 320 20V72Z'

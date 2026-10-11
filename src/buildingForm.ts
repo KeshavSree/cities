@@ -1,5 +1,5 @@
 import type { Building } from '../shared/types';
-import { LEVELS_PER_TIER, segmentDesigns, tierForLevel, tierIndex, type SegmentDesign, type BuildingTheme } from '../shared/progression';
+import { CYBERPUNK_CROWN_HEIGHTS, LEVELS_PER_TIER, segmentDesigns, tierForLevel, tierIndex, type SegmentDesign, type BuildingTheme } from '../shared/progression';
 import { plotPlan, type PlotPlan } from '../shared/plots';
 
 /** Offset each parcel edge inward, keeping its original street angle. */
@@ -93,6 +93,43 @@ const MASSING_THEMES:Record<BuildingTheme,{profiles:number[][];towerProfiles:num
     [.80,.78,.008,-.09], [.80,.78,.008,-.09], [.80,.78,.008,-.09],
     [.68,.67,-.006,-.13], [.68,.67,-.006,-.13], [.68,.67,-.006,-.13], [.58,.58,0,-.16],
   ],cornerCut:.23},
+  earthen:{profiles:[
+    [1,1,0,0], [.96,.96,0,-.01], [.90,.92,.02,-.02], [.86,.90,-.02,-.03], [.82,.86,.02,-.05],
+    [.78,.83,-.02,-.07], [.74,.80,.015,-.08], [.70,.77,-.015,-.10], [.66,.74,.01,-.11], [.61,.70,0,-.13],
+  ],towerProfiles:[
+    [1,1,0,0], [.95,.95,0,-.01], [.90,.92,0,-.02], [.84,.88,0,-.04], [.84,.88,0,-.04],
+    [.78,.83,0,-.07], [.72,.78,0,-.09], [.72,.78,0,-.09], [.64,.71,0,-.12], [.56,.64,0,-.15],
+  ],cornerCut:.06},
+  deco:{profiles:[
+    [1,1,0,0], [.96,.96,0,-.01], [.92,.93,0,-.02], [.86,.90,0,-.035], [.82,.86,0,-.05],
+    [.78,.82,0,-.065], [.71,.76,0,-.08], [.64,.70,0,-.10], [.56,.62,0,-.12], [.43,.50,0,-.15],
+  ],towerProfiles:[
+    [1,1,0,0], [.94,.94,0,-.015], [.94,.94,0,-.015], [.82,.86,0,-.05], [.82,.86,0,-.05],
+    [.82,.86,0,-.05], [.68,.74,0,-.09], [.68,.74,0,-.09], [.54,.62,0,-.12], [.38,.48,0,-.16],
+  ],cornerCut:.08},
+  metabolism:{profiles:[
+    [1,1,0,0], [.92,.90,.03,-.03], [.96,.88,-.03,-.04], [.86,.86,.04,-.06], [.90,.84,-.04,-.07],
+    [.82,.82,.03,-.09], [.85,.80,-.03,-.10], [.76,.78,.035,-.12], [.79,.76,-.035,-.13], [.68,.70,0,-.15],
+  ],towerProfiles:[
+    [1,1,0,0], [.92,.90,.025,-.03], [.92,.90,.025,-.03], [.84,.85,-.025,-.06], [.84,.85,-.025,-.06],
+    [.84,.85,-.025,-.06], [.76,.79,.025,-.10], [.76,.79,.025,-.10], [.76,.79,.025,-.10], [.66,.70,0,-.15],
+  ],cornerCut:.16},
+  cyberpunk:{profiles:[
+    [1,1,0,0],[.94,.88,-.06,.02],[.88,.94,.04,-.03],[.84,.84,-.045,-.04],
+    [.84,.84,-.045,-.04],[.84,.84,-.045,-.04],[.75,.78,.055,-.065],[.75,.78,.055,-.065],
+    [.70,.74,-.025,-.09],[.68,.72,-.025,-.09],
+  ],towerProfiles:[
+    [1,1,0,0],[.94,.90,-.035,.015],[.94,.90,-.035,.015],[.86,.86,.025,-.035],
+    [.86,.86,.025,-.035],[.86,.86,.025,-.035],[.78,.80,-.045,-.065],[.78,.80,-.045,-.065],
+    [.72,.76,.03,-.09],[.70,.74,.03,-.09],
+  ],cornerCut:.23},
+  nocturne:{profiles:[
+    [1,1,0,0], [.93,.94,0,-.02], [.86,.90,0,-.04], [.79,.86,0,-.055], [.73,.82,0,-.07],
+    [.67,.77,0,-.085], [.60,.72,0,-.10], [.54,.66,0,-.115], [.47,.59,0,-.13], [.36,.48,0,-.16],
+  ],towerProfiles:[
+    [1,1,0,0], [.92,.94,0,-.02], [.92,.94,0,-.02], [.78,.85,0,-.055], [.78,.85,0,-.055],
+    [.68,.77,0,-.085], [.57,.69,0,-.11], [.57,.69,0,-.11], [.44,.57,0,-.14], [.32,.44,0,-.18],
+  ],cornerCut:.035},
 };
 function composeSections(plan:PlotPlan,base:Point[],designs:SegmentDesign[],tier:number){
   const count=designs.length;
@@ -121,7 +158,7 @@ function composeSections(plan:PlotPlan,base:Point[],designs:SegmentDesign[],tier
     let candidate=quad;
     // A chamfer is a local response to a corner, never the entire tower's plan.
     if(tier>=6&&(segment>=6||segment===count-1)){
-      const corner=(Math.abs(plan.x+plan.z)%2===0?0:2),t=segment===count-1?.18:.12;
+      const corner=(Math.abs(plan.x+plan.z)%2===0?0:2),t=segment===count-1?grammar.cornerCut:grammar.cornerCut*.66;
       candidate=quad.flatMap((p,i)=>i!==corner?[p]:[
         {x:p.x+(quad[(i+quad.length-1)%quad.length].x-p.x)*t,z:p.z+(quad[(i+quad.length-1)%quad.length].z-p.z)*t},
         {x:p.x+(quad[(i+1)%quad.length].x-p.x)*t,z:p.z+(quad[(i+1)%quad.length].z-p.z)*t},
@@ -167,6 +204,8 @@ export function buildingForm(building:Building,roadScore=0){
     const exposed=above?outlineArea(proposal.outline)-outlineArea(clipOutline(proposal.outline,above)):outlineArea(proposal.outline);
     const section={...proposal,cornice:scaleOutline(proposal.outline,1.012),y,h,segment,terrace:exposed>.35};y+=h;return section;
   });
-  const roofHeight=tier===0?.25:tier<=2?.95:tier>=3?(building.style==='spire'?1.4:1.1):.66;
+  const crownTheme=designs[designs.length-1].theme;
+  const themedRoof={contemporary:tier===0?.25:tier<=2?.95:tier>=3?(building.style==='spire'?1.4:1.1):.66,earthen:tier<3?.72:.9,deco:tier<3?.72:1.45,metabolism:tier<3?.55:1.15,nocturne:tier<3?1.05:1.9,cyberpunk:CYBERPUNK_CROWN_HEIGHTS[tier]+.12}[crownTheme];
+  const roofHeight=Math.max(themedRoof,building.style==='spire'&&tier>=3?1.4:0);
   return {kind:definition.kind,tier,definition,height,footprint,podium,podiumFoundation,foundationOutline:podiumFoundation||rectangleOutline(plan,footprint.w+foundationPadding*2,footprint.d+foundationPadding*2),sections,foundationPadding,foundationHeight,baseY,topY:baseY+height+roofHeight,segments:designs};
 }

@@ -23,7 +23,7 @@ Build an invitation-only 3D city: each person has a plot near their inviter and 
 - Daily claim awards 30 XP and 30 bricks once per UTC calendar day.
 - GitHub's authenticated contribution API supplies commit counts (10 XP each); pull requests and reviews do not award rewards. Reward already-credited activity only once. These counts verify provider data, not the quality or uniqueness of a person's work.
 - Invitation tokens are single-use. The server searches for a free plot around the inviter and retries coordinate collisions.
-- Styles, facade colors and independent segment designs cost bricks. All balances and costs are enforced by the Worker.
+- Themes are permanent brick unlocks; unlocked themes, facade colors, and segment details can be switched freely. All unlock balances and costs are enforced by the Worker.
 - Demo residents and demo activity are visibly labeled, cannot be mistaken for verified achievements, and cannot be enabled through a production browser request.
 
 ## Scope boundaries

@@ -3,6 +3,8 @@ import { coastZ, PLOT_SPACING } from '../shared/world';
 
 const CHUNK_SIZE = PLOT_SPACING * 8;
 const BEACH_WIDTH = 2.2;
+// A fixed inland landmark, well beyond the starting neighborhood.
+const LAKE = { x: -98, z: -126, radiusX: 25, radiusZ: 18 };
 type Point = { x: number; z: number };
 
 /** A finite render window around the camera; its procedural coordinates never move. */
@@ -93,6 +95,25 @@ export class WorldTerrain {
     sand.receiveShadow = true;
     this.group.add(sand);
     this.group.add(new THREE.Mesh(geometry(shallow), new THREE.MeshStandardMaterial({ color: night ? '#719b9f' : '#bddad7', roughness: 1, side: THREE.DoubleSide })));
+    if (LAKE.x + 30 >= minX && LAKE.x - 30 <= maxX && LAKE.z + 24 >= minZ && LAKE.z - 24 <= maxZ) {
+      const shoreline: Point[] = [];
+      for (let i = 0; i < 64; i++) {
+        const angle = i / 64 * Math.PI * 2;
+        const radius = 1 + .09 * Math.sin(angle * 3 + .7) + .045 * Math.cos(angle * 5);
+        shoreline.push({ x: LAKE.x + Math.cos(angle) * LAKE.radiusX * radius, z: LAKE.z + Math.sin(angle) * LAKE.radiusZ * radius });
+      }
+      // Nested contours give the irregular shore a narrow bank and shallow rim.
+      for (const [scale, height, color] of [
+        [1.06, .006, night ? '#8a917c' : '#d2c8a7'],
+        [1, .012, night ? '#719b9f' : '#bddad7'],
+        [.91, .018, night ? '#598597' : '#93bdcc'],
+      ] as const) {
+        const points = shoreline.map(p => ({ x: LAKE.x + (p.x - LAKE.x) * scale, z: LAKE.z + (p.z - LAKE.z) * scale }));
+        const surface: number[] = [];
+        appendPolygon(surface, points, height);
+        this.group.add(new THREE.Mesh(geometry(surface), new THREE.MeshStandardMaterial({ color, roughness: 1, side: THREE.DoubleSide })));
+      }
+    }
   }
 }
 

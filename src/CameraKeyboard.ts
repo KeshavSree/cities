@@ -12,7 +12,7 @@ export class CameraKeyboard {
   private offset=new THREE.Vector3();
   private up=new THREE.Vector3(0,1,0);
 
-  constructor(private camera:THREE.OrthographicCamera,private controls:OrbitControls,private onStop:()=>void){
+  constructor(private camera:THREE.OrthographicCamera,private controls:OrbitControls,private onStop:()=>void,private onStart:()=>void=()=>{}){
     window.addEventListener('keydown',this.keyDown);
     window.addEventListener('keyup',this.keyUp);
     window.addEventListener('blur',this.clear);
@@ -25,7 +25,9 @@ export class CameraKeyboard {
   private keyDown=(event:KeyboardEvent)=>{
     if(event.ctrlKey||event.metaKey||event.altKey){this.clear();return;}
     if(!movementKeys.has(event.code)||this.blocked())return;
-    event.preventDefault();this.held.add(event.code);
+    event.preventDefault();
+    const wasIdle=!this.held.size;this.held.add(event.code);
+    if(wasIdle)this.onStart();
   };
   private keyUp=(event:KeyboardEvent)=>{if(this.held.delete(event.code)&&!this.held.size)this.onStop();};
   private clear=()=>{if(this.held.size){this.held.clear();this.onStop();}};

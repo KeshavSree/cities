@@ -1,6 +1,6 @@
 # C.I.T.I.E.S
 
-A little city of people who build things. Every resident gets a low-poly building; Verified activity earns permanent XP to level up through ten model tiers. Spend bricks on segment designs, finishes, and nearby public projects. New residents arrive through invitations and receive plots near their inviter.
+A little city of people who build things. Every resident gets a low-poly building; Verified activity earns permanent XP to level up through ten model tiers. Spend bricks on permanent theme unlocks, finishes, and nearby public projects. New residents arrive through invitations and receive plots near their inviter.
 
 ## Run locally
 
@@ -16,7 +16,7 @@ Open **http://127.0.0.1:5173**. The Worker runs at `127.0.0.1:8787`; Vite proxie
 
 `setup` copies `.dev.vars.example` to the ignored `.dev.vars`, generates a local encryption key, and applies D1 migrations. The local D1 database and Durable Object state persist in `.wrangler/state/`. The first visit seeds 21 explicitly labeled demo residents and signs you in as Alex Park. XP, bricks, customization, likes, public contributions, daily claims, invitations, and live updates use the real local Worker and D1 database. Refreshing or restarting the app preserves changes.
 
-To demonstrate invitations, click **Invite a friend**, create an invitation, then **Try a demo join**. This consumes the invitation and places a demo neighbor near you. Demo routes are disabled unless the server configuration sets `DEV_MODE=true`; that setting is absent from production configuration.
+To demonstrate invitations, click **Invite a friend**, create an invitation, then **Try a demo join**. The invitation is permanent and can be reused to place demo neighbors near you. Demo routes are disabled unless the server configuration sets `DEV_MODE=true`; that setting is absent from production configuration.
 
 ```sh
 npm run build       # TypeScript compilation + production frontend bundle
@@ -53,7 +53,7 @@ XP is permanent and levels unlock automatically. The current version has **30 le
 
 | Action | XP | Bricks |
 | --- | ---: | ---: |
-| Newly credited GitHub commit | 10 | 2 |
+| Newly credited GitHub commit (max 10/day) | 10 | 10 |
 | Invited resident actually joins | 200 | — |
 | An authenticated resident likes your tower, including yourself | 50 | — |
 | Nearby tower levels up, including creation (0 → 1) | 20 | — |
@@ -62,7 +62,7 @@ XP is permanent and levels unlock automatically. The current version has **30 le
 | Edit one segment's color and details | — | Costs 20 |
 | Change overall finish / default facade color | — | Costs 45 / 15 |
 
-GitHub rewards are commit-only; pull requests and reviews do not earn XP or bricks. Updated rates apply to future rewards, preserving earned XP and credited commit counts. `0003_reward_rates.sql` updates the public-project completion trigger to 200 XP.
+The first successful GitHub sync records a baseline and awards no XP or bricks for historical commits. Subsequent syncs reward increases above that baseline, capped at 20 commits (200 XP and 200 bricks) per UTC day. Excess commits are consumed by the baseline and cannot carry into later reward days. GitHub rewards are commit-only; pull requests and reviews do not earn XP or bricks. Updated rates apply to future rewards, preserving earned XP and credited commit counts. `0003_reward_rates.sql` updates the public-project completion trigger to 200 XP.
 
 Likes are permanent and limited to one per account per tower, including your own tower. Production liking requires a GitHub-connected account; local demo likes stay between demo residents. Invites only award after successful joining. Nearby rewards are event-based: the eight closest other residents within three plot spacings receive 20 XP for each level a nearby tower gains. Placing a new tower counts as 0 → 1; subsequent level-ups continue through level 30. Migration `0006_level_up_rewards.sql` replaces tier-milestone rewards with individual level-up rewards while retaining creation rewards, existing XP and balances. Coordinate-keyed, distance-weighted occupancy still shapes roads; it no longer determines an individual tower's model.
 
@@ -79,7 +79,17 @@ Likes are permanent and limited to one per account per tower, including your own
 | 25–27 | Sky garden | Biosphere terrace, green base band and roof planting |
 | 28–30 | Arcology | Civic energy platform, blue base band |
 
-Every three levels unlock a model tier and one editable segment: one at levels 1–3, up to ten at levels 28–30. Each level within a tier increases height. Each segment stores its own architectural theme, color, and facade details. Terraced Contemporary is the first available theme; classic windows, glass facades, and balconies are independent finishes. Existing saved designs inherit the new theme without spending bricks. The server accepts edits only for unlocked segments; ten storage slots are initialized on creation.
+Every three levels unlock a model tier and one editable segment: one at levels 1–3, up to ten at levels 28–30. Each level within a tier increases height. Each segment stores its own architectural theme, color, and facade details. Terraced Contemporary is free; four additional themes are permanent brick unlocks at shared price tiers. Classic windows, glass facades, and balconies remain independent details. Once a theme is unlocked, it can be applied to any available segment—and switched again later—without spending more bricks. The server verifies theme ownership and accepts edits only for unlocked segments; ten storage slots are initialized on creation.
+
+| Price tier | Theme | Bricks | Architectural system |
+| --- | --- | ---: | --- |
+| Starter | Terraced Contemporary | 0 | Offset volumes, planted terraces, connected facade lines |
+| 1 | Earthen Citadel | 90 | Tapered mineral walls, recessed openings, parapets and shaded courts |
+| 2 | Art Deco | 180 | Axial setbacks, vertical ribs, geometric entrances and stepped crowns |
+| 3 | Metabolism | 360 | Stable service cores, projecting modular pods and rooftop equipment |
+| 4 | Nocturne Spire | 540 | Buttressed dark masonry, narrow luminous bays and split pointed crowns |
+
+Theme identity extends through massing, facade proportions, materials, ground furnishings, roof treatment, crown and night lighting. Adjacent segments may use different owned themes; the shared composition layer retains the lower outline, support overlap and common facade datum so the result remains one building.
 
 Apartments and higher models have parcel-following bases. The Terraced Contemporary grammar uses asymmetric setbacks, paired volumes, a planted roof pavilion, and recessed garden floors supported by perimeter columns. Each tier combines a new proposal derived from the original plot with the previous tier’s parcel frame (65% proposal, 35% inherited frame). Plot skew remains present at every height. Actual lower wall geometry then constrains the result: at least 85% floor-plate overlap and at most 0.28 world units of cantilever (0.10 for smaller models). This is a visual massing rule, not structural engineering. A chamfer is confined to upper corners rather than making the whole tower triangular. Adjacent plots alternate the direction of lateral setbacks. Higher models use gentler lateral offsets and three-part shaft groups with matching outlines, so multiple editable tiers read as one continuous volume. One shallow recessed garden floor separates the upper shaft.
 
@@ -141,7 +151,7 @@ Before allocating a resident, `shared/plots.ts` precomputes a placement plan con
 
 Run `npm run check:roads` to check convex parcels, usable footprints across all model tiers, entrance alignment, all three junction types, and equality between preview and constructed road plans over a sample of 475 parcels.
 
-Daily rewards use a composite unique key and atomic D1 batches. Spending uses conditional SQL updates. Plot coordinates and identity are unique, and invitation allocation runs as an atomic batch that rejects used invitations and retries coordinate collisions. Changes require same-origin requests and authenticated sessions. Residents can create invitations without a daily limit. Only unused invitations appear in the invitation menu.
+Daily rewards use a composite unique key and atomic D1 batches. Spending uses conditional SQL updates. Plot coordinates and identity are unique, and invitation signup runs as an atomic batch that rejects invalid links and records each distinct new resident. Links are permanent and reusable; plot selection checks availability again when confirmed. Changes require same-origin requests and authenticated sessions. Residents can create invitations without a daily limit. Invitations from the last seven days appear with usage counts; expired links cannot be copied from the menu.
 
 GitHub manual sync has a 15-minute cooldown. A six-hour Cron Trigger refreshes at most three stale accounts per invocation. This is suitable for an initial small city; use Queues and more frequent scheduled batches before supporting many active GitHub accounts. No polling of GitHub during page rendering.
 
@@ -198,3 +208,13 @@ Roads correlate with neighboring development, while individual building models a
 Every occupied plot creates its planned entrance road. Small rectangular models and their entrances align to that frontage; larger bases follow parcel edges and upper sections fit their supporting shapes. Separate ground polygons are clipped to road shoulders; fences leave an entrance gap.
 
 The server returns the next 48 available slots in allocation order, using occupancy independent of the render limit and excluding public zones. Each candidate already has its plot and access-road plan. There is no separately curated remote preview block or connection repair after placement. Dev mode shows level-one shack outlines, entrance arrows, and the same planned approach roads that construction will activate. Individual candidates predict density independently; simultaneous joins can take a previewed slot before redemption. Ground gardens are cleared when a real building occupies the plot.
+
+### GitHub contribution calendar
+
+The tower sidebar uses a cached, real GitHub contribution calendar for the past year, with scrollable weekly columns, intensity colors, and daily hover details. The calendar includes all GitHub contribution types; XP still uses only newly credited commits. Manual and scheduled sync refresh both the calendar and commit count. Demo residents do not show fabricated graphs. Migration `0010_github_calendar.sql` stores calendars separately from neighborhood snapshots.
+
+Calendar layout adapted from [Kian Kasad’s website](https://github.com/kdkasad/website), copyright 2025 Kian Kasad, under the BSD-2-Clause-Patent license. The full license is distributed in `public/licenses/kasad-website.txt`.
+
+### Shared neighborhood reads
+
+The client reads public towers/projects from `/api/neighborhood` and personal balances, likes, unlocks and placement state from `/api/self`. A shared Durable Object caches neighborhood snapshots in eight-plot buckets for up to 30 seconds, coalesces simultaneous cache misses, and invalidates on tower/project mutations. Public cached buildings always have `bricks: null`. One hibernating WebSocket per browser subscribes to its current view; the server sends private tower balances only to the authenticated owner. Normal events patch individual entities; full catch-up reads occur on reconnection or explicit placement changes. The legacy bootstrap endpoint remains compatible with older clients.

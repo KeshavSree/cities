@@ -5,7 +5,9 @@ import { buildingForm, outlineArea } from '../src/buildingForm';
 import { streetNetwork, lotPolygon, neighborhoodScores } from '../src/neighborhood';
 import { upcomingPlotPreviews } from '../src/plotPreview';
 import type { Building } from '../shared/types';
-const resident=(x:number,z:number,level=1):Building=>({id:`${x},${z}`,username:'sample',name:'Sample',bio:'',avatar:null,github_url:null,website:null,school:null,is_demo:1,x,z,level,xp:0,bricks:35,segments:'[]',likes:0,style:'terrace',color:'sand',commits:0,prs:0,reviews:0,synced_at:null,updated_at:''});
+import type { BuildingTheme } from '../shared/progression';
+const themes:BuildingTheme[]=['contemporary','earthen','deco','metabolism','nocturne'];
+const resident=(x:number,z:number,level=1,theme:BuildingTheme='contemporary'):Building=>({id:`${x},${z}`,username:'sample',name:'Sample',bio:'',avatar:null,github_url:null,website:null,school:null,is_demo:1,x,z,level,xp:0,bricks:35,segments:JSON.stringify(Array.from({length:10},()=>({theme,color:'sand',style:'classic'}))),likes:0,style:'terrace',color:'sand',commits:0,prs:0,reviews:0,synced_at:null,updated_at:''});
 const inside=(point:{x:number;z:number},polygon:{x:number;z:number}[])=>polygon.every((a,i)=>{const b=polygon[(i+1)%polygon.length];return (b.x-a.x)*(point.z-a.z)-(b.z-a.z)*(point.x-a.x)>=-1e-5;});
 const patterns=new Set<string>();let plots=0;
 for(let x=-12;x<=12;x++)for(let z=-12;z<=6;z++){
@@ -17,10 +19,12 @@ for(let x=-12;x<=12;x++)for(let z=-12;z<=6;z++){
   const [a,b]=plan.frontage.points,dx=b.x-a.x,dz=b.z-a.z;
   assert(Math.abs(Math.sin(plan.rotation)*dx+Math.cos(plan.rotation)*dz)<1e-5,'Entrance not perpendicular to street');
   for(const level of [1,4,7,10,13,16,19,22,25,28,30]){
-    const form=buildingForm(resident(x,z,level),.6);
-    assert(form.footprint.w>.1&&form.footprint.d>.1,`Invalid footprint ${x},${z} L${level}: ${JSON.stringify(form.footprint)}`);
-    assert(form.sections.every(s=>s.outline.length>=3&&outlineArea(s.outline)>.1&&s.outline.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.z))));
-    assert(form.sections.every(s=>s.supportRatio>=.84999));
+    for(const theme of themes){
+      const form=buildingForm(resident(x,z,level,theme),.6);
+      assert(form.footprint.w>.1&&form.footprint.d>.1,`Invalid footprint ${x},${z} L${level} ${theme}: ${JSON.stringify(form.footprint)}`);
+      assert(form.sections.every(s=>s.outline.length>=3&&outlineArea(s.outline)>.1&&s.outline.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.z))),`Invalid section ${x},${z} L${level} ${theme}: ${JSON.stringify(form.sections.map(s=>({points:s.outline.length,area:outlineArea(s.outline),theme:form.segments[s.segment].theme})))}`);
+      assert(form.sections.every(s=>s.supportRatio>=.84999),`Unsupported section ${x},${z} L${level} ${theme}`);
+    }
   }
   for(const [nx,nz] of [[x,z],[x+1,z],[x+1,z+1],[x,z+1]]){
     const kind=junctionLayout(nx,nz);patterns.add(kind);

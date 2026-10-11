@@ -5,7 +5,7 @@ type Box = (parent: THREE.Group, x: number, y: number, z: number, width: number,
 type Material = (color: string) => THREE.Material;
 
 /** A stable park plan fitted to the road-defined parcel, with construction milestones. */
-export function buildParkLandscape(site: THREE.Group, boundary: GroundPoint[], entrance: GroundPoint, funded: number, night: boolean, box: Box, material: Material) {
+export function buildParkLandscape(site: THREE.Group, boundary: GroundPoint[], entrance: GroundPoint, funded: number, night: boolean, box: Box, material: Material, simplified = false) {
   const inside = (point: GroundPoint) => {
     let result = false;
     for (let i = 0, j = boundary.length - 1; i < boundary.length; j = i++) {
@@ -66,7 +66,8 @@ export function buildParkLandscape(site: THREE.Group, boundary: GroundPoint[], e
   const canopy = (p: GroundPoint, scale: number, index: number) => {
     box(site, p.x, .65 * scale, p.z, .18 * scale, 1.15 * scale, .18 * scale, '#947454');
     for (const [dx, y, dz, size] of [[0, 1.65, 0, .8], [.32, 1.4, .1, .55], [-.25, 1.5, -.15, .55]]) {
-      const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(size * scale, 0), material(['#719655', '#88a66d', '#5f824e'][index % 3]));
+      const geometry=simplified?new THREE.SphereGeometry(size*scale,8,6):new THREE.IcosahedronGeometry(size*scale,0);
+      const leaf = new THREE.Mesh(geometry, material(['#719655', '#88a66d', '#5f824e'][index % 3]));
       leaf.position.set(p.x + dx * scale, y * scale, p.z + dz * scale); leaf.scale.y = 1.12; leaf.castShadow = true; site.add(leaf);
     }
     disc(p, .45 * scale, .115, '#8c9d69', 8);

@@ -2,16 +2,19 @@ export type Style = 'terrace' | 'modern' | 'spire';
 export type Color = 'sand' | 'lilac' | 'sage' | 'coral' | 'blue';
 export interface Building {
   id: string; username: string; name: string; bio: string; avatar: string | null;
-  github_url: string | null; website: string | null; school: string | null;
+  linkedin_url?: string | null; github_url: string | null; website: string | null; school: string | null;
   is_demo: number; x: number; z: number; level: number; xp:number; bricks:number|null; segments:string; likes:number;
   style: Style; color: Color; commits: number; prs: number; reviews: number;
   synced_at: string | null; updated_at: string; invited_by?: string | null; invite_degree?: number;
   inviter_x?:number|null; inviter_z?:number|null;
 }
 export interface Bootstrap {
+  onboardingCompleted?:boolean;
+  githubReconnectRequired?:boolean;
+  pendingPlacement?:{origin:Building;options:{x:number;z:number}[]}|null;
   buildings: Building[]; me: string | null; demo: boolean; githubConfigured: boolean;
   claimedToday: boolean; dailyReward: number; inviteRequired: boolean;
-  nextPlots:{x:number;z:number}[]; projects:PublicProject[]; likedIds:string[];
+  nextPlots:{x:number;z:number}[]; projects:PublicProject[]; likedIds:string[]; unlockedThemes:string[];
 }
 export const COLORS: Record<Color, { label: string; hex: string }> = {
   sand: { label: 'Sandstone', hex: '#dfba85' },

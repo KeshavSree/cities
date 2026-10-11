@@ -23,6 +23,9 @@ const people = [
   ['demo-ava', 'avawilson', 'Ava Wilson', 'Learning Rust. Growing slowly.', 1, -2, 2, 'terrace', 'sage', 52, 6, 4],
   ['demo-kai', 'kaimori', 'Kai Mori', 'Tools that help other people make things.', -1, -2, 7, 'spire', 'coral', 331, 37, 30],
 ] as const;
+const demoThemes:Record<string,'earthen'|'deco'|'metabolism'|'nocturne'>={
+  'demo-jules':'earthen','demo-maya':'deco','demo-asha':'metabolism','demo-sam':'nocturne',
+};
 
 // Sample invitation tree: every resident except the founder has an inviter.
 // These are demo fixtures, never inferred relationships between real accounts.
@@ -41,21 +44,23 @@ export async function ensureDemoConnections(db:D1Database){
   const children=Object.keys(demoConnections);
   const missing=await db.prepare(`SELECT u.id FROM users u
     WHERE u.is_demo=1 AND u.id IN (${children.map(()=>'?').join(',')})
-    AND NOT EXISTS(SELECT 1 FROM invitations i WHERE i.used_by=u.id)`)
+    AND NOT EXISTS(SELECT 1 FROM invitation_redemptions r WHERE r.user_id=u.id)`)
     .bind(...children).all<{id:string}>();
   if(!missing.results.length)return;
   await db.batch(missing.results.map(({id})=>db.prepare(`INSERT OR IGNORE INTO invitations(token,inviter_id,used_by,created_at)
     SELECT ?,parent.id,child.id,'2000-01-01 00:00:00' FROM users parent JOIN users child ON child.id=?
     WHERE parent.id=? AND parent.is_demo=1 AND child.is_demo=1
-    AND NOT EXISTS(SELECT 1 FROM invitations i WHERE i.used_by=child.id)`)
+    AND NOT EXISTS(SELECT 1 FROM invitation_redemptions r WHERE r.user_id=child.id)`)
     .bind(`demo-seed-${id}`,id,demoConnections[id])));
 }
 
 export async function seedDemo(db: D1Database) {
   const stmts: D1PreparedStatement[] = [];
   for (const [id, username, name, bio, x, z, level, style, color, commits, prs, reviews] of people) {
+    const theme=demoThemes[id];
+    const segments=JSON.stringify(Array.from({length:10},()=>theme?{theme,color,style:style==='modern'?'glass':'classic'}:null));
     stmts.push(db.prepare('INSERT OR IGNORE INTO users(id, username, name, bio, is_demo) VALUES(?, ?, ?, ?, 1)').bind(id, username, name, bio));
-    stmts.push(db.prepare('INSERT OR IGNORE INTO buildings(user_id, x, z, level, xp, bricks, style, color) VALUES(?, ?, ?, ?, ?, ?, ?, ?)').bind(id, x, z, level, xpAtLevel(level), id === 'demo-you' ? 360 : 120, style as Style, color as Color));
+    stmts.push(db.prepare('INSERT OR IGNORE INTO buildings(user_id, x, z, level, xp, bricks, style, color, segments) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, x, z, level, xpAtLevel(level), id === 'demo-you' ? 360 : 120, style as Style, color as Color,segments));
     stmts.push(db.prepare("INSERT OR IGNORE INTO metrics(user_id, commits, prs, reviews, credited_commits, credited_prs, credited_reviews, synced_at) VALUES(?, ?, ?, ?, ?, ?, ?, datetime('now'))").bind(id, commits, prs, reviews, commits, prs, reviews));
   }
   // Seed in three requests via /api/dev/start?batch=N. Each invocation stays below 50 queries.

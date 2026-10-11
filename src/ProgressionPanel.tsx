@@ -29,7 +29,7 @@ export function LevelProgress({building}:{building:Building}){
       <p>Tower likes: {REWARDS.like} XP</p>
       <p>Daily visit: {REWARDS.dailyXp} XP + {REWARDS.dailyBricks} bricks</p>
       <p>Nearby tower level-up: {REWARDS.construction} XP</p>
-      <p>GitHub: {REWARDS.commit} XP / commit</p>
+      <p>GitHub: {REWARDS.commit} XP + {REWARDS.commitBricks} bricks / commit · max 100 of each/day</p>
     </aside>}
   </section>;
 }

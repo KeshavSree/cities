@@ -1,0 +1,33 @@
+.modal.invite-welcome{width:min(1000px,calc(100vw - 48px));padding:42px 38px 32px}
+.modal.invite-welcome h2{max-width:none;font-size:32px;letter-spacing:-1.1px}
+.invite-welcome>.modal-description{font-size:15px;margin:10px 0 28px}
+.invite-welcome-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:26px;list-style:none;margin:0 0 32px;padding:0}
+.invite-welcome-steps li{min-width:0}
+.welcome-illustration{height:185px;display:flex;align-items:center;justify-content:center;margin-bottom:20px;position:relative;overflow:hidden}
+.welcome-illustration img{width:150px;height:150px;object-fit:contain}
+.invite-welcome-steps h3{font-size:17px;line-height:1.5;font-weight:650;color:#30454d}
+.invite-welcome-steps h3>span{color:#438ed1;margin-right:5px;font-weight:750}
+.invite-welcome-steps p{font-size:13px;line-height:1.8;color:#758b96;margin-top:9px}
+.welcome-activity{gap:5px;padding:12px}
+.welcome-activity img{width:125px;height:140px}
+.welcome-contributions{display:grid;grid-template-columns:repeat(5,11px);gap:3px;transform:rotate(-8deg);flex-shrink:0}
+.welcome-contributions span{height:11px;border-radius:2px}
+.welcome-progress-arrow{color:#8ea58b;flex-shrink:0}
+.welcome-customize img{width:170px;height:170px;filter:hue-rotate(115deg)}
+.welcome-bricks{position:absolute;left:20px;bottom:20px;display:flex;align-items:center;gap:8px;color:#438ed1}
+.welcome-neighbors{gap:0;padding:8px}
+.welcome-neighbors img{width:calc((100% - 34px)/2);height:150px}
+.welcome-neighbor-plus{width:34px;height:34px;display:grid;place-items:center;background:#d9edff;color:#438ed1;border-radius:50%;flex-shrink:0}
+.invite-welcome>.primary-button{max-width:300px;margin:0 auto;display:flex;justify-content:center;background:#dceeff;color:#438ed1;box-shadow:none;transition:background-color 120ms ease,color 120ms ease,transform 120ms ease}
+.invite-welcome>.primary-button:hover:not(:disabled){background:#438ed1;color:#fff;transform:scale(1.05)}
+.invite-welcome>.primary-button:active:not(:disabled){transform:scale(.97)}
+.invite-welcome>.primary-button:focus-visible{outline:2px solid #438ed1;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.invite-welcome>.primary-button{transition:none}}
+@media(max-width:760px){
+  .modal.invite-welcome{width:100%;padding:32px 24px 26px}
+  .modal.invite-welcome h2{font-size:25px;padding-right:20px}
+  .invite-welcome-steps{grid-template-columns:1fr;gap:24px}
+  .welcome-illustration{height:160px;margin-bottom:12px}
+  .welcome-neighbors img{width:130px}
+  .welcome-neighbors{gap:12px}
+}

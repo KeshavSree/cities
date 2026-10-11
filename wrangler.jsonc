@@ -2,6 +2,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cities",
   "main": "worker/index.ts",
+  "workers_dev": true,
+  "routes": [{ "pattern": "devcities.dev", "custom_domain": true }],
   "compatibility_date": "2026-10-07",
   "assets": {
     "directory": "./dist",
@@ -12,11 +14,11 @@
   "d1_databases": [{
     "binding": "DB",
     "database_name": "cities",
-    "database_id": "00000000-0000-0000-0000-000000000000",
+    "database_id": "76ba9e61-93e0-4d36-9d50-439ed6eb3b75",
     "migrations_dir": "migrations"
   }],
   "durable_objects": { "bindings": [{ "name": "NEIGHBORHOODS", "class_name": "Neighborhood" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Neighborhood"] }],
   "triggers": { "crons": ["17 */6 * * *"] },
-  "vars": { "APP_ORIGIN": "https://cities.example.com" }
+  "vars": { "APP_ORIGIN": "https://devcities.dev", "FOUNDER_GITHUB_ID": "178847100" }
 }

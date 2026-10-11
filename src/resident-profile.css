@@ -32,3 +32,9 @@
 @media(max-width:760px){.profile-bio-row p{font-size:12px}}
 @media(hover:none){.profile-photo-overlay{opacity:1;background:linear-gradient(transparent 50%,#263b4d90 50%);align-items:end;padding-bottom:4px}.profile-photo-overlay svg{width:13px;height:13px}}
 @media(prefers-reduced-motion:reduce){.profile-photo-overlay{transition:none}}
+.tower-drawer .desktop-focus,.tower-drawer .bio-edit-button{transition:background-color 120ms ease,color 120ms ease,transform 120ms ease}
+.tower-drawer .desktop-focus:hover:not(:disabled),.tower-drawer .bio-edit-button:hover:not(:disabled){background:#438ed1;color:#fff;transform:scale(1.05)}
+.tower-drawer .desktop-focus:active:not(:disabled),.tower-drawer .bio-edit-button:active:not(:disabled){transform:scale(.97)}
+@media(prefers-reduced-motion:reduce){.tower-drawer .desktop-focus,.tower-drawer .bio-edit-button{transition:none}}
+
+.profile-photo-link{display:flex;flex-shrink:0;border-radius:50%}
