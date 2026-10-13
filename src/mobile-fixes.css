@@ -41,7 +41,7 @@
   .tower-drawer .profile-links-form input,.tower-drawer textarea,.tower-drawer input:not([type=file]),.invitation-pane input{font-size:16px;min-height:44px}
   .tower-drawer .profile-links-form label{font-size:12px}
   .tower-drawer .profile-links-form button,.tower-drawer .bio-editor button{min-height:44px;padding:8px 10px}
-  .invitation-drawer{bottom:var(--mobile-dock-offset)}
+  .invitation-drawer{bottom:var(--mobile-dock-offset);overflow:clip}
   .invitation-drawer .invitation-pane{z-index:1;max-height:calc(var(--visible-height,100dvh) - var(--mobile-header) - env(safe-area-inset-top) - var(--mobile-dock-offset) - 12px);background:#fff;overscroll-behavior:contain}
   .invitation-backdrop{display:block;position:absolute;inset:0;pointer-events:auto;background:transparent;border:0}
   .invitation-pane .icon-button{min-width:44px;min-height:44px}

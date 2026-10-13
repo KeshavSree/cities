@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { ChevronUp } from 'lucide-react';
 import './invitation-pane.css';
 
@@ -18,15 +18,23 @@ const arrowHead='M83 62L90 72L101 66';
 export function InvitationPane({open,onClose,children}:{open:boolean;onClose:()=>void;children:ReactNode}){
   const pencilId=useId();
   const panel=useRef<HTMLElement>(null),closeRef=useRef(onClose);closeRef.current=onClose;
+  useLayoutEffect(()=>{
+    if(!open||!panel.current)return;
+    // Focusing a translated sheet can scroll its clipping container. Start
+    // each opening at the original anchor, including after an earlier jump.
+    const drawer=panel.current.parentElement;
+    if(drawer){drawer.scrollTop=0;drawer.scrollLeft=0;}
+    panel.current.scrollTop=0;
+  },[open]);
   useEffect(()=>{
     if(!open)return;
     const previous=document.activeElement as HTMLElement|null;
-    panel.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    panel.current?.querySelector<HTMLButtonElement>('button')?.focus({preventScroll:true});
     const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();closeRef.current();}};
     document.addEventListener('keydown',escape);
     return()=>{
       document.removeEventListener('keydown',escape);
-      if(panel.current?.contains(document.activeElement)&&previous?.isConnected)previous.focus();
+      if(panel.current?.contains(document.activeElement)&&previous?.isConnected)previous.focus({preventScroll:true});
     };
   },[open]);
   return <div className={`invitation-drawer ${open?'is-open':''}`} aria-hidden={!open}>
