@@ -30,6 +30,7 @@ export function InvitationPane({open,onClose,children}:{open:boolean;onClose:()=
     };
   },[open]);
   return <div className={`invitation-drawer ${open?'is-open':''}`} aria-hidden={!open}>
+    {open&&<button className="invitation-backdrop" aria-label="Dismiss invitations" onClick={onClose}/>}
     <aside ref={panel} className="invitation-pane" aria-labelledby="invitation-title" inert={!open}>
       <header><h2 id="invitation-title">Invite someone</h2><button className="icon-button" aria-label="Close invitations" title="Slide invitations closed" onClick={onClose}><ChevronUp size={20}/></button></header>
       <svg className="invite-pencil-arrow" viewBox="0 0 130 90" fill="none" aria-hidden="true">

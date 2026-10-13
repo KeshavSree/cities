@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import type { Building } from '../shared/types';
 import { ProfileAvatar } from './ResidentProfile';
 import './resident-search.css';
@@ -15,8 +15,9 @@ export function ResidentSearch({open,query,results,onOpenChange,onQuery,onSelect
     document.addEventListener('pointerdown',outside);
     return()=>document.removeEventListener('pointerdown',outside);
   },[open,onOpenChange]);
-  const close=()=>{onOpenChange(false);button.current?.focus();};
+  const close=()=>{onOpenChange(false);if(window.innerWidth<=760)document.querySelector<HTMLButtonElement>('.mobile-dock [aria-label="Find neighbors"]')?.focus();else button.current?.focus();};
   const activeIndex=Math.min(active,Math.max(0,results.length-1));
+  useEffect(()=>{if(open)document.getElementById(`${listId}-${activeIndex}`)?.scrollIntoView({block:'nearest'});},[open,activeIndex,listId]);
   return <div ref={root} className={`nav-search ${open?'is-open':''}`} onKeyDown={event=>{
     if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();}
   }}>
@@ -26,7 +27,7 @@ export function ResidentSearch({open,query,results,onOpenChange,onQuery,onSelect
         if(event.key==='ArrowDown'||event.key==='ArrowUp'){
           event.preventDefault();setActive(previous=>Math.max(0,Math.min(results.length-1,previous+(event.key==='ArrowDown'?1:-1))));
         }else if(event.key==='Enter'&&results[activeIndex]){event.preventDefault();onSelect(results[activeIndex]);}
-      }}/>
+      }}/><button className="search-close" type="button" aria-label="Close search" onClick={close}><X size={19}/></button>
     </div>
     <div className="search-suggestions" inert={!open} aria-hidden={!open}>
       <div id={listId} className="resident-results" role="listbox" aria-label="Matching residents">

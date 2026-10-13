@@ -6,6 +6,8 @@ import { type Bootstrap, type Building, type Color } from '../shared/types';
 import { VIEW_RADIUS } from '../shared/world';
 import { lightingAt } from './lighting';
 import { TowerDrawer } from './TowerDrawer';
+import { useViewport } from './useViewport';
+import { ChangelogPane } from './Changelog';
 import { Onboarding } from './Onboarding';
 import { InvitationPane } from './InvitationPane';
 import { InviteWelcomeSteps } from './InviteWelcomeSteps';
@@ -29,7 +31,7 @@ import './daily-bonus.css';
 import './xp-reward.css';
 import './settings-pane.css';
 
-type Modal = 'invite' | 'help' | 'login' | 'not-invited' | 'auth-error' | null;
+type Modal = 'changelog' | 'invite' | 'help' | 'login' | 'not-invited' | 'auth-error' | null;
 const CityScene = lazy(()=>import('./CityScene').then(m=>({default:m.CityScene})));
 type Invite = { token: string; created_at: string; use_count:number };
 const brickBalanceKey=(id:string)=>`cities-seen-bricks:${id}`;
@@ -48,6 +50,11 @@ function initialize() {
 }
 
 export default function App() {
+  const viewport=useViewport();
+  useEffect(()=>{
+    const root=document.documentElement;root.style.setProperty('--visible-height',`${viewport.height}px`);root.dataset.keyboardOpen=String(viewport.keyboardOpen);
+    return()=>{root.style.removeProperty('--visible-height');delete root.dataset.keyboardOpen;};
+  },[viewport.height,viewport.keyboardOpen]);
   const [snapshot, setSnapshot] = useState<Bootstrap | null>(null);
   const [error, setError] = useState('');
   const [pageVisible,setPageVisible]=useState(()=>!document.hidden);
@@ -294,8 +301,8 @@ export default function App() {
   const own=tower?.id===snapshot?.me;
   const neighbors=[...buildings].sort((a,b)=>b.level-a.level);
   const filtered=neighbors.filter(b=>`${b.name} ${b.username}`.toLowerCase().includes(query.toLowerCase()));
-  const select=(b:Building)=>{setModal(prev=>prev==='invite'?null:prev);setSelected(b.id);setSearchOpen(false);setDrawerOpen(true);scene.current?.focus(b);};
-  const selectProject=(id:string)=>{setModal(prev=>prev==='invite'?null:prev);setSelected(id);setSearchOpen(false);setDrawerOpen(true);const p=snapshot?.projects.find(p=>p.id===id);if(p)scene.current?.focus(p);};
+  const select=(b:Building)=>{setSettingsOpen(false);setModal(prev=>prev==='invite'||prev==='changelog'?null:prev);setSelected(b.id);setSearchOpen(false);setDrawerOpen(true);scene.current?.focus(b);};
+  const selectProject=(id:string)=>{setSettingsOpen(false);setModal(prev=>prev==='invite'||prev==='changelog'?null:prev);setSelected(id);setSearchOpen(false);setDrawerOpen(true);const p=snapshot?.projects.find(p=>p.id===id);if(p)scene.current?.focus(p);};
   const onboardingTower=useCallback(()=>{if(!meId)return;setSelected(meId);setDrawerOpen(true);setModal(null);setSearchOpen(false);},[meId]);
   const onboardingCloseInvite=useCallback(()=>setModal(null),[]);
   useEffect(()=>{
@@ -336,18 +343,18 @@ export default function App() {
   const like=()=>tower&&action('like',async()=>{const r=await api<{building:Building}>('/like',{tower:tower.id});update(r.building);setSnapshot(prev=>prev?{...prev,likedIds:[...prev.likedIds,tower.id]}:prev);setLikePulse(tower.id);});
   const devProgression=(data:{level?:number;source?:string})=>tower&&action('dev',async()=>{const r=await api<{building:Building}>('/dev/progression',{tower:tower.id,...data});update(r.building);if(data.level)scene.current?.focus(r.building);notify(data.level?'Demo model tier updated.':'Sample reward recorded.');});
   const contribute=(project:string,amount:number)=>action('project',async()=>{const r=await api<{building:Building;project:Bootstrap['projects'][number]}>('/projects/contribute',{project,amount,requestId:crypto.randomUUID()});update(r.building);setSnapshot(prev=>prev?{...prev,projects:prev.projects.map(p=>p.id===r.project.id?r.project:p)}:prev);notify('Your bricks are building a shared place.');});
-  const showInvites=()=>{if(!me){location.href='/api/auth/github';return;}if(modal==='invite'){setModal(null);return;}setDrawerOpen(false);setSearchOpen(false);setModal('invite');api<{invitation:Invite}>('/invites',{}).then(r=>setInvites([r.invitation])).catch(e=>notify(e.message,true));};
+  const showInvites=()=>{if(!me){location.href='/api/auth/github';return;}if(modal==='invite'){setModal(null);return;}setSettingsOpen(false);setDrawerOpen(false);setSearchOpen(false);setModal('invite');api<{invitation:Invite}>('/invites',{}).then(r=>setInvites([r.invitation])).catch(e=>notify(e.message,true));};
   const copy=async(token:string)=>{try{await navigator.clipboard.writeText(`${location.origin}/?invite=${token}`);notify('Invitation copied.');}catch{notify('Clipboard is unavailable. Select and copy the invitation link below.',true);}};
   const createInvite=()=>action('invite',async()=>{if(invites[0])await copy(invites[0].token);});
 
   return <div className={`app ${lighting.night?'night':''}`} style={{background:`radial-gradient(ellipse at 40% 55%,${lighting.skyCenter} 0,${lighting.skyEdge} 100%)`}}>
     <header className="topbar">
-      <button className="brand" onClick={()=>{scene.current?.reset();setCenter({x:0,z:0});}} aria-label="C.I.T.I.E.S, return to city center">
+      <div className="brand-and-changelog"><button className="brand" onClick={()=>{scene.current?.reset();setCenter({x:0,z:0});}} aria-label="C.I.T.I.E.S, return to city center">
         <span className="brand-mark"><i/><i/><i/></span><span>c.i.t.i.e.s<span className="brand-period">.</span></span>
-      </button>
+      </button><button className="changelog-link" onClick={()=>{setModal(previous=>previous==='changelog'?null:'changelog');setSearchOpen(false);setSettingsOpen(false);setDrawerOpen(false);}} aria-expanded={modal==='changelog'} aria-controls="changelog-pane">Changelog</button></div>
       <nav aria-label="City controls">
         {canDebug && <button className="debug-toggle" aria-pressed={showScores} onClick={toggleScores} title="Show model tiers, XP, and road diagnostics"><Bug size={14}/>Dev mode</button>}
-        <>{canDebug && <button className="debug-toggle" disabled={!me||placementActive} onClick={()=>{onboardingTower();setOnboardingOpen(true);}}>Test onboarding</button>}{canDebug && <button className="debug-toggle" disabled={!me} onClick={enterPlacement}>Test placement</button>}</><ResidentSearch open={searchOpen} query={query} results={filtered} onQuery={setQuery} onSelect={select} onOpenChange={open=>{if(open)setModal(prev=>prev==='invite'?null:prev);setSearchOpen(open);}}/>
+        <>{canDebug && <button className="debug-toggle" disabled={!me||placementActive} onClick={()=>{onboardingTower();setOnboardingOpen(true);}}>Test onboarding</button>}{canDebug && <button className="debug-toggle" disabled={!me} onClick={enterPlacement}>Test placement</button>}</><ResidentSearch open={searchOpen} query={query} results={filtered} onQuery={setQuery} onSelect={select} onOpenChange={open=>{if(open)setModal(prev=>prev==='invite'||prev==='changelog'?null:prev);setSearchOpen(open);}}/>
         <span className="nav-divider"/>
         {me && <button className="invite-button" aria-label="Invite a friend" title="Invite a friend" onClick={showInvites}><Plus size={16}/> Invite a friend</button>}
         {me&&me.bricks!==null&&<span ref={brickCounter} className="topbar-bricks" aria-label={`${me.bricks.toLocaleString()} bricks`}><Package size={17} aria-hidden="true"/><span>{me.bricks.toLocaleString()}</span></span>}
@@ -365,8 +372,8 @@ export default function App() {
         {placementChoice && <button className="placement-confirm" disabled={Boolean(busy)} onClick={confirmPlacement}><Hammer size={24} aria-hidden="true"/><span>{busy==='placement'?'Placing…':'Select location'}</span></button>}
       </section>}
       {!placementActive && drawerOpen && (tower||project||selected==='projects')&&<button className="mobile-sheet-backdrop" aria-label="Close details" onClick={()=>setDrawerOpen(false)}/>}
-      {!placementActive && (project||selected==='projects')&&<TowerDrawer open={drawerOpen} onOpenChange={open=>{if(open)setModal(prev=>prev==='invite'?null:prev);setDrawerOpen(open);}} subject="project"><ProjectDetails key={selected} project={project} projects={snapshot?.projects||[]} me={me} busy={Boolean(busy)} onSelect={selectProject} onFocus={p=>scene.current?.focus(p)} onContribute={contribute}/></TowerDrawer>}
-      {!placementActive && tower && <TowerDrawer open={drawerOpen} onOpenChange={open=>{if(open)setModal(prev=>prev==='invite'?null:prev);setDrawerOpen(open);}}><aside key={tower.id} className="inspector" aria-label={`${tower.name}'s tower`}>
+      {!placementActive && (project||selected==='projects')&&<TowerDrawer open={drawerOpen} onOpenChange={open=>{if(open)setModal(prev=>prev==='invite'||prev==='changelog'?null:prev);setDrawerOpen(open);}} subject="project"><ProjectDetails key={selected} project={project} projects={snapshot?.projects||[]} me={me} busy={Boolean(busy)} onSelect={selectProject} onFocus={p=>scene.current?.focus(p)} onContribute={contribute}/></TowerDrawer>}
+      {!placementActive && tower && <TowerDrawer open={drawerOpen} onOpenChange={open=>{if(open)setModal(prev=>prev==='invite'||prev==='changelog'?null:prev);setDrawerOpen(open);}}><aside key={tower.id} className="inspector" aria-label={`${tower.name}'s tower`}>
         <ResidentProfile key={tower.id} building={tower} own={own} busy={Boolean(busy)} onSaveBio={saveBio} onUpload={savePhoto} nameAction={<div className="tower-social"><button className={`tower-like ${likePulse===tower.id?'is-popping':''}`} aria-pressed={Boolean(snapshot?.likedIds.includes(tower.id))} aria-label={`${snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} ${own?'your tower':`${tower.name}'s tower`}, ${tower.likes} likes`} title={snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} disabled={!me||Boolean(busy)||snapshot?.likedIds.includes(tower.id)} onClick={like}><Heart className="tower-like-heart" size={17} aria-hidden="true" fill={snapshot?.likedIds.includes(tower.id)?'currentColor':'none'}/><span>{tower.likes}</span></button></div>} headerActions={<button className="icon-button desktop-focus" title="Focus this tower" aria-label="Focus this tower" onClick={()=>scene.current?.focus(tower)}><LocateFixed size={20}/></button>}/>
         {showScores && <ScoreBreakdown score={scoreAt(tower.x,tower.z)} building={tower} editable={Boolean(snapshot?.demo&&tower.is_demo)} busy={Boolean(busy)} onDev={devProgression}/>}
         <LevelProgress building={tower}/>
@@ -376,7 +383,7 @@ export default function App() {
           try{const r=await api<{building:Building}>('/profile/links',links);update(r.building);}finally{setBusy('');}
         }}/>
         <div className="tower-panel">
-          <SegmentEditor key={tower.id} building={tower} own={own} busy={Boolean(busy)} unlockedThemes={snapshot?.unlockedThemes||['contemporary']} onUnlock={unlockTheme} onSave={saveSegment}/>
+          <SegmentEditor key={tower.id} building={tower} own={own} active={drawerOpen} busy={Boolean(busy)} unlockedThemes={snapshot?.unlockedThemes||['contemporary']} onUnlock={unlockTheme} onSave={saveSegment}/>
           {!tower.is_demo&&<div className="section-heading"><h3>GitHub activity</h3></div>}
           <GitHubCalendar key={tower.id} building={tower}/>
           <div className="activity-caption"><span/>{own && !tower.is_demo && <button disabled={Boolean(busy)} onClick={()=>{if(snapshot?.githubReconnectRequired){setReconnectOpen(true);return;}action('sync',async()=>{try{const r=await api<{building:Building}>('/sync',{});update(r.building);notify('Your GitHub activity is up to date.');}catch(e){handleSyncError(e);}});}}>{snapshot?.githubReconnectRequired?'Reconnect GitHub':busy==='sync'?'Syncing…':'Sync activity'}</button>}</div>
@@ -386,14 +393,15 @@ export default function App() {
       {me && !snapshot?.claimedToday && <button ref={dailyButton} className="daily-card daily-bonus" aria-label="Collect daily bonus, 30 bricks" aria-busy={busy==='daily'} disabled={Boolean(busy)} onClick={daily}>
         <strong>Daily Bonus</strong><span className="daily-bonus-reward"><span className="daily-icon"><Package size={21} aria-hidden="true"/></span><span>{snapshot?.dailyReward||30}</span></span>
       </button>}
-      <aside className={`settings-pane ${settingsOpen?'is-open':''}`} aria-label="Settings" aria-hidden={!settingsOpen}>
+      <aside className={`settings-pane ${settingsOpen?'is-open':''}`} aria-label="Settings" aria-hidden={!settingsOpen} inert={!settingsOpen}>
         <header><div><Settings size={18} aria-hidden="true"/><span>Settings</span></div><button title="Close settings" aria-label="Close settings" tabIndex={settingsOpen?0:-1} onClick={()=>setSettingsOpen(false)}><X size={17}/></button></header>
         <div className="settings-row"><Layers size={18} aria-hidden="true"/><span>LOD</span><button className="settings-switch" type="button" role="switch" aria-label="Level of detail" aria-checked={lodEnabled} tabIndex={settingsOpen?0:-1} onClick={toggleLod}><span/></button></div>
+        {canDebug&&<div className="mobile-dev-tools"><button onClick={toggleScores} aria-pressed={showScores}><Bug size={18}/>Development diagnostics</button><button disabled={!me||placementActive} onClick={()=>{setSettingsOpen(false);onboardingTower();setOnboardingOpen(true);}}>Test onboarding</button><button disabled={!me} onClick={()=>{setSettingsOpen(false);enterPlacement();}}>Test placement</button></div>}
       </aside>
       <div className="map-controls"><div className="map-tools"><button title="Zoom in" aria-label="Zoom in" onClick={()=>scene.current?.zoom(1.2)}><Plus size={18}/></button><button title="Zoom out" aria-label="Zoom out" onClick={()=>scene.current?.zoom(1/1.2)}><Minus size={18}/></button><span/><button title="Reset view" aria-label="Reset view" onClick={()=>{scene.current?.reset();setCenter({x:0,z:0});}}><Compass size={19}/></button><button className={settingsOpen?'active':''} title="Settings" aria-label="Settings" aria-expanded={settingsOpen} onClick={()=>setSettingsOpen(open=>!open)}><Settings size={18}/></button><button title="How it works" aria-label="How it works" onClick={()=>setModal('help')}><HelpCircle size={18}/></button></div></div>
       <nav className={`mobile-dock ${me?'':'is-guest'}`} aria-label="Mobile city navigation">
         <button className={!searchOpen&&!drawerOpen&&modal===null?'is-active':''} aria-label="Explore city" onClick={()=>{setSearchOpen(false);setDrawerOpen(false);setModal(null);scene.current?.reset();setCenter({x:0,z:0});}}><Compass size={20}/><span>Explore</span></button>
-        <button className={searchOpen?'is-active':''} aria-label="Find neighbors" aria-expanded={searchOpen} onClick={()=>{setDrawerOpen(false);setModal(null);setSearchOpen(!searchOpen);}}><Users size={20}/><span>Neighbors</span></button>
+        <button className={searchOpen?'is-active':''} aria-label="Find neighbors" aria-expanded={searchOpen} onClick={()=>{setSettingsOpen(false);setDrawerOpen(false);setModal(null);setSearchOpen(!searchOpen);}}><Users size={20}/><span>Neighbors</span></button>
         <button className={`mobile-daily ${!snapshot?.claimedToday?'has-reward':''}`} aria-label={snapshot?.claimedToday?'Daily bonus collected':'Collect daily bonus'} disabled={!me||Boolean(busy)||snapshot?.claimedToday} onClick={daily}><Gift size={20}/><span>Bonus</span></button>
         {me && <button className={modal==='invite'?'is-active':''} aria-label="Invite a friend" onClick={showInvites}><Plus size={20}/><span>Invite</span></button>}
         <button className={drawerOpen&&selected===snapshot?.me?'is-active':''} aria-label={me?'Open my tower':'Sign in'} onClick={focusMe}>{me?<ProfileAvatar avatar={me.avatar} name={me.name} className="dock-avatar"/>:<Github size={20}/>}<span>Me</span></button>
@@ -418,7 +426,8 @@ export default function App() {
           <button className="icon-button" title="Copy invitation" aria-label="Copy invitation" onClick={()=>copy(i.token)}><Copy size={17}/></button>
         </div>)}</div>}
     </InvitationPane>
-    {modal && modal!=='invite' && <Dialog className={modal==='login' && inviteToken ? 'invite-welcome' : ''} onClose={()=>setModal(null)} showMark={!inviteToken || modal!=='login'} title={modal==='help'?'A city built by its people.':modal==='not-invited'?'You have not been invited':modal==='auth-error'?'GitHub sign-in could not be completed':'Welcome to C.I.T.I.E.S'}>
+    <ChangelogPane open={modal==='changelog'} onClose={()=>setModal(null)}/>
+    {modal && modal!=='invite' && modal!=='changelog' && <Dialog className={modal==='login' && inviteToken ? 'invite-welcome' : ''} onClose={()=>setModal(null)} showMark={!inviteToken || modal!=='login'} title={modal==='help'?'A city built by its people.':modal==='not-invited'?'You have not been invited':modal==='auth-error'?'GitHub sign-in could not be completed':'Welcome to C.I.T.I.E.S'}>
       {modal==='help' && <><p className="modal-description">Earn XP to grow your tower through {MAX_LEVEL} levels and {TIERS.length} model tiers. Spend bricks to make it yours.</p><div className="help-item"><Github/><div><h3>Verified contributions.</h3><p>GitHub earns {REWARDS.commit} XP per newly credited commit, up to {GITHUB_DAILY_COMMIT_LIMIT} rewarded commits ({GITHUB_DAILY_COMMIT_LIMIT*REWARDS.commit} XP) per UTC day. Each rewarded commit also earns {REWARDS.commitBricks} bricks, capped at {GITHUB_DAILY_COMMIT_LIMIT*REWARDS.commitBricks} bricks per UTC day. Pull requests and reviews do not earn rewards.</p></div></div><div className="help-item"><Layers/><div><h3>Ten tiers. Thirty levels.</h3><p>From a shack to an arcology. Every {LEVELS_PER_TIER} levels unlock a new model, ground treatment, and editable segment. Upper sections inherit plot angles and lower alignments while making room for terraces. Permanently unlock architectural themes with bricks, then switch unlocked themes across segments for free. Each new level takes more XP.</p></div></div><div className="help-item"><Users/><div><h3>Build a community.</h3><p>Invite joins earn {REWARDS.invite} XP; likes earn {REWARDS.like}. Each nearby tower level-up, including a new tower’s first level, rewards the eight closest other residents within three plot spacings with {REWARDS.construction} XP.</p></div></div><div className="help-item"><Landmark/><div><h3>Bricks build shared places.</h3><p>Unlock permanent themes or contribute to nearby projects. Segment restyling is free after unlock. Contribute at least 25 bricks to earn {REWARDS.project} XP when a project finishes.</p></div></div><div className="help-item"><Gift/><div><h3>A little reward for returning.</h3><p>Collect {REWARDS.dailyBricks} bricks and {REWARDS.dailyXp} XP once per UTC day.</p></div></div><div className="help-controls">Click the city to use WASD to move and Q/E to rotate.<br/>Space moves up; Shift moves down. Hold keys for continuous movement.<br/>Drag to orbit. Right-drag to pan. Scroll to zoom.<br/>Use search to select residents with your keyboard.</div>{snapshot?.demo&&<p className="demo-explanation">Local demo residents and preset XP are illustrative. Dev mode lets you preview all tiers and simulate rewards. Actual rewards and brick spending are stored by the local backend.</p>}</>}
       {modal==='not-invited'&&<p className="modal-description">Find someone to invite you!</p>}
       {modal==='auth-error'&&<><p className="modal-description">{new URLSearchParams(location.search).get('auth_error')||'Please try again.'}</p><button className="primary-button full-width" onClick={()=>{location.href='/api/auth/github';}}><Github size={18}/>Try again with GitHub</button></>}

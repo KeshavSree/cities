@@ -1,0 +1,25 @@
+{
+  "id": "update-a74470f1bcb7",
+  "date": "2026-10-13",
+  "title": "City updates",
+  "summary": "",
+  "changes": [
+    "Updates to tower appearance and customization.",
+    "A new place to keep up with city updates."
+  ],
+  "source": {
+    "baseRevision": "540f4fa9ee685bebbb5e7b681351871c46411f07",
+    "revision": "540f4fa9ee685bebbb5e7b681351871c46411f07",
+    "fingerprint": "a74470f1bcb7b1ba6d74d7be907078e932d5b69ac9541d09af25179e911d67f9",
+    "commits": [],
+    "files": [
+      "package.json",
+      "scripts/changelog.mjs",
+      "src/App.tsx",
+      "src/Changelog.tsx",
+      "src/SegmentEditor.tsx",
+      "src/TierSlices.tsx",
+      "src/changelog.css"
+    ]
+  }
+}

@@ -5,4 +5,5 @@ import './styles.css';
 import './drawer.css';
 import './dev-scores.css';
 import './mobile.css';
+import './mobile-fixes.css';
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>);

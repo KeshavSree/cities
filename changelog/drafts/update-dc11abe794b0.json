@@ -1,0 +1,41 @@
+{
+  "id": "update-dc11abe794b0",
+  "date": "2026-10-13",
+  "title": "A smoother city on mobile",
+  "summary": "Navigation, customization, and onboarding now fit smaller screens more comfortably.",
+  "changes": [
+    "Added Changelog beside the city logo. Open it to see past updates in a panel that slides down from the top; use the bottom arrow to tuck it away.",
+    "Made tower and project sheets, theme cards, text, and tap targets easier to use on phones. Closed panels no longer leave hidden controls in the keyboard navigation.",
+    "Improved small-screen and landscape layouts for invitations, profile editing, and plot placement. Invitation links stay readable, and the location selection controls fit on screen.",
+    "Added a visible close button to mobile search, kept the city logo visible while searching, and improved navigation through search results.",
+    "Fixed mobile onboarding spotlights to point at the bottom navigation controls and visible tower layers. Guide bubbles now stay within the screen, including after resizing.",
+    "Improved mobile map framing and prevented drags and multi-touch gestures from accidentally selecting a tower or plot.",
+    "Adjusted panels and inputs for the on-screen keyboard, and made opening another panel close conflicting navigation views.",
+    "Corrected the GitHub reward help text to show the existing daily limit of 200 XP and 200 bricks."
+  ],
+  "source": {
+    "baseRevision": "540f4fa9ee685bebbb5e7b681351871c46411f07",
+    "revision": "540f4fa9ee685bebbb5e7b681351871c46411f07",
+    "fingerprint": "dc11abe794b01421b436166e885cb5503059711832ea422e85de173b5c9cbb88",
+    "commits": [],
+    "files": [
+      "package.json",
+      "scripts/changelog.mjs",
+      "src/App.tsx",
+      "src/Changelog.tsx",
+      "src/CityScene.tsx",
+      "src/InvitationPane.tsx",
+      "src/Onboarding.tsx",
+      "src/ProgressionPanel.tsx",
+      "src/ResidentSearch.tsx",
+      "src/SegmentEditor.tsx",
+      "src/SegmentMenu.tsx",
+      "src/TierSlices.tsx",
+      "src/changelog.css",
+      "src/main.tsx",
+      "src/mobile-fixes.css",
+      "src/onboarding.css",
+      "src/useViewport.ts"
+    ]
+  }
+}

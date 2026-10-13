@@ -104,7 +104,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ own
     let frame:number|undefined,continuousUntil=0,previousTime=performance.now(),renderSamples=0,renderAverage=0;
     function invalidate(duration=0){continuousUntil=Math.max(continuousUntil,performance.now()+duration);if(frame===undefined)frame=requestAnimationFrame(animate);}
     function resize() {
-      const w = el.clientWidth, h = el.clientHeight; const view = window.innerWidth < 700 ? 23 : 26;
+      const w = el.clientWidth, h = el.clientHeight; const view = window.innerWidth<=760?Math.max(26,19*h/w):26;
       camera.left = -view * w / h; camera.right = view * w / h; camera.top = view; camera.bottom = -view;
       camera.updateProjectionMatrix(); renderer.setSize(w,h);composer.setSize(w,h);labelRenderer.setSize(w,h);
       if(engine.current)engine.current.shadowsDirty=true;
@@ -114,9 +114,11 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ own
     resize(); const observer = new ResizeObserver(resize); observer.observe(el);
     const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2();
     let down = { x: 0, y: 0 }; let lastPan = '0,0'; let pointerActive = false;
-    const pointerDown = (e: PointerEvent) => { renderer.domElement.focus({preventScroll:true}); pointerActive = true; down = { x: e.clientX, y: e.clientY }; invalidate(500); };
+    const activePointers=new Set<number>();let multiTouch=false,tapMoved=false;
+    const pointerDown = (e: PointerEvent) => { renderer.domElement.focus({preventScroll:true}); activePointers.add(e.pointerId);pointerActive=true;if(activePointers.size>1)multiTouch=true;else{multiTouch=false;tapMoved=false;down={x:e.clientX,y:e.clientY};}invalidate(500); };
     const pointerUp = (e: PointerEvent) => {
-      if(!pointerActive)return;pointerActive=false;
+      if(!activePointers.has(e.pointerId))return;activePointers.delete(e.pointerId);pointerActive=activePointers.size>0;
+      if(multiTouch||tapMoved)return;
       if (Math.hypot(e.clientX-down.x,e.clientY-down.y)>6 || e.button !== 0) return;
       const r = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX-r.left)/r.width*2-1, -(e.clientY-r.top)/r.height*2+1);
       raycaster.setFromCamera(pointer,camera);
@@ -130,6 +132,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ own
       else if (hit) props.current.onSelect(hit.object.userData.owner);
     };
     const move = (e: PointerEvent) => {
+      if(pointerActive&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>6)tapMoved=true;
       const r = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX-r.left)/r.width*2-1, -(e.clientY-r.top)/r.height*2+1);
       raycaster.setFromCamera(pointer,camera);
       if(props.current.placementMode){
@@ -138,7 +141,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ own
       }
       renderer.domElement.style.cursor = raycaster.intersectObjects(city.children,true).some(v => v.object.userData.owner||v.object.userData.project) ? 'pointer' : 'grab';
     };
-    const pointerCancel = () => { pointerActive=false; };
+    const pointerCancel = (event:PointerEvent) => {activePointers.delete(event.pointerId);pointerActive=activePointers.size>0;multiTouch=true;};
     const viewDirection=new THREE.Vector3(),groundCenter=new THREE.Vector3();
     const viewedGround=()=>{
       viewDirection.copy(controls.target).sub(camera.position).normalize();

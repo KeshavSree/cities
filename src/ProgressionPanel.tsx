@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { HelpCircle } from 'lucide-react';
 import type { Building } from '../shared/types';
-import { MAX_LEVEL, REWARDS, tierForLevel, xpAtLevel, xpForNextLevel } from '../shared/progression';
+import { MAX_LEVEL, REWARDS, GITHUB_DAILY_COMMIT_LIMIT, tierForLevel, xpAtLevel, xpForNextLevel } from '../shared/progression';
 import './level-progress.css';
 
 export function LevelProgress({building}:{building:Building}){
@@ -29,7 +29,7 @@ export function LevelProgress({building}:{building:Building}){
       <p>Tower likes: {REWARDS.like} XP</p>
       <p>Daily visit: {REWARDS.dailyXp} XP + {REWARDS.dailyBricks} bricks</p>
       <p>Nearby tower level-up: {REWARDS.construction} XP</p>
-      <p>GitHub: {REWARDS.commit} XP + {REWARDS.commitBricks} bricks / commit · max 100 of each/day</p>
+      <p>GitHub: {REWARDS.commit} XP + {REWARDS.commitBricks} bricks / commit · max {GITHUB_DAILY_COMMIT_LIMIT*REWARDS.commit} XP and {GITHUB_DAILY_COMMIT_LIMIT*REWARDS.commitBricks} bricks/day</p>
     </aside>}
   </section>;
 }

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "update-dc11abe794b0",
+    "date": "2026-10-13",
+    "title": "A smoother city on mobile",
+    "summary": "Navigation, customization, and onboarding now fit smaller screens more comfortably.",
+    "changes": [
+      "Added Changelog beside the city logo. Open it to see past updates in a panel that slides down from the top; use the bottom arrow to tuck it away.",
+      "Made tower and project sheets, theme cards, text, and tap targets easier to use on phones. Closed panels no longer leave hidden controls in the keyboard navigation.",
+      "Improved small-screen and landscape layouts for invitations, profile editing, and plot placement. Invitation links stay readable, and the location selection controls fit on screen.",
+      "Added a visible close button to mobile search, kept the city logo visible while searching, and improved navigation through search results.",
+      "Fixed mobile onboarding spotlights to point at the bottom navigation controls and visible tower layers. Guide bubbles now stay within the screen, including after resizing.",
+      "Improved mobile map framing and prevented drags and multi-touch gestures from accidentally selecting a tower or plot.",
+      "Adjusted panels and inputs for the on-screen keyboard, and made opening another panel close conflicting navigation views.",
+      "Corrected the GitHub reward help text to show the existing daily limit of 200 XP and 200 bricks."
+    ]
+  }
+]

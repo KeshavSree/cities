@@ -4,10 +4,11 @@ import { TierSlices } from './TierSlices';
 import { SegmentMenu } from './SegmentMenu';
 import { segmentDesigns, SEGMENT_STYLES, BUILDING_THEMES, type BuildingTheme, type SegmentStyle } from '../shared/progression';
 
-export function SegmentEditor({building,own,busy,unlockedThemes,onUnlock,onSave}:{building:Building;own:boolean;busy:boolean;unlockedThemes:readonly string[];onUnlock:(theme:BuildingTheme)=>void;onSave:(segment:number,color:Color,style:SegmentStyle,theme:BuildingTheme)=>void}){
+export function SegmentEditor({building,own,active=true,busy,unlockedThemes,onUnlock,onSave}:{building:Building;own:boolean;active?:boolean;busy:boolean;unlockedThemes:readonly string[];onUnlock:(theme:BuildingTheme)=>void;onSave:(segment:number,color:Color,style:SegmentStyle,theme:BuildingTheme)=>void}){
   const [selectedIndex,setIndex]=useState(0),[draftStyle,setStyle]=useState<SegmentStyle|null>(null),[draftTheme,setTheme]=useState<BuildingTheme|null>(null);
   const [menuOpen,setMenuOpen]=useState(false),[pendingTheme,setPendingTheme]=useState<BuildingTheme|null>(null);
   const closeMenu=()=>{setPendingTheme(null);setMenuOpen(false);setStyle(null);setTheme(null);};
+  useEffect(()=>{if(!active){setPendingTheme(null);setMenuOpen(false);setStyle(null);setTheme(null);}},[active]);
   const designs=segmentDesigns(building),index=Math.min(selectedIndex,designs.length-1);
   const design=designs[index],color=design.color,style=draftStyle??design.style,theme=draftTheme??design.theme;
   useEffect(()=>{
@@ -28,7 +29,7 @@ export function SegmentEditor({building,own,busy,unlockedThemes,onUnlock,onSave}
       </button>;
     })}</div>:<div className="theme-readonly"><span className={`theme-swatch ${theme}`} aria-hidden="true"><i/><i/><i/></span><strong>{BUILDING_THEMES[theme].label}</strong></div>}
     <p className="theme-description">{BUILDING_THEMES[theme].description}</p>
-    <label className="segment-label">Details</label><div className="segment-styles">{(Object.keys(SEGMENT_STYLES) as SegmentStyle[]).map(s=><button key={s} aria-pressed={style===s} disabled={!own||busy} onClick={()=>{if(s!==style)onSave(index,color,s,theme);}}>{SEGMENT_STYLES[s]}</button>)}</div>
+    {theme!=='cyberpunk'&&<><label className="segment-label">Details</label><div className="segment-styles">{(Object.keys(SEGMENT_STYLES) as SegmentStyle[]).map(s=><button key={s} aria-pressed={style===s} disabled={!own||busy} onClick={()=>{if(s!==style)onSave(index,color,s,theme);}}>{SEGMENT_STYLES[s]}</button>)}</div></>}
     </SegmentMenu>}
   </section>;
 }

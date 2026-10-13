@@ -1,0 +1,38 @@
+{
+  "id": "update-d2fb2d8fc09b",
+  "date": "2026-10-13",
+  "title": "City updates",
+  "summary": "",
+  "changes": [
+    "Updates to tower appearance and customization.",
+    "Updates to the welcome and onboarding experience.",
+    "Updates to inviting friends into your city.",
+    "A new place to keep up with city updates.",
+    "Improvements to profiles, navigation, and mobile layouts."
+  ],
+  "source": {
+    "baseRevision": "540f4fa9ee685bebbb5e7b681351871c46411f07",
+    "revision": "540f4fa9ee685bebbb5e7b681351871c46411f07",
+    "fingerprint": "d2fb2d8fc09b759fa7eab7bc158885b69eb007332758fda466f7ac40e70c7942",
+    "commits": [],
+    "files": [
+      "package.json",
+      "scripts/changelog.mjs",
+      "src/App.tsx",
+      "src/Changelog.tsx",
+      "src/CityScene.tsx",
+      "src/InvitationPane.tsx",
+      "src/Onboarding.tsx",
+      "src/ProgressionPanel.tsx",
+      "src/ResidentSearch.tsx",
+      "src/SegmentEditor.tsx",
+      "src/SegmentMenu.tsx",
+      "src/TierSlices.tsx",
+      "src/changelog.css",
+      "src/main.tsx",
+      "src/mobile-fixes.css",
+      "src/onboarding.css",
+      "src/useViewport.ts"
+    ]
+  }
+}
