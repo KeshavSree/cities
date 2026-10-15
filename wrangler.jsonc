@@ -20,5 +20,5 @@
   "durable_objects": { "bindings": [{ "name": "NEIGHBORHOODS", "class_name": "Neighborhood" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Neighborhood"] }],
   "triggers": { "crons": ["17 */6 * * *"] },
-  "vars": { "APP_ORIGIN": "https://devcities.dev", "FOUNDER_GITHUB_ID": "178847100" }
+  "vars": { "APP_ORIGIN": "https://devcities.dev", "FOUNDER_GITHUB_ID": "178847100", "GITHUB_REPOSITORY": "KeshavSree/cities" }
 }

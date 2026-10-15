@@ -11,6 +11,7 @@ import { COLORS, type Building, type PublicProject } from '../shared/types';
 import { coastZ, plotPosition, plotCoordinates, worldHash, VIEW_RADIUS, PLOT_SPACING } from '../shared/world';
 import { WorldTerrain } from './WorldTerrain';
 import { buildParkLandscape } from './ParkLandscape';
+import { buildPlazaLandscape } from './PlazaLandscape';
 import type { CityLighting } from './lighting';
 import { neighborhoodDensity, neighborhoodScores, settlementType, streetNetwork, streetDensity, roadWidth, roadShoulder, roadColor, shoulderColor, lotPolygon, projectPolygon, mixGroundColor, SETTLEMENT_THRESHOLDS, type GroundPoint } from './neighborhood';
 import { CameraKeyboard } from './CameraKeyboard';
@@ -951,25 +952,7 @@ function buildCity(group: THREE.Group, buildings: Building[], night: boolean,den
       site.traverse(object=>{if(object instanceof THREE.Mesh)object.userData.project=project.id;});
       continue;
     }
-    const path=box(site,entrance.x/2,.11,entrance.z/2,Math.hypot(entrance.x,entrance.z),.04,.95,'#d5c9ae');
-    path.rotation.y=-Math.atan2(entrance.z,entrance.x);
-    if(ratio<1){
-      for(let i=0;i<boundary.length;i++){
-        const a=boundary[i],b=boundary[(i+1)%boundary.length],mid=midpoints[i];
-        if(Math.hypot(mid.x-entrance.x,mid.z-entrance.z)<1)continue;
-        const fence=box(site,mid.x,.4,mid.z,Math.hypot(b.x-a.x,b.z-a.z),.6,.07,'#c4aa82');
-        fence.rotation.y=-Math.atan2(b.z-a.z,b.x-a.x);
-      }
-      // Brick stacks grow as actual contributions accumulate.
-      for(let i=0;i<Math.ceil(ratio*8);i++)box(site,-4+i%4*.65,.25+Math.floor(i/4)*.3,-3,.55,.3,.4,'#b9927a');
-    }
-    if(ratio>=.25){tree(site,-3,-2,.9,box,mat,0,detail===1);tree(site,3,2,.9,box,mat,0,detail===1);}
-    if(ratio>=.5)for(const x of [-2,2]){box(site,x,.3,2.5,1.5,.3,.4,'#b99d7d');box(site,x,.57,2.68,1.5,.3,.08,'#b99d7d');}
-    if(ratio>=.75){box(site,0,.18,0,3.2,.2,3.2,'#d9d8c6');for(const x of [-1.3,1.3])for(const z of [-1.3,1.3])box(site,x,1.1,z,.12,1.8,.12,'#a9ada1');}
-    if(ratio>=1){
-      if(project.kind==='park')box(site,0,2.05,0,3.7,.3,3.7,'#9dbaa0');
-      else {box(site,0,.45,0,1.8,.5,1.8,'#cad3d0');const sculpture=new THREE.Mesh(new THREE.IcosahedronGeometry(1,0),mat('#a79bc7'));sculpture.position.y=1.65;site.add(sculpture);}
-    }
+    buildPlazaLandscape(site,boundary,entrance,ratio,night,box,mat,detail===1);
     site.traverse(object=>{if(object instanceof THREE.Mesh)object.userData.project=project.id;});
   }
   // Merge meshes by material and owner, preserving pickable towers while reducing draw calls.
