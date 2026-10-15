@@ -1,0 +1,48 @@
+{
+  "id": "update-2e1480f6b939",
+  "date": "2026-10-15",
+  "title": "Build the city together",
+  "summary": "Open-source contributions now earn XP, Makers square has a richer construction plan, and mobile invitations reopen smoothly.",
+  "changes": [
+    "Approved pull requests merged into C.I.T.I.E.S now award 100 XP to the linked resident, once per contribution.",
+    "Rebuilt Makers square with patterned paving, planted wings, benches, lighting, worktables, staged materials, a canopy, and a landmark sculpture.",
+    "Made the square follow its irregular parcel and simplify cleanly when viewing the city from farther away.",
+    "Fixed the mobile invitation pane so reopening it returns to the expected position instead of jumping.",
+    "Refocused the open-source project guide on the core loop, XP, major mechanics, contribution rewards, and a real city view."
+  ],
+  "source": {
+    "baseRevision": "540f4fa9ee685bebbb5e7b681351871c46411f07",
+    "revision": "e0a1e29e81ca9820329864cb6f351f0c5f3abb32",
+    "fingerprint": "2e1480f6b9390ac56f135808cb160ecee2b0a4a42b365b5a2ba4c5900752648d",
+    "commits": [
+      "Add contribution XP and enrich Makers square",
+      "Prevent mobile invitation pane jumping on reopen",
+      "Improve mobile navigation and add reviewed changelogs"
+    ],
+    "files": [
+      "README.md",
+      "package.json",
+      "public/images/city-banner.png",
+      "scripts/changelog.mjs",
+      "shared/progression.ts",
+      "src/App.tsx",
+      "src/Changelog.tsx",
+      "src/CityScene.tsx",
+      "src/InvitationPane.tsx",
+      "src/Onboarding.tsx",
+      "src/PlazaLandscape.ts",
+      "src/ProgressionPanel.tsx",
+      "src/ResidentSearch.tsx",
+      "src/SegmentEditor.tsx",
+      "src/SegmentMenu.tsx",
+      "src/TierSlices.tsx",
+      "src/changelog.css",
+      "src/main.tsx",
+      "src/mobile-fixes.css",
+      "src/onboarding.css",
+      "src/useViewport.ts",
+      "worker/index.ts",
+      "wrangler.jsonc"
+    ]
+  }
+}
