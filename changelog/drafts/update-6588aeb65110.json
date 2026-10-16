@@ -1,0 +1,52 @@
+{
+  "id": "update-6588aeb65110",
+  "date": "2026-10-15",
+  "title": "A neighborhood worth exploring",
+  "summary": "Choose where to begin, then discover a livelier city at street level.",
+  "changes": [
+    "Choose a starting point on highlighted streets, or pick a nearby resident, before entering Street view.",
+    "Explore planted entrances, nameplates, shop windows, striped awnings, and warm evening lighting.",
+    "Discover street signs, benches, planters, bicycles, lamps, postboxes, crossings, and utility covers.",
+    "Watch pedestrians walk through the neighborhood on clear routes.",
+    "Walk around buildings and street furnishings with WASD or touch controls, and return to your overview at any time."
+  ],
+  "source": {
+    "baseRevision": "540f4fa9ee685bebbb5e7b681351871c46411f07",
+    "revision": "a4043c67bcde258911a02896b14074784fbff7d3",
+    "fingerprint": "6588aeb6511018633b0d89b816f599762302dd5a6de10f48be3aaf59f7ee3dde",
+    "commits": [
+      "Prevent mobile invitation pane jumping on reopen",
+      "Improve mobile navigation and add reviewed changelogs"
+    ],
+    "files": [
+      "README.md",
+      "package.json",
+      "scripts/changelog.mjs",
+      "scripts/check-street.ts",
+      "src/App.tsx",
+      "src/CameraKeyboard.ts",
+      "src/Changelog.tsx",
+      "src/CityScene.tsx",
+      "src/InvitationPane.tsx",
+      "src/NeighborhoodLife.ts",
+      "src/Onboarding.tsx",
+      "src/ProgressionPanel.tsx",
+      "src/ResidentSearch.tsx",
+      "src/SegmentEditor.tsx",
+      "src/SegmentMenu.tsx",
+      "src/StreetControls.tsx",
+      "src/StreetDetails.ts",
+      "src/StreetWalk.ts",
+      "src/TierSlices.tsx",
+      "src/WorldTerrain.ts",
+      "src/changelog.css",
+      "src/main.tsx",
+      "src/mobile-fixes.css",
+      "src/onboarding.css",
+      "src/street-view.css",
+      "src/streetFurniturePlan.ts",
+      "src/streetNavigation.ts",
+      "src/useViewport.ts"
+    ]
+  }
+}
