@@ -140,6 +140,7 @@ export class OwnedNeighbors {
       person.legs.forEach((leg,i)=>leg.rotation.x=swing*(i?1:-1));person.arms.forEach((arm,i)=>arm.rotation.x=swing*(i?-1:1));
       if(person.route.length||!person.modeled)moving=true;
       else if(person.wait>0)this.nextUpdate=Math.min(this.nextUpdate,person.wait);
+      else if(!person.planning&&!this.planner?.busy)moving=true;
       group.userData.activity=person.route.length?'walking':person.goal?.kind==='shop'?'visiting':'resting';group.userData.destination=person.goal?.label||'Home';group.userData.destinationId=person.goal?.id||null;
 
     }

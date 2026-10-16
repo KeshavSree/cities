@@ -32,3 +32,13 @@ for(const host of ['localhost','127.0.0.1','[::1]'])assert(localMockEnabled('tru
 for(const mode of [undefined,'false'])assert(!localMockEnabled(mode,'localhost'),'Mock identity requires explicit local dev mode');
 for(const host of ['devcities.dev','example.com','localhost.example.com'])assert(!localMockEnabled('true',host),'Public hosts cannot receive automatic mock ownership');
 console.log('Owned-neighbor checks passed: clear shopping routes, animated walks, shop visits, returning home, pickup freeze, relocation, storage, no-shop strolls, and local-only mock ownership.');
+
+const blockedOwner={...resident('blocked'),decorations:JSON.stringify([{id:'blocked-one',kind:'person',x:2,z:0,rotation:0},{id:'blocked-two',kind:'person',x:2,z:.5,rotation:0}])};
+const blockedLife=new OwnedNeighbors();blockedLife.rebuild([blockedOwner]);
+(blockedLife as any).routes.path=()=>null;
+for(const person of (blockedLife as any).people.values())person.wait=0;
+assert.equal(blockedLife.update(.01,{x:0,z:0}),true,'Without a worker, ready neighbors still need the next frame when the first path fails');
+blockedLife.update(.01,{x:0,z:0});
+assert([...((blockedLife as any).people.values())].every((person:any)=>person.wait>0),'Every ready neighbor gets a planning turn before the renderer sleeps');
+assert.equal(blockedLife.update(.01,{x:0,z:0}),false,'The renderer sleeps again after the planning queue drains');blockedLife.dispose();
+console.log('Neighbor fallback checks passed: failed paths do not strand the remaining ready neighbors.');
