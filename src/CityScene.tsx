@@ -100,6 +100,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
     renderer.domElement.tabIndex = 0;
     const scene = new THREE.Scene();
     const streetLights=new StreetLighting(mobile);scene.add(streetLights.group);
+    let lightSourcesRevision=-1;
     const terrain = new WorldTerrain(); scene.add(terrain.group);
     const nature=new WildNature();scene.add(nature.group);
     const camera = new THREE.OrthographicCamera(-32,32,24,-24,.1,5000);
@@ -129,7 +130,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
     outline.edgeStrength=4;outline.edgeThickness=1.4;outline.edgeGlow=0;
     composer.addPass(outline);
     const output=new OutputPass();composer.addPass(output);
-    const refreshShadows=(local=true)=>{renderer.shadowMap.needsUpdate=true;sun.shadow.needsUpdate=true;if(local)for(const light of streetLights.lights)if(light.castShadow&&light.intensity)light.shadow.needsUpdate=true;};
+    const refreshShadows=()=>{renderer.shadowMap.needsUpdate=true;sun.shadow.needsUpdate=true;};
     let lastActorShadow=0;
 
     let idleTimer:ReturnType<typeof setTimeout>|undefined;
@@ -265,7 +266,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
       sun.target.position.set(ground.x,0,ground.z);sun.target.updateMatrixWorld();
       sun.position.set(ground.x-Math.cos(light.sunPhase)*45,30+light.daylight*55,ground.z-40);
       if(e&&(e.shadowsDirty||ground.distanceToSquared(previousShadowGround)>4)){
-        refreshShadows(e.shadowsDirty);e.shadowsDirty=false;previousShadowGround.copy(ground);
+        refreshShadows();e.shadowsDirty=false;previousShadowGround.copy(ground);
       }
       if(navigating&&now-lastKeyboardPan>=250){panEnd();lastKeyboardPan=now;}
       if(props.current.placementMode){
@@ -289,7 +290,8 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
           if(motion){particle.position.y=particle.userData.y+t*5;particle.rotation.set(t*2,particle.userData.angle+t*2,0);}
         }
       }
-      if(assets.process(mobile?3:5)){streetLights.setSources(city);refreshShadows();outline.selectedObjects=walk.enabled?[]:city.children.filter(mesh=>mesh.userData.owner===props.current.selected||mesh.userData.project===props.current.selected);}
+      if(assets.process(mobile?3:5)){refreshShadows();outline.selectedObjects=walk.enabled?[]:city.children.filter(mesh=>mesh.userData.owner===props.current.selected||mesh.userData.project===props.current.selected);}
+      if(lightSourcesRevision!==city.userData.revision){streetLights.setSources(city);lightSourcesRevision=city.userData.revision;}
       for(const object of city.children){
         const owner=props.current.decorationOwner;
         object.visible=!(owner&&object.userData.owner===owner&&(!object.userData.decoration||object.userData.decoration===props.current.decorationDraft?.id))&&!(interactions.carriedId&&object.userData.decoration===interactions.carriedId);
@@ -303,7 +305,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
       if(owned.shadowsDirty&&(!ownedWalking||now-lastActorShadow>=(mobile?200:100))){refreshShadows();owned.shadowsDirty=false;lastActorShadow=now;}
       planned.visible=!walk.enabled;
       interactions.update(outline);
-      if(streetLights.update(ground,light.lightsOn,[interactions.group,decorationOverlay],seconds))renderer.shadowMap.needsUpdate=true;
+      streetLights.update(ground,light.lightsOn,[interactions.group,decorationOverlay],seconds);
       renderPass.camera=renderingCamera;outline.renderCamera=renderingCamera;outline.enabled=!props.current.decorationOwner&&outline.selectedObjects.length>0;
       if(walk.enabled){
         streetSky.set(light.skyEdge);scene.background=streetSky;
@@ -312,6 +314,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
       }else{scene.background=null;scene.fog=null;}
       terrain.update(renderingCamera,light.night);
       if(nature.update(ground))refreshShadows();
+      streetLights.surface.bind(scene);
       const renderStarted=performance.now();composer.render(seconds);
       const renderTime=performance.now()-renderStarted;
       if(mobile&&(navigating||pointerActive||Boolean(e?.focus))){
@@ -325,7 +328,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
       if(labels.children.length||celebrations.children.length)labelRenderer.render(scene,renderingCamera);
       const nextDetail=walk.enabled?0:detailForZoom(camera.zoom,props.current.lodEnabled);
       if(nextDetail!==detailRef.current){detailRef.current=nextDetail;setDetail(nextDetail);}
-      const active=Boolean(assets.pending||streetLights.transitioning||ownedWalking||navigating||controlsActive||e?.focus||props.current.placementMode||celebrations.children.length||now<continuousUntil);
+      const active=Boolean(assets.pending||ownedWalking||navigating||controlsActive||e?.focus||props.current.placementMode||celebrations.children.length||now<continuousUntil);
       if(active)invalidate();else if(Number.isFinite(owned.nextUpdate))idleTimer=setTimeout(()=>invalidate(),Math.max(16,owned.nextUpdate*1000));
     }
     const visibility=()=>{if(!document.hidden){previousTime=performance.now();invalidate();}};document.addEventListener('visibilitychange',visibility);
@@ -434,7 +437,6 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
     const e = engine.current; if (!e) return;
     e.night = night;
     e.assets.reconcile(buildings.filter(b=>Math.abs(b.x-center.x)<=VIEW_RADIUS&&Math.abs(b.z-center.z)<=VIEW_RADIUS),night,lightsOn,projects,detail,center);
-    e.streetLights.setSources(e.city);
     e.outline.selectedObjects=e.walk.enabled?[]:e.city.children.filter(mesh=>mesh.userData.owner===props.current.selected||mesh.userData.project===props.current.selected);
     e.shadowsDirty=true;e.invalidate();
   }, [buildings,night,lightsOn,center.x,center.z,projects,detail]);
