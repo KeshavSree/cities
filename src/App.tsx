@@ -1,10 +1,20 @@
+import { nearestShopSlot } from '../shared/shopAttachments';
+import { flushSync } from 'react-dom';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Heart, Hammer, Landmark, Bug, Check, Compass, Copy, Gift, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, Minus, Package, Plus, Settings, Sparkles, Users, X } from 'lucide-react';
+import { Clock3, Heart, Hammer, Landmark, Bug, Check, Compass, Copy, Gift, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, Minus, Package, Plus, Settings, Sparkles, Users, X } from 'lucide-react';
 import type { SceneHandle } from './CityScene';
+import { streetStartByPoint } from './streetNavigation';
+import { plotPosition } from '../shared/world';
+import { emptyStreetInteraction, type StreetInteractionState } from './streetInteractionState';
+import { StreetControls } from './StreetControls';
+import { DecorationShop } from './DecorationShop';
+import { DecorationPlacement } from './DecorationPlacement';
+import { DECORATIONS, decorationsOf, placementError, suggestedDecorationPosition, type DecorationDraft, type DecorationKind, type Decoration } from '../shared/decorations';
+import type { StreetStart } from './streetNavigation';
 import { api, ApiError, uploadAvatar, readSnapshot, refreshPersonal } from './api';
 import { type Bootstrap, type Building, type Color } from '../shared/types';
 import { VIEW_RADIUS } from '../shared/world';
-import { lightingAt } from './lighting';
+import { lightingAt, type TimeOfDay } from './lighting';
 import { TowerDrawer } from './TowerDrawer';
 import { useViewport } from './useViewport';
 import { ChangelogPane } from './Changelog';
@@ -15,6 +25,7 @@ import { ProfileLinks } from './ProfileLinks';
 import { ResidentSearch } from './ResidentSearch';
 import { ScoreBreakdown } from './ScoreBreakdown';
 import { neighborhoodScores } from './neighborhood';
+import { cityLayoutKey } from './cityRevisions';
 import { upcomingPlotPreviews } from './plotPreview';
 import { LevelProgress } from './ProgressionPanel';
 import { SegmentEditor } from './SegmentEditor';
@@ -31,6 +42,7 @@ import './daily-bonus.css';
 import './xp-reward.css';
 import './settings-pane.css';
 
+const LIGHTING_PREVIEW_HOURS:Record<TimeOfDay,number>={morning:7,day:12,evening:19,night:23};
 type Modal = 'changelog' | 'invite' | 'help' | 'login' | 'not-invited' | 'auth-error' | null;
 const CityScene = lazy(()=>import('./CityScene').then(m=>({default:m.CityScene})));
 type Invite = { token: string; created_at: string; use_count:number };
@@ -41,7 +53,7 @@ let initialization: Promise<Bootstrap> | null = null;
 function initialize() {
   return initialization ??= (async () => {
     let snapshot = await readSnapshot();
-    if (snapshot.demo && !snapshot.buildings.length) {
+    if (snapshot.demo && (!snapshot.me||!snapshot.buildings.length)) {
       for (let batch = 0; batch < 3; batch++) await api(`/dev/start?batch=${batch}`, {});
       snapshot = await readSnapshot();
     }
@@ -63,7 +75,13 @@ export default function App() {
   const reconnectPrompted=useRef(false);
   const openingSync=useRef<string|null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [lighting, setLighting] = useState(()=>lightingAt(new Date()));
+  const [clockLighting,setClockLighting]=useState(()=>lightingAt(new Date()));
+  const [lightingOverride,setLightingOverride]=useState<TimeOfDay|'auto'>('auto');
+  const previewLighting=useMemo(()=>{
+    if(!import.meta.env.DEV||lightingOverride==='auto')return null;
+    const time=new Date();time.setHours(LIGHTING_PREVIEW_HOURS[lightingOverride],0,0,0);return lightingAt(time);
+  },[lightingOverride]);
+  const lighting=previewLighting??clockLighting;
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [modal, setModal] = useState<Modal>(null);
@@ -101,6 +119,15 @@ export default function App() {
   const [placementChoice,setPlacementChoice]=useState<string|null>(null);
   const [previewLocation,setPreviewLocation]=useState<{x:number;z:number;inviter_x:number;inviter_z:number;invited_by:string}|null>(null);
   const [settingsOpen,setSettingsOpen]=useState(false);
+  const [streetView,setStreetView]=useState(false);
+  const [decorationDraft,setDecorationDraft]=useState<DecorationDraft|null>(null);
+  const [preserveStreetDraft,setPreserveStreetDraft]=useState(false);
+  const [streetDraft,setStreetDraft]=useState<DecorationDraft|null>(null);
+  const [streetInteraction,setStreetInteraction]=useState<StreetInteractionState>(emptyStreetInteraction);
+  const [mouseLocked,setMouseLocked]=useState(false);
+  const [mouseCaptureBlocked,setMouseCaptureBlocked]=useState(false);
+  const [pickingStreet,setPickingStreet]=useState(false);
+  const [streetStart,setStreetStart]=useState<StreetStart|null>(null);
   const [onboardingOpen,setOnboardingOpen]=useState(false);
   const onboardingStarted=useRef<string|null>(null);
   const onboardingClaim=useRef(false);
@@ -137,13 +164,14 @@ export default function App() {
   },[modal]);
   useEffect(()=>()=>clearTimeout(toastTimer.current),[]);
   useEffect(()=>{
-    const refresh=()=>setLighting(lightingAt(new Date()));
+    const refresh=()=>setClockLighting(lightingAt(new Date()));
     const timer=setInterval(refresh,30_000);
     const visible=()=>{if(document.visibilityState==='visible')refresh();};
-    document.addEventListener('visibilitychange',visible);
-    return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',visible);};
+    document.addEventListener('visibilitychange',visible);window.addEventListener('focus',refresh);window.addEventListener('pageshow',refresh);
+    return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',visible);window.removeEventListener('focus',refresh);window.removeEventListener('pageshow',refresh);};
   },[]);
-  useEffect(()=>{ if (snapshot) load(false).catch(e=>notify(e.message,true)); },[center.x,center.z,load,notify]);
+  const snapshotCellX=Math.floor(center.x/8),snapshotCellZ=Math.floor(center.z/8);
+  useEffect(()=>{ if (currentSnapshot.current) load(false).catch(e=>notify(e.message,true)); },[snapshotCellX,snapshotCellZ,load,notify]);
   const update = useCallback((building: Building) => {
     setSnapshot(prev=>{
       if(!prev)return prev;
@@ -236,7 +264,8 @@ export default function App() {
   const buildings=useMemo(()=>(snapshot?.buildings||[]).map(b=>previewLocation && b.id===snapshot?.me ? {...b,...previewLocation} : b),[snapshot?.buildings,snapshot?.me,previewLocation]);
   const canDebug=import.meta.env.DEV;
   const showScores=canDebug&&debugScores;
-  const scoreAt=useMemo(()=>neighborhoodScores(buildings),[buildings]);
+  const layoutRevision=cityLayoutKey(buildings);
+  const scoreAt=useMemo(()=>neighborhoodScores(buildings),[layoutRevision]);
   const toggleScores=()=>{const next=!debugScores;setDebugScores(next);try{localStorage.setItem('cities-dev-scores',String(next));}catch{/* Dev scores work without storage. */}};
   const toggleLod=()=>setLodEnabled(current=>{const next=!current;try{localStorage.setItem('cities-lod',String(next));}catch{/* LOD still works without storage. */}return next;});
   const tower=buildings.find(b=>b.id===selected);
@@ -259,7 +288,8 @@ export default function App() {
       if(previous!==null&&Number.isFinite(previous)&&ownXp>previous)setXpReward({id:Date.now(),amount:ownXp-previous});
     }catch{/* Rewards still arrive if browser storage is unavailable. */}
   },[meId,ownXp,pageVisible]);
-  const previews=useMemo(()=>me?upcomingPlotPreviews(buildings,me,snapshot?.nextPlots||[]):[],[buildings,me,snapshot?.nextPlots]);
+  const nextPlotsKey=JSON.stringify(snapshot?.nextPlots||[]);
+  const previews=useMemo(()=>me?upcomingPlotPreviews(buildings,me,snapshot?.nextPlots||[]):[],[layoutRevision,me?.id,nextPlotsKey]);
   const placementActive=placementMode || Boolean(snapshot?.pendingPlacement);
   const placementOrigin=snapshot?.pendingPlacement?.origin||me;
   const placementOptions=useMemo(()=>{
@@ -301,7 +331,7 @@ export default function App() {
   const own=tower?.id===snapshot?.me;
   const neighbors=[...buildings].sort((a,b)=>b.level-a.level);
   const filtered=neighbors.filter(b=>`${b.name} ${b.username}`.toLowerCase().includes(query.toLowerCase()));
-  const select=(b:Building)=>{setSettingsOpen(false);setModal(prev=>prev==='invite'||prev==='changelog'?null:prev);setSelected(b.id);setSearchOpen(false);setDrawerOpen(true);scene.current?.focus(b);};
+  const select=(b:Building)=>{setDecorationDraft(null);setSettingsOpen(false);setModal(prev=>prev==='invite'||prev==='changelog'?null:prev);setSelected(b.id);setSearchOpen(false);setDrawerOpen(true);scene.current?.focus(b);};
   const selectProject=(id:string)=>{setSettingsOpen(false);setModal(prev=>prev==='invite'||prev==='changelog'?null:prev);setSelected(id);setSearchOpen(false);setDrawerOpen(true);const p=snapshot?.projects.find(p=>p.id===id);if(p)scene.current?.focus(p);};
   const onboardingTower=useCallback(()=>{if(!meId)return;setSelected(meId);setDrawerOpen(true);setModal(null);setSearchOpen(false);},[meId]);
   const onboardingCloseInvite=useCallback(()=>setModal(null),[]);
@@ -339,6 +369,60 @@ export default function App() {
     try{const r=await uploadAvatar<{building:Building}>(image);update(r.building);notify('Profile picture updated.');}finally{setBusy('');}
   };
   const saveSegment=(segment:number,color:Color,style:SegmentStyle,theme:BuildingTheme)=>action('segment',async()=>{const r=await api<{building:Building}>('/segments',{segment,color,style,theme});update(r.building);notify('Segment updated.');});
+  const chooseDecoration=(kind:DecorationKind,item?:Decoration)=>{
+    if(!me)return;
+    const draft={kind,id:item?.id,x:item?.x??null,z:item?.z??null,rotation:item?.rotation??0,requestId:crypto.randomUUID()};
+    // Close panels before requesting capture, while the shop click still grants user activation.
+    flushSync(()=>{
+      setPickingStreet(false);setDrawerOpen(false);setModal(null);setSearchOpen(false);setSettingsOpen(false);
+      setPreserveStreetDraft(false);if(streetView)setStreetDraft(draft);else setDecorationDraft(draft);
+    });
+    if(streetView)scene.current?.look();
+  };
+  const returnToCity=()=>{
+    if(busy||streetInteraction.saving)return;
+    const held=scene.current?.takeItem()??streetDraft;
+    flushSync(()=>{setStreetView(false);setPickingStreet(false);setStreetDraft(null);setPreserveStreetDraft(false);if(held)setDecorationDraft(held);});
+  };
+  const placeInStreet=()=>{
+    if(!me||!decorationDraft||busy)return;
+    const suggestion=decorationDraft.x===null||decorationDraft.z===null?suggestedDecorationPosition(me,decorationDraft.kind,decorationDraft.rotation,decorationDraft.id):null;
+    const draft=suggestion?{...decorationDraft,...suggestion}:decorationDraft,origin=plotPosition(me.x,me.z);
+    const start=streetStartByPoint({x:origin.x+(draft.x??0),z:origin.z+(draft.z??0)},buildings,draft.id);
+    if(!start){notify('No clear street beside this item yet.',true);return;}
+    flushSync(()=>{setDecorationDraft(null);setStreetDraft(draft);setPreserveStreetDraft(true);setPickingStreet(false);setStreetStart(start);setStreetView(true);setDrawerOpen(false);setSettingsOpen(false);});
+    scene.current?.look();
+  };
+  const cancelDecoration=()=>{if(busy)return;setDecorationDraft(null);setDrawerOpen(true);};
+  const commitDecoration=async(draft:DecorationDraft)=>{
+    if(!me||draft.x===null||draft.z===null)throw new Error('Choose a spot first.');
+    const error=placementError(me,draft.kind,{x:draft.x,z:draft.z,rotation:draft.rotation},draft.id);if(error)throw new Error(error);
+    let result:{building:Building};
+    try{result=await api<{building:Building}>(draft.id?'/decorations/move':'/decorations/purchase',draft);}
+    catch(error){
+      const fresh=await api<{building:Building}>('/me').catch(()=>null);
+      if(fresh){
+        update(fresh.building);
+        const owned=decorationsOf(fresh.building).find(item=>item.id===(draft.id||`${me.id}:${draft.requestId}`));
+        if(owned&&(!draft.id||owned.x===draft.x&&owned.z===draft.z&&owned.rotation===draft.rotation))return;
+      }
+      throw error;
+    }
+    update(result.building);
+  };
+  const saveDecoration=()=>action('decoration-save',async()=>{
+    if(!decorationDraft)return;await commitDecoration(decorationDraft);
+    setDecorationDraft(null);setDrawerOpen(true);notify(decorationDraft.id?'Item moved.':`${DECORATIONS[decorationDraft.kind].label} added to your neighborhood.`);
+  });
+  const saveStreetItem=async(draft:DecorationDraft)=>{
+    if(busy)return false;setBusy('street-save');
+    try{await commitDecoration(draft);setStreetDraft(null);notify(draft.id?'Item moved.':`${DECORATIONS[draft.kind].label} placed.`);return true;}
+    catch(error){notify(error instanceof Error?error.message:'Could not save this spot. Try again.',true);return false;}
+    finally{setBusy('');}
+  };
+  const storeDecoration=(item:Decoration)=>action('decoration-store',async()=>{
+    const result=await api<{building:Building}>('/decorations/move',{id:item.id,x:null,z:null,rotation:item.rotation});update(result.building);notify('Decoration stored. Place it again for free.');
+  });
   const unlockTheme=(theme:BuildingTheme)=>action(`theme-${theme}`,async()=>{const r=await api<{building:Building;unlockedThemes:string[]}>('/themes/unlock',{theme});update(r.building);setSnapshot(prev=>prev?{...prev,unlockedThemes:r.unlockedThemes}:prev);notify(`${BUILDING_THEMES[theme].label} unlocked.`);});
   const like=()=>tower&&action('like',async()=>{const r=await api<{building:Building}>('/like',{tower:tower.id});update(r.building);setSnapshot(prev=>prev?{...prev,likedIds:[...prev.likedIds,tower.id]}:prev);setLikePulse(tower.id);});
   const devProgression=(data:{level?:number;source?:string})=>tower&&action('dev',async()=>{const r=await api<{building:Building}>('/dev/progression',{tower:tower.id,...data});update(r.building);if(data.level)scene.current?.focus(r.building);notify(data.level?'Demo model tier updated.':'Sample reward recorded.');});
@@ -347,9 +431,10 @@ export default function App() {
   const copy=async(token:string)=>{try{await navigator.clipboard.writeText(`${location.origin}/?invite=${token}`);notify('Invitation copied.');}catch{notify('Clipboard is unavailable. Select and copy the invitation link below.',true);}};
   const createInvite=()=>action('invite',async()=>{if(invites[0])await copy(invites[0].token);});
 
-  return <div className={`app ${lighting.night?'night':''}`} style={{background:`radial-gradient(ellipse at 40% 55%,${lighting.skyCenter} 0,${lighting.skyEdge} 100%)`}}>
+  const enterStreet=(start:StreetStart)=>{setStreetStart(start);setPickingStreet(false);setStreetView(true);requestAnimationFrame(()=>scene.current?.look());};
+  return <div data-time-of-day={lighting.phase} data-streetlights={lighting.lightsOn?'on':'off'} className={`app ${lighting.night?'night':''} ${streetView&&!placementActive?'street-mode':''} ${pickingStreet&&!placementActive?'street-picking':''} ${decorationDraft?'decoration-editing':''}`} style={{background:`radial-gradient(ellipse at 40% 55%,${lighting.skyCenter} 0,${lighting.skyEdge} 100%)`}}>
     <header className="topbar">
-      <div className="brand-and-changelog"><button className="brand" onClick={()=>{scene.current?.reset();setCenter({x:0,z:0});}} aria-label="C.I.T.I.E.S, return to city center">
+      <div className="brand-and-changelog"><button className="brand" onClick={()=>{setStreetView(false);setPickingStreet(false);setDecorationDraft(null);scene.current?.reset();setCenter({x:0,z:0});}} aria-label="C.I.T.I.E.S, return to city center">
         <span className="brand-mark"><i/><i/><i/></span><span>c.i.t.i.e.s<span className="brand-period">.</span></span>
       </button><button className="changelog-link" onClick={()=>{setModal(previous=>previous==='changelog'?null:'changelog');setSearchOpen(false);setSettingsOpen(false);setDrawerOpen(false);}} aria-expanded={modal==='changelog'} aria-controls="changelog-pane">Changelog</button></div>
       <nav aria-label="City controls">
@@ -364,8 +449,16 @@ export default function App() {
     </header>
 
     <main>
-      <Suspense fallback={<div className="scene-loading"><LoaderCircle className="spin" size={24}/><span>Drawing your little city…</span></div>}><CityScene ref={scene} ownerId={snapshot?.me||null} pageVisible={pageVisible} buildings={buildings} selected={selected} lighting={lighting} center={center} debugScores={showScores} lodEnabled={lodEnabled} previews={placementActive?placementOptions:previews} placementMode={placementActive} placementOrigin={placementOrigin} placementChoice={placementChoice} onPlacement={choosePlacement} projects={snapshot?.projects||[]} onProject={selectProject} onSelect={id=>{const b=buildings.find(b=>b.id===id);if(b)select(b);}} onPan={(x,z)=>setCenter({x,z})}/></Suspense>
+      <Suspense fallback={<div className="scene-loading"><LoaderCircle className="spin" size={24}/><span>Drawing your little city…</span></div>}><CityScene ref={scene} preserveStreetDraft={preserveStreetDraft} streetDraft={streetDraft} onStreetSave={saveStreetItem} onStreetDraftCancel={()=>setStreetDraft(null)} onStreetState={setStreetInteraction} onMouseLock={(locked,blocked=false)=>{setMouseLocked(locked);setMouseCaptureBlocked(blocked);}} ownerId={snapshot?.me||null} pageVisible={pageVisible} streetView={streetView&&!placementActive} pickingStreet={pickingStreet&&!placementActive} streetStart={streetStart} onStreetPick={start=>{setStreetStart(start);}} onStreetEnter={enterStreet} onStreetExit={returnToCity} navigationPaused={drawerOpen||Boolean(modal)||settingsOpen||searchOpen||onboardingOpen} buildings={buildings} selected={selected} lighting={lighting} center={center} debugScores={showScores} lodEnabled={lodEnabled} previews={placementActive?placementOptions:previews} placementMode={placementActive} placementOrigin={placementOrigin} placementChoice={placementChoice} onPlacement={choosePlacement} projects={snapshot?.projects||[]} onProject={selectProject} onSelect={id=>{const b=buildings.find(b=>b.id===id);if(b)select(b);}} decorationOwner={decorationDraft?me?.id:null} decorationDraft={decorationDraft} onDecorationPosition={(x,z)=>setDecorationDraft(previous=>{if(!previous)return null;const slot=previous.kind==='base_shop'&&me?nearestShopSlot(me,{x,z}):null;return {...previous,x:slot?.x??x,z:slot?.z??z,rotation:slot?.rotation??previous.rotation};})} onDecorationCancel={cancelDecoration} onPan={(x,z)=>setCenter({x,z})}/></Suspense>
 
+      {!placementActive&&<StreetControls placing={Boolean(decorationDraft)} switchingDisabled={Boolean(busy)||streetInteraction.saving} onLightingSettings={canDebug?()=>setSettingsOpen(true):undefined} active={streetView} available={Boolean(buildings.length)&&!onboardingOpen} paused={drawerOpen||Boolean(modal)||settingsOpen||searchOpen||onboardingOpen}
+        picking={pickingStreet} hasHome={Boolean(me)} mouseLocked={mouseLocked} mouseCaptureBlocked={mouseCaptureBlocked} interaction={streetInteraction} onLook={()=>scene.current?.look()} onRotate={()=>scene.current?.rotateItem()} onCancelItem={()=>scene.current?.cancelItem()} onShop={()=>{scene.current?.walk('forward',false);setSelected(me?.id||null);setDrawerOpen(true);}}
+        onDragPoint={(x,y)=>{const start=scene.current?.streetDropPoint(x,y)||null;setStreetStart(start);return start;}}
+        onDrop={enterStreet}
+        onChange={active=>{if(active){if(decorationDraft){placeInStreet();return;}if(streetView)return;setDrawerOpen(false);setSearchOpen(false);setModal(null);setSettingsOpen(false);setStreetStart(null);setPickingStreet(true);}else returnToCity();}}
+        onWalk={(direction,held)=>scene.current?.walk(direction,held)}/>}
+
+      {decorationDraft&&me&&<DecorationPlacement building={me} draft={decorationDraft} busy={Boolean(busy)} onChange={setDecorationDraft} onCancel={cancelDecoration} onConfirm={saveDecoration} onSuggest={()=>{if(!me||!decorationDraft)return;const position=suggestedDecorationPosition(me,decorationDraft.kind,decorationDraft.rotation,decorationDraft.id);if(position)setDecorationDraft({...decorationDraft,...position});else notify('No clear spot for this decoration. Try rotating or choose a smaller item.',true);}}/>}
 
       {placementActive && <section className="placement-preview" aria-label="Tower placement preview">
         <div className="placement-message"><h2>Choose tower location</h2><p>{placementOptions.length?'Click a hologram to select it.':'No open plots found in the current preview area.'}</p></div>
@@ -374,18 +467,19 @@ export default function App() {
       {!placementActive && drawerOpen && (tower||project||selected==='projects')&&<button className="mobile-sheet-backdrop" aria-label="Close details" onClick={()=>setDrawerOpen(false)}/>}
       {!placementActive && (project||selected==='projects')&&<TowerDrawer open={drawerOpen} onOpenChange={open=>{if(open)setModal(prev=>prev==='invite'||prev==='changelog'?null:prev);setDrawerOpen(open);}} subject="project"><ProjectDetails key={selected} project={project} projects={snapshot?.projects||[]} me={me} busy={Boolean(busy)} onSelect={selectProject} onFocus={p=>scene.current?.focus(p)} onContribute={contribute}/></TowerDrawer>}
       {!placementActive && tower && <TowerDrawer open={drawerOpen} onOpenChange={open=>{if(open)setModal(prev=>prev==='invite'||prev==='changelog'?null:prev);setDrawerOpen(open);}}><aside key={tower.id} className="inspector" aria-label={`${tower.name}'s tower`}>
-        <ResidentProfile key={tower.id} building={tower} own={own} busy={Boolean(busy)} onSaveBio={saveBio} onUpload={savePhoto} nameAction={<div className="tower-social"><button className={`tower-like ${likePulse===tower.id?'is-popping':''}`} aria-pressed={Boolean(snapshot?.likedIds.includes(tower.id))} aria-label={`${snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} ${own?'your tower':`${tower.name}'s tower`}, ${tower.likes} likes`} title={snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} disabled={!me||Boolean(busy)||snapshot?.likedIds.includes(tower.id)} onClick={like}><Heart className="tower-like-heart" size={17} aria-hidden="true" fill={snapshot?.likedIds.includes(tower.id)?'currentColor':'none'}/><span>{tower.likes}</span></button></div>} headerActions={<button className="icon-button desktop-focus" title="Focus this tower" aria-label="Focus this tower" onClick={()=>scene.current?.focus(tower)}><LocateFixed size={20}/></button>}/>
+        <ResidentProfile key={`profile-${tower.id}`} building={tower} own={own} busy={Boolean(busy)} onSaveBio={saveBio} onUpload={savePhoto} nameAction={<div className="tower-social"><button className={`tower-like ${likePulse===tower.id?'is-popping':''}`} aria-pressed={Boolean(snapshot?.likedIds.includes(tower.id))} aria-label={`${snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} ${own?'your tower':`${tower.name}'s tower`}, ${tower.likes} likes`} title={snapshot?.likedIds.includes(tower.id)?'Liked':'Like'} disabled={!me||Boolean(busy)||snapshot?.likedIds.includes(tower.id)} onClick={like}><Heart className="tower-like-heart" size={17} aria-hidden="true" fill={snapshot?.likedIds.includes(tower.id)?'currentColor':'none'}/><span>{tower.likes}</span></button></div>} headerActions={<button className="icon-button desktop-focus" title="Focus this tower" aria-label="Focus this tower" onClick={()=>scene.current?.focus(tower)}><LocateFixed size={20}/></button>}/>
         {showScores && <ScoreBreakdown score={scoreAt(tower.x,tower.z)} building={tower} editable={Boolean(snapshot?.demo&&tower.is_demo)} busy={Boolean(busy)} onDev={devProgression}/>}
         <LevelProgress building={tower}/>
-        <ProfileLinks key={tower.id} building={tower} own={own} busy={Boolean(busy)} onSave={async links=>{
+        <ProfileLinks key={`links-${tower.id}`} building={tower} own={own} busy={Boolean(busy)} onSave={async links=>{
           if(busy)throw new Error('Wait for the current change to finish.');
           setBusy('profile-links');
           try{const r=await api<{building:Building}>('/profile/links',links);update(r.building);}finally{setBusy('');}
         }}/>
         <div className="tower-panel">
-          <SegmentEditor key={tower.id} building={tower} own={own} active={drawerOpen} busy={Boolean(busy)} unlockedThemes={snapshot?.unlockedThemes||['contemporary']} onUnlock={unlockTheme} onSave={saveSegment}/>
+          <SegmentEditor key={`segments-${tower.id}`} building={tower} own={own} active={drawerOpen} busy={Boolean(busy)} unlockedThemes={snapshot?.unlockedThemes||['contemporary']} onUnlock={unlockTheme} onSave={saveSegment}/>
+          {own&&<DecorationShop building={tower} busy={Boolean(busy)} onChoose={chooseDecoration} onStore={storeDecoration}/>}
           {!tower.is_demo&&<div className="section-heading"><h3>GitHub activity</h3></div>}
-          <GitHubCalendar key={tower.id} building={tower}/>
+          <GitHubCalendar key={`calendar-${tower.id}`} building={tower}/>
           <div className="activity-caption"><span/>{own && !tower.is_demo && <button disabled={Boolean(busy)} onClick={()=>{if(snapshot?.githubReconnectRequired){setReconnectOpen(true);return;}action('sync',async()=>{try{const r=await api<{building:Building}>('/sync',{});update(r.building);notify('Your GitHub activity is up to date.');}catch(e){handleSyncError(e);}});}}>{snapshot?.githubReconnectRequired?'Reconnect GitHub':busy==='sync'?'Syncing…':'Sync activity'}</button>}</div>
         </div>
       </aside></TowerDrawer>}
@@ -395,12 +489,14 @@ export default function App() {
       </button>}
       <aside className={`settings-pane ${settingsOpen?'is-open':''}`} aria-label="Settings" aria-hidden={!settingsOpen} inert={!settingsOpen}>
         <header><div><Settings size={18} aria-hidden="true"/><span>Settings</span></div><button title="Close settings" aria-label="Close settings" tabIndex={settingsOpen?0:-1} onClick={()=>setSettingsOpen(false)}><X size={17}/></button></header>
+        <div className="settings-row" title="Your local time. Morning 6–9am, day 9am–6pm, evening 6–9pm, night 9pm–6am. Lamps turn on at 6pm."><Clock3 size={18} aria-hidden="true"/><span>Local time</span><span style={{textTransform:'capitalize'}}>{clockLighting.phase}</span></div>
+        {canDebug&&<div className="dev-lighting-control"><label htmlFor="lighting-preview">Lighting preview</label><select id="lighting-preview" value={lightingOverride} onChange={event=>{const value=event.target.value as TimeOfDay|'auto';setLightingOverride(value);if(value==='auto')setClockLighting(lightingAt(new Date()));}}><option value="auto">Auto (local time)</option><option value="morning">Morning</option><option value="day">Day</option><option value="evening">Evening</option><option value="night">Night</option></select></div>}
         <div className="settings-row"><Layers size={18} aria-hidden="true"/><span>LOD</span><button className="settings-switch" type="button" role="switch" aria-label="Level of detail" aria-checked={lodEnabled} tabIndex={settingsOpen?0:-1} onClick={toggleLod}><span/></button></div>
         {canDebug&&<div className="mobile-dev-tools"><button onClick={toggleScores} aria-pressed={showScores}><Bug size={18}/>Development diagnostics</button><button disabled={!me||placementActive} onClick={()=>{setSettingsOpen(false);onboardingTower();setOnboardingOpen(true);}}>Test onboarding</button><button disabled={!me} onClick={()=>{setSettingsOpen(false);enterPlacement();}}>Test placement</button></div>}
       </aside>
-      <div className="map-controls"><div className="map-tools"><button title="Zoom in" aria-label="Zoom in" onClick={()=>scene.current?.zoom(1.2)}><Plus size={18}/></button><button title="Zoom out" aria-label="Zoom out" onClick={()=>scene.current?.zoom(1/1.2)}><Minus size={18}/></button><span/><button title="Reset view" aria-label="Reset view" onClick={()=>{scene.current?.reset();setCenter({x:0,z:0});}}><Compass size={19}/></button><button className={settingsOpen?'active':''} title="Settings" aria-label="Settings" aria-expanded={settingsOpen} onClick={()=>setSettingsOpen(open=>!open)}><Settings size={18}/></button><button title="How it works" aria-label="How it works" onClick={()=>setModal('help')}><HelpCircle size={18}/></button></div></div>
+      <div className="map-controls"><div className="map-tools"><button title="Zoom in" aria-label="Zoom in" onClick={()=>scene.current?.zoom(1.2)}><Plus size={18}/></button><button title="Zoom out" aria-label="Zoom out" onClick={()=>scene.current?.zoom(1/1.2)}><Minus size={18}/></button><span/><button title="Reset view" aria-label="Reset view" onClick={()=>{setStreetView(false);setPickingStreet(false);setDecorationDraft(null);scene.current?.reset();setCenter({x:0,z:0});}}><Compass size={19}/></button><button className={settingsOpen?'active':''} title="Settings" aria-label="Settings" aria-expanded={settingsOpen} onClick={()=>setSettingsOpen(open=>!open)}><Settings size={18}/></button><button title="How it works" aria-label="How it works" onClick={()=>setModal('help')}><HelpCircle size={18}/></button></div></div>
       <nav className={`mobile-dock ${me?'':'is-guest'}`} aria-label="Mobile city navigation">
-        <button className={!searchOpen&&!drawerOpen&&modal===null?'is-active':''} aria-label="Explore city" onClick={()=>{setSearchOpen(false);setDrawerOpen(false);setModal(null);scene.current?.reset();setCenter({x:0,z:0});}}><Compass size={20}/><span>Explore</span></button>
+        <button className={!searchOpen&&!drawerOpen&&modal===null?'is-active':''} aria-label="Explore city" onClick={()=>{setSearchOpen(false);setDrawerOpen(false);setModal(null);setStreetView(false);setPickingStreet(false);setDecorationDraft(null);scene.current?.reset();setCenter({x:0,z:0});}}><Compass size={20}/><span>Explore</span></button>
         <button className={searchOpen?'is-active':''} aria-label="Find neighbors" aria-expanded={searchOpen} onClick={()=>{setSettingsOpen(false);setDrawerOpen(false);setModal(null);setSearchOpen(!searchOpen);}}><Users size={20}/><span>Neighbors</span></button>
         <button className={`mobile-daily ${!snapshot?.claimedToday?'has-reward':''}`} aria-label={snapshot?.claimedToday?'Daily bonus collected':'Collect daily bonus'} disabled={!me||Boolean(busy)||snapshot?.claimedToday} onClick={daily}><Gift size={20}/><span>Bonus</span></button>
         {me && <button className={modal==='invite'?'is-active':''} aria-label="Invite a friend" onClick={showInvites}><Plus size={20}/><span>Invite</span></button>}
@@ -428,7 +524,7 @@ export default function App() {
     </InvitationPane>
     <ChangelogPane open={modal==='changelog'} onClose={()=>setModal(null)}/>
     {modal && modal!=='invite' && modal!=='changelog' && <Dialog className={modal==='login' && inviteToken ? 'invite-welcome' : ''} onClose={()=>setModal(null)} showMark={!inviteToken || modal!=='login'} title={modal==='help'?'A city built by its people.':modal==='not-invited'?'You have not been invited':modal==='auth-error'?'GitHub sign-in could not be completed':'Welcome to C.I.T.I.E.S'}>
-      {modal==='help' && <><p className="modal-description">Earn XP to grow your tower through {MAX_LEVEL} levels and {TIERS.length} model tiers. Spend bricks to make it yours.</p><div className="help-item"><Github/><div><h3>Verified contributions.</h3><p>GitHub earns {REWARDS.commit} XP per newly credited commit, up to {GITHUB_DAILY_COMMIT_LIMIT} rewarded commits ({GITHUB_DAILY_COMMIT_LIMIT*REWARDS.commit} XP) per UTC day. Each rewarded commit also earns {REWARDS.commitBricks} bricks, capped at {GITHUB_DAILY_COMMIT_LIMIT*REWARDS.commitBricks} bricks per UTC day. Pull requests and reviews do not earn rewards.</p></div></div><div className="help-item"><Layers/><div><h3>Ten tiers. Thirty levels.</h3><p>From a shack to an arcology. Every {LEVELS_PER_TIER} levels unlock a new model, ground treatment, and editable segment. Upper sections inherit plot angles and lower alignments while making room for terraces. Permanently unlock architectural themes with bricks, then switch unlocked themes across segments for free. Each new level takes more XP.</p></div></div><div className="help-item"><Users/><div><h3>Build a community.</h3><p>Invite joins earn {REWARDS.invite} XP; likes earn {REWARDS.like}. Each nearby tower level-up, including a new tower’s first level, rewards the eight closest other residents within three plot spacings with {REWARDS.construction} XP.</p></div></div><div className="help-item"><Landmark/><div><h3>Bricks build shared places.</h3><p>Unlock permanent themes or contribute to nearby projects. Segment restyling is free after unlock. Contribute at least 25 bricks to earn {REWARDS.project} XP when a project finishes.</p></div></div><div className="help-item"><Gift/><div><h3>A little reward for returning.</h3><p>Collect {REWARDS.dailyBricks} bricks and {REWARDS.dailyXp} XP once per UTC day.</p></div></div><div className="help-controls">Click the city to use WASD to move and Q/E to rotate.<br/>Space moves up; Shift moves down. Hold keys for continuous movement.<br/>Drag to orbit. Right-drag to pan. Scroll to zoom.<br/>Use search to select residents with your keyboard.</div>{snapshot?.demo&&<p className="demo-explanation">Local demo residents and preset XP are illustrative. Dev mode lets you preview all tiers and simulate rewards. Actual rewards and brick spending are stored by the local backend.</p>}</>}
+      {modal==='help' && <><p className="modal-description">Earn XP to grow your tower through {MAX_LEVEL} levels and {TIERS.length} model tiers. Spend bricks to make it yours.</p><div className="help-item"><Github/><div><h3>Verified contributions.</h3><p>GitHub earns {REWARDS.commit} XP per newly credited commit, up to {GITHUB_DAILY_COMMIT_LIMIT} rewarded commits ({GITHUB_DAILY_COMMIT_LIMIT*REWARDS.commit} XP) per UTC day. Each rewarded commit also earns {REWARDS.commitBricks} bricks, capped at {GITHUB_DAILY_COMMIT_LIMIT*REWARDS.commitBricks} bricks per UTC day. Pull requests and reviews do not earn rewards.</p></div></div><div className="help-item"><Layers/><div><h3>Ten tiers. Thirty levels.</h3><p>From a shack to an arcology. Every {LEVELS_PER_TIER} levels unlock a new model, ground treatment, and editable segment. Upper sections inherit plot angles and lower alignments while making room for terraces. Permanently unlock architectural themes with bricks, then switch unlocked themes across segments for free. Each new level takes more XP.</p></div></div><div className="help-item"><Users/><div><h3>Build a community.</h3><p>Invite joins earn {REWARDS.invite} XP; likes earn {REWARDS.like}. Each nearby tower level-up, including a new tower’s first level, rewards the eight closest other residents within three plot spacings with {REWARDS.construction} XP.</p></div></div><div className="help-item"><Landmark/><div><h3>Bricks build shared places.</h3><p>Unlock permanent themes or contribute to nearby projects. Segment restyling is free after unlock. Contribute at least 25 bricks to earn {REWARDS.project} XP when a project finishes.</p></div></div><div className="help-item"><Gift/><div><h3>A little reward for returning.</h3><p>Collect {REWARDS.dailyBricks} bricks and {REWARDS.dailyXp} XP once per UTC day.</p></div></div><div className="help-controls">Drag the person onto a highlighted street, or click the person and choose a highlighted street to enter Street view. Move your mouse to look and use WASD or the walking arrows to walk. Look at your own items to highlight them; click to pick up or place. R rotates; Escape cancels a held item and releases the mouse. Touch uses swipes and taps. Choose City view to return.<br/>In City view, click the city to use WASD to move and Q/E to rotate.<br/>Space moves up; Shift moves down. Hold keys for continuous movement.<br/>Drag to orbit. Right-drag to pan. Scroll to zoom.<br/>Use search to select residents with your keyboard.</div>{snapshot?.demo&&<p className="demo-explanation">Local demo residents and preset XP are illustrative. Dev mode lets you preview all tiers and simulate rewards. Actual rewards and brick spending are stored by the local backend.</p>}</>}
       {modal==='not-invited'&&<p className="modal-description">Find someone to invite you!</p>}
       {modal==='auth-error'&&<><p className="modal-description">{new URLSearchParams(location.search).get('auth_error')||'Please try again.'}</p><button className="primary-button full-width" onClick={()=>{location.href='/api/auth/github';}}><Github size={18}/>Try again with GitHub</button></>}
       {modal==='login'&&<><p className="modal-description">{inviteError||(inviterName?`${inviterName} has invited you to C.I.T.I.E.S.`:'Loading your invitation…')}</p><InviteWelcomeSteps/><button className="primary-button full-width" disabled={!snapshot?.githubConfigured||!inviterName||Boolean(inviteError)} onClick={()=>{location.href=`/api/auth/github?invite=${encodeURIComponent(inviteToken)}`;}}><Github size={18}/>Continue with GitHub</button></>}
