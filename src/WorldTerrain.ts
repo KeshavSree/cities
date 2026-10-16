@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { coastZ, PLOT_SPACING } from '../shared/world';
+import { WILD_LAKE as LAKE } from './wildNaturePlan';
 
 const CHUNK_SIZE = PLOT_SPACING * 8;
 const BEACH_WIDTH = 2.2;
 // A fixed inland landmark, well beyond the starting neighborhood.
-const LAKE = { x: -98, z: -126, radiusX: 25, radiusZ: 18 };
+
 type Point = { x: number; z: number };
 
 /** A finite render window around the camera; its procedural coordinates never move. */
@@ -15,8 +16,16 @@ export class WorldTerrain {
   private pointer = new THREE.Vector2();
   private corners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
 
-  update(camera: THREE.OrthographicCamera, night: boolean) {
+  update(camera: THREE.OrthographicCamera | THREE.PerspectiveCamera, night: boolean) {
     camera.updateMatrixWorld();
+    if(camera instanceof THREE.PerspectiveCamera){
+      // Eye-level views include rays above the horizon. A bounded window plus
+      // distance fog avoids projecting those rays to infinity or behind us.
+      const x=Math.floor(camera.position.x/CHUNK_SIZE)*CHUNK_SIZE;
+      const z=Math.floor(camera.position.z/CHUNK_SIZE)*CHUNK_SIZE;
+      this.refresh(x-CHUNK_SIZE*3,x+CHUNK_SIZE*4,z-CHUNK_SIZE*3,z+CHUNK_SIZE*4,night);
+      return;
+    }
     let index = 0;
     for (const x of [-1, 1]) for (const y of [-1, 1]) {
       this.pointer.set(x, y);
@@ -30,6 +39,10 @@ export class WorldTerrain {
     const maxX = Math.ceil(Math.max(...this.corners.map(p => p.x)) / CHUNK_SIZE) * CHUNK_SIZE + CHUNK_SIZE * 2;
     const minZ = Math.floor(Math.min(...this.corners.map(p => p.z)) / CHUNK_SIZE) * CHUNK_SIZE - CHUNK_SIZE * 2;
     const maxZ = Math.ceil(Math.max(...this.corners.map(p => p.z)) / CHUNK_SIZE) * CHUNK_SIZE + CHUNK_SIZE * 2;
+    this.refresh(minX,maxX,minZ,maxZ,night);
+  }
+
+  private refresh(minX:number,maxX:number,minZ:number,maxZ:number,night:boolean){
     const key = `${minX},${maxX},${minZ},${maxZ},${night}`;
     if (key === this.windowKey) return;
     this.windowKey = key;
