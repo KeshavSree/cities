@@ -18,7 +18,8 @@
     "check:grid": "node scripts/check-roads.mjs scripts/check-grid.ts",
     "prebuild": "node scripts/changelog.mjs draft",
     "changelog:draft": "node scripts/changelog.mjs draft",
-    "changelog:approve": "node scripts/changelog.mjs approve"
+    "changelog:approve": "node scripts/changelog.mjs approve",
+    "check:lighting": "node scripts/check-roads.mjs scripts/check-lighting.ts"
   },
   "dependencies": {
     "lucide-react": "^1.52.0",
