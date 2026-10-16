@@ -79,6 +79,10 @@ export class StreetInteraction {
     this.group.visible=!config.paused;
     outline.selectedObjects=[];outline.visibleEdgeColor.set('#b8db91');outline.hiddenEdgeColor.set('#000000');
     if(this.held&&owner){
+      if(!this.held.id){
+        const receipt=decorationsOf(owner).find(item=>item.id===`${owner.id}:${this.held!.requestId}`&&item.kind===this.held!.kind);
+        if(receipt){this.held.id=receipt.id;this.placementKey='';this.walk.setBuildings(config.buildings,receipt.id);}
+      }
       if(config.lightsOn!==this.ghostLightsOn)this.buildGhost();
       this.walk.camera.getWorldDirection(this.direction);
       const eye=this.walk.camera.position,key=`${eye.x}:${eye.y}:${eye.z}:${this.direction.x}:${this.direction.y}:${this.direction.z}:${this.held.rotation}:${owner.decorations}:${owner.level}:${owner.segments}`;

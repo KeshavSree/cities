@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { DECORATIONS, decorationsOf, decorationFootprint, decorationSpace, placementError, placedDecorations, suggestedDecorationPosition, type DecorationKind } from '../shared/decorations';
 import { streetPlacement } from '../src/streetPlacement';
+import { persistDecoration } from '../src/decorationPersistence';
 import { plotPlan } from '../shared/plots';
 import { buildingForm } from '../src/buildingForm';
 import type { Building } from '../shared/types';
@@ -52,3 +53,29 @@ for(const point of form.foundationOutline)for(let i=0;i<plan.corners.length;i++)
   assert((dx*(point.z-a.z)-dz*(point.x-a.x))/Math.hypot(dx,dz)>=1.89,'Reserve a wider street and garden margin');
 }
 console.log(`Decoration checks passed: ${positions} placements across tiers and irregular plots, ownership boundaries, overlaps, storage, rotation, and wider road clearance.`);
+
+const saveOwner={...resident(0,0,4),decorations:'[]'},saveDraft={kind:'planter' as const,x:2,z:1,rotation:0,requestId:'retry-purchase-request'};
+const receipt={id:`${saveOwner.id}:${saveDraft.requestId}`,kind:'planter',x:2,z:0,rotation:0};
+const purchased={...saveOwner,bricks:320,decorations:JSON.stringify([receipt])};
+const placed={...purchased,decorations:JSON.stringify([{...receipt,x:saveDraft.x,z:saveDraft.z}])};
+const lostResponse=new Error('Purchase response lost');
+let calls:{path:string;data?:unknown}[]=[],refreshed:Building|undefined;
+const recovery=async <T>(path:string,data?:unknown):Promise<T>=>{
+  calls.push({path,data});
+  if(path==='/decorations/purchase')throw lostResponse;
+  if(path==='/me')return {building:purchased} as T;
+  if(path==='/decorations/move')return {building:placed} as T;
+  throw new Error(`Unexpected path ${path}`);
+};
+const recovered=await persistDecoration(saveOwner,saveDraft,b=>refreshed=b,recovery);
+assert.equal(recovered,placed);assert.equal(refreshed,purchased);
+assert.deepEqual(calls.map(c=>c.path),['/decorations/purchase','/me','/decorations/move'],'A completed purchase at an earlier position is recovered with a free move, not silently accepted');
+assert.equal((calls[2].data as any).id,receipt.id,'Recovery moves the existing receipt instead of buying twice');assert.equal(recovered.bricks,320);
+calls=[];await persistDecoration(purchased,saveDraft,()=>{},recovery);assert.deepEqual(calls.map(c=>c.path),['/decorations/move'],'An already discovered receipt always uses free movement');
+calls=[];const confirmed=await persistDecoration(saveOwner,{...saveDraft,z:0},()=>{},recovery);assert.equal(confirmed,purchased);assert.deepEqual(calls.map(c=>c.path),['/decorations/purchase','/me'],'Matching authoritative receipt positions need no second write');
+await assert.rejects(persistDecoration(saveOwner,saveDraft,()=>{},async <T>()=>{throw lostResponse;}),error=>error===lostResponse,'A failed refresh retains the original save failure');
+await assert.rejects(persistDecoration(saveOwner,saveDraft,()=>{},async <T>(path:string)=>{if(path==='/me')return {building:{...purchased,decorations:JSON.stringify([{...receipt,kind:'bench'}])}} as T;throw lostResponse;}),error=>error===lostResponse,'A receipt for a different item is never treated as success');
+const failedMove=new Error('Move was not saved');calls=[];
+await assert.rejects(persistDecoration(purchased,{...saveDraft,id:receipt.id},()=>{},async <T>(path:string)=>{calls.push({path});if(path==='/me')return {building:purchased} as T;throw failedMove;}),error=>error===failedMove);
+assert.deepEqual(calls.map(c=>c.path),['/decorations/move','/me'],'Failed owned moves retain their error rather than creating a second write');
+console.log('Decoration save recovery checks passed: lost responses, changed positions, receipt reuse, authoritative confirmation, failed refreshes, and failed owned moves.');

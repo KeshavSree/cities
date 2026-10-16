@@ -4,6 +4,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { Clock3, Heart, Hammer, Landmark, Bug, Check, Compass, Copy, Gift, HelpCircle, Layers, Leaf, LoaderCircle, LocateFixed, LogOut, Minus, Package, Plus, Settings, Sparkles, Users, X } from 'lucide-react';
 import type { SceneHandle } from './CityScene';
 import { streetStartByPoint } from './streetNavigation';
+import { persistDecoration } from './decorationPersistence';
 import { plotPosition } from '../shared/world';
 import { emptyStreetInteraction, type StreetInteractionState } from './streetInteractionState';
 import { StreetControls } from './StreetControls';
@@ -395,20 +396,12 @@ export default function App() {
   };
   const cancelDecoration=()=>{if(busy)return;setDecorationDraft(null);setDrawerOpen(true);};
   const commitDecoration=async(draft:DecorationDraft)=>{
-    if(!me||draft.x===null||draft.z===null)throw new Error('Choose a spot first.');
-    const error=placementError(me,draft.kind,{x:draft.x,z:draft.z,rotation:draft.rotation},draft.id);if(error)throw new Error(error);
-    let result:{building:Building};
-    try{result=await api<{building:Building}>(draft.id?'/decorations/move':'/decorations/purchase',draft);}
-    catch(error){
-      const fresh=await api<{building:Building}>('/me').catch(()=>null);
-      if(fresh){
-        update(fresh.building);
-        const owned=decorationsOf(fresh.building).find(item=>item.id===(draft.id||`${me.id}:${draft.requestId}`));
-        if(owned&&(!draft.id||owned.x===draft.x&&owned.z===draft.z&&owned.rotation===draft.rotation))return;
-      }
-      throw error;
-    }
-    update(result.building);
+    if(!me)throw new Error('Sign in to place items.');
+    update(await persistDecoration(me,draft,building=>{
+      update(building);
+      const receipt=decorationsOf(building).find(item=>item.id===(draft.id||`${me.id}:${draft.requestId}`)&&item.kind===draft.kind);
+      if(receipt)setDecorationDraft(current=>current?.requestId===draft.requestId?{...current,id:receipt.id}:current);
+    }));
   };
   const saveDecoration=()=>action('decoration-save',async()=>{
     if(!decorationDraft)return;await commitDecoration(decorationDraft);
@@ -434,7 +427,7 @@ export default function App() {
   const enterStreet=(start:StreetStart)=>{setStreetStart(start);setPickingStreet(false);setStreetView(true);requestAnimationFrame(()=>scene.current?.look());};
   return <div data-time-of-day={lighting.phase} data-streetlights={lighting.lightsOn?'on':'off'} className={`app ${lighting.night?'night':''} ${streetView&&!placementActive?'street-mode':''} ${pickingStreet&&!placementActive?'street-picking':''} ${decorationDraft?'decoration-editing':''}`} style={{background:`radial-gradient(ellipse at 40% 55%,${lighting.skyCenter} 0,${lighting.skyEdge} 100%)`}}>
     <header className="topbar">
-      <div className="brand-and-changelog"><button className="brand" onClick={()=>{setStreetView(false);setPickingStreet(false);setDecorationDraft(null);scene.current?.reset();setCenter({x:0,z:0});}} aria-label="C.I.T.I.E.S, return to city center">
+      <div className="brand-and-changelog"><button className="brand" disabled={Boolean(busy)||streetInteraction.saving} onClick={()=>{setStreetView(false);setPickingStreet(false);setDecorationDraft(null);scene.current?.reset();setCenter({x:0,z:0});}} aria-label="C.I.T.I.E.S, return to city center">
         <span className="brand-mark"><i/><i/><i/></span><span>c.i.t.i.e.s<span className="brand-period">.</span></span>
       </button><button className="changelog-link" onClick={()=>{setModal(previous=>previous==='changelog'?null:'changelog');setSearchOpen(false);setSettingsOpen(false);setDrawerOpen(false);}} aria-expanded={modal==='changelog'} aria-controls="changelog-pane">Changelog</button></div>
       <nav aria-label="City controls">
@@ -449,7 +442,7 @@ export default function App() {
     </header>
 
     <main>
-      <Suspense fallback={<div className="scene-loading"><LoaderCircle className="spin" size={24}/><span>Drawing your little city…</span></div>}><CityScene ref={scene} preserveStreetDraft={preserveStreetDraft} streetDraft={streetDraft} onStreetSave={saveStreetItem} onStreetDraftCancel={()=>setStreetDraft(null)} onStreetState={setStreetInteraction} onMouseLock={(locked,blocked=false)=>{setMouseLocked(locked);setMouseCaptureBlocked(blocked);}} ownerId={snapshot?.me||null} pageVisible={pageVisible} streetView={streetView&&!placementActive} pickingStreet={pickingStreet&&!placementActive} streetStart={streetStart} onStreetPick={start=>{setStreetStart(start);}} onStreetEnter={enterStreet} onStreetExit={returnToCity} navigationPaused={drawerOpen||Boolean(modal)||settingsOpen||searchOpen||onboardingOpen} buildings={buildings} selected={selected} lighting={lighting} center={center} debugScores={showScores} lodEnabled={lodEnabled} previews={placementActive?placementOptions:previews} placementMode={placementActive} placementOrigin={placementOrigin} placementChoice={placementChoice} onPlacement={choosePlacement} projects={snapshot?.projects||[]} onProject={selectProject} onSelect={id=>{const b=buildings.find(b=>b.id===id);if(b)select(b);}} decorationOwner={decorationDraft?me?.id:null} decorationDraft={decorationDraft} onDecorationPosition={(x,z)=>setDecorationDraft(previous=>{if(!previous)return null;const slot=previous.kind==='base_shop'&&me?nearestShopSlot(me,{x,z}):null;return {...previous,x:slot?.x??x,z:slot?.z??z,rotation:slot?.rotation??previous.rotation};})} onDecorationCancel={cancelDecoration} onPan={(x,z)=>setCenter({x,z})}/></Suspense>
+      <Suspense fallback={<div className="scene-loading"><LoaderCircle className="spin" size={24}/><span>Drawing your little city…</span></div>}><CityScene ref={scene} preserveStreetDraft={preserveStreetDraft} streetDraft={streetDraft} onStreetSave={saveStreetItem} onStreetDraftCancel={()=>setStreetDraft(null)} onStreetState={setStreetInteraction} onMouseLock={(locked,blocked=false)=>{setMouseLocked(locked);setMouseCaptureBlocked(blocked);}} ownerId={snapshot?.me||null} pageVisible={pageVisible} streetView={streetView&&!placementActive} pickingStreet={pickingStreet&&!placementActive} streetStart={streetStart} onStreetPick={start=>{setStreetStart(start);}} onStreetEnter={enterStreet} onStreetExit={returnToCity} navigationPaused={drawerOpen||Boolean(modal)||settingsOpen||searchOpen||onboardingOpen} buildings={buildings} selected={selected} lighting={lighting} center={center} debugScores={showScores} lodEnabled={lodEnabled} previews={placementActive?placementOptions:previews} placementMode={placementActive} placementOrigin={placementOrigin} placementChoice={placementChoice} onPlacement={choosePlacement} projects={snapshot?.projects||[]} onProject={selectProject} onSelect={id=>{const b=buildings.find(b=>b.id===id);if(b)select(b);}} decorationOwner={decorationDraft?me?.id:null} decorationDraft={decorationDraft} onDecorationPosition={(x,z)=>{if(busy)return;setDecorationDraft(previous=>{if(!previous)return null;const slot=previous.kind==='base_shop'&&me?nearestShopSlot(me,{x,z}):null;return {...previous,x:slot?.x??x,z:slot?.z??z,rotation:slot?.rotation??previous.rotation};});}} onDecorationCancel={cancelDecoration} onPan={(x,z)=>setCenter({x,z})}/></Suspense>
 
       {!placementActive&&<StreetControls placing={Boolean(decorationDraft)} switchingDisabled={Boolean(busy)||streetInteraction.saving} onLightingSettings={canDebug?()=>setSettingsOpen(true):undefined} active={streetView} available={Boolean(buildings.length)&&!onboardingOpen} paused={drawerOpen||Boolean(modal)||settingsOpen||searchOpen||onboardingOpen}
         picking={pickingStreet} hasHome={Boolean(me)} mouseLocked={mouseLocked} mouseCaptureBlocked={mouseCaptureBlocked} interaction={streetInteraction} onLook={()=>scene.current?.look()} onRotate={()=>scene.current?.rotateItem()} onCancelItem={()=>scene.current?.cancelItem()} onShop={()=>{scene.current?.walk('forward',false);setSelected(me?.id||null);setDrawerOpen(true);}}

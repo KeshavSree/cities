@@ -58,3 +58,10 @@ person.userData.owner='another';body.userData.owner='another';lookAtPerson();ass
 lookAtPerson();click();assert.equal(walkingInteraction.carriedId,'walker','One click picks up the moving owned neighbor');walkingInteraction.cancel();walkingInteraction.dispose();body.geometry.dispose();(body.material as THREE.Material).dispose();
 object.geometry.dispose();(object.material as THREE.Material).dispose();
 console.log('Street interaction checks passed: ownership, occlusion, reach, pause, pickup, walking with an item, invalid drops, rotation, cancellation, one pending save, failed-save retry, new purchases, and exit cleanup.');
+
+const retryOwner={...own,decorations:'[]'},retryInteraction=new StreetInteraction(canvas,new THREE.Group(),walk,()=>({buildings:[retryOwner],ownerId:retryOwner.id,lightsOn:false,paused:false,onState:s=>state=s,onCancel:()=>{},onSave:async()=>false}),()=>{});
+walk.enabled=true;camera.position.set(0,.76,3.5);camera.lookAt(0,.115,2);camera.updateMatrixWorld();
+retryInteraction.begin({kind:'planter',x:null,z:null,rotation:0,requestId:'lost-purchase-receipt'});retryInteraction.update(outline);
+retryOwner.decorations=JSON.stringify([{id:`${retryOwner.id}:lost-purchase-receipt`,kind:'planter',x:0,z:2,rotation:0}]);retryInteraction.update(outline);
+assert.equal(retryInteraction.carriedId,`${retryOwner.id}:lost-purchase-receipt`,'Receipt recovery converts a new preview into its already purchased item');assert.equal(state.purchase,false,'Retrying a discovered purchase is a free move');assert.equal(state.error,null,'The recovered item does not collide with its own saved footprint');retryInteraction.dispose();
+console.log('Street recovery checks passed: discovered receipts stay movable and never request a second purchase.');
