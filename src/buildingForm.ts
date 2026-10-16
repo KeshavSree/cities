@@ -28,18 +28,18 @@ function plotFootprint(building:Building,tier:number,padding:number){
     const widthProjection=Math.abs(right.x*nx+right.z*nz),depthProjection=Math.abs(front.x*nx+front.z*nz);
     return {distance,widthProjection,depthProjection};
   });
-  // The full tier reaches 0.4 units from its frontage centerline. Reduce width
+  // The full tier reserves 1.15 units from its frontage centerline. Reduce width
   // to fit skewed side boundaries instead of pulling the front back from its road.
-  let d=2*(plan.frontage.distance-.4),w=6.4;
+  let d=2*(plan.frontage.distance-1.15),w=6.4;
   for(const edge of edges)if(edge.widthProjection<1e-6){
-    d=Math.min(d,2*(edge.distance-.3-padding*edge.depthProjection)/edge.depthProjection);
+    d=Math.min(d,2*(edge.distance-1.05-padding*edge.depthProjection)/edge.depthProjection);
   }
-  const widthAt=(depth:number)=>Math.min(6.4,...edges.filter(edge=>edge.widthProjection>=1e-6).map(edge=>2*(edge.distance-.3-padding*(edge.widthProjection+edge.depthProjection)-depth*edge.depthProjection/2)/edge.widthProjection));
+  const widthAt=(depth:number)=>Math.min(6.4,...edges.filter(edge=>edge.widthProjection>=1e-6).map(edge=>2*(edge.distance-1.05-padding*(edge.widthProjection+edge.depthProjection)-depth*edge.depthProjection/2)/edge.widthProjection));
   w=widthAt(d);
   // Diagonal cul-de-sac frontage can make the old full-depth rectangle too
   // long. Trade depth for usable width while staying inside every parcel edge.
   if(w<1.6){
-    for(const edge of edges)if(edge.depthProjection>1e-6)d=Math.min(d,2*(edge.distance-.3-padding*(edge.widthProjection+edge.depthProjection)-.8*edge.widthProjection)/edge.depthProjection);
+    for(const edge of edges)if(edge.depthProjection>1e-6)d=Math.min(d,2*(edge.distance-1.05-padding*(edge.widthProjection+edge.depthProjection)-.8*edge.widthProjection)/edge.depthProjection);
     w=widthAt(d);
   }
   // A turning-ring tangent can pass unusually close to the nominal plot
@@ -177,7 +177,7 @@ function composeSections(plan:PlotPlan,base:Point[],designs:SegmentDesign[],tier
     return {outline,supportRatio,overhang,role:segment===count-1&&tier>=3?'Garden crown':segment<3?'Lower residential volume':segment<6?'Continuous middle volume':'Upper garden volume',loggia:tier>=6&&segment===6};
   });
 }
-export const MODEL_SETBACKS=[0,0,0,1.2,.8,.4,.39,.38,.37,.36];
+export const MODEL_SETBACKS=[0,0,0,2,2,2,2,2,2,2];
 
 /** Each tier adds an editable segment within a connected architectural composition. */
 export function buildingForm(building:Building,roadScore=0){

@@ -1,5 +1,6 @@
 import { DAILY_REWARD, STYLE_COST, COLOR_COST, STYLES, COLORS } from '../shared/types';
 import type { Building, Style, Color } from '../shared/types';
+import { DECORATIONS, isDecorationKind, decorationsOf, placementError, suggestedDecorationPosition } from '../shared/decorations';
 import { seedDemo, ensureDemoConnections } from './demo';
 import { VIEW_RADIUS } from '../shared/world';
 import { availablePlotPlans, previewPlotPlans } from '../shared/plots';
@@ -20,7 +21,8 @@ interface User { id: string; github_id: string | null; username: string; name: s
 const DAY = () => new Date().toISOString().slice(0, 10);
 const NOW = () => Math.floor(Date.now() / 1000);
 const QUERY = `SELECT u.id, u.username, u.name, u.bio, u.avatar, u.linkedin_url, u.github_url, u.website, u.school,
-  u.is_demo, b.x, b.z, b.level, b.xp, b.bricks, b.segments, b.style, b.color, b.updated_at,
+  u.is_demo, b.x, b.z, b.level, b.xp, b.bricks, b.segments, b.style, b.color, b.updated_at,b.decorations_version,
+  (SELECT json_group_array(json_object('id',d.id,'kind',d.kind,'x',d.x,'z',d.z,'rotation',d.rotation)) FROM decorations d WHERE d.user_id=u.id) decorations,
   (SELECT COUNT(*) FROM tower_likes WHERE tower_id=u.id) likes,
   COALESCE(m.commits, 0) commits, COALESCE(m.prs, 0) prs, COALESCE(m.reviews, 0) reviews, m.synced_at,
   (SELECT i.inviter_id FROM invitation_redemptions r JOIN invitations i ON i.token=r.token WHERE r.user_id=u.id) invited_by,
@@ -518,6 +520,49 @@ export default {
       if(path==='/api/onboarding/complete'&&req.method==='POST'){
         await env.DB.prepare("INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description) VALUES(?,?,'onboarding',0,0,'Onboarding completed')").bind(`onboarding-complete:${user.id}`,user.id).run();
         return json({ok:true});
+      }
+      if((path==='/api/decorations/purchase'||path==='/api/decorations/move')&&req.method==='POST'){
+        const data=await body(req),own=await building(env,user.id),purchase=path.endsWith('/purchase');
+        const requestId=typeof data.requestId==='string'?data.requestId:'';
+        const id=purchase?`${user.id}:${requestId}`:typeof data.id==='string'?data.id:'';
+        const existing=purchase?await env.DB.prepare('SELECT kind,request_data FROM decorations WHERE id=? AND user_id=?').bind(id,user.id).first<{kind:string;request_data:string}>():decorationsOf(own).find(item=>item.id===id);
+        if(purchase&&!/^[a-zA-Z0-9-]{16,64}$/.test(requestId))throw new ApiError('Choose a valid purchase request.');
+        if(!purchase&&!existing)throw new ApiError('This decoration does not belong to you.',404);
+        const kind=purchase?data.kind:existing!.kind;
+        if(!isDecorationKind(kind))throw new ApiError('Choose an available decoration.');
+        const stored=!purchase&&data.x===null&&data.z===null;
+        const rotation=data.rotation,x=data.x,z=data.z;
+        if(typeof rotation!=='number'||!Number.isInteger(rotation)||rotation<0||rotation>3||!stored&&(typeof x!=='number'||typeof z!=='number'||!Number.isFinite(x)||!Number.isFinite(z)))throw new ApiError('Choose a valid decoration position.');
+        const requestData=JSON.stringify({kind,x,z,rotation});
+        if(purchase&&existing){
+          if('request_data' in existing&&existing.request_data===requestData)return json({building:await changed(env,user.id,ctx)});
+          throw new ApiError('This purchase already completed. Refresh your decorations before buying another.',409);
+        }
+        if(!stored){const error=placementError(own,kind,{x:x as number,z:z as number,rotation},purchase?undefined:id);if(error)throw new ApiError(error,409);}
+        try{
+          const guard='user_id=? AND decorations_version=? AND level=? AND x=? AND z=?';
+          const result=purchase?await env.DB.prepare(`INSERT INTO decorations(id,user_id,kind,cost,request_data,x,z,rotation)
+            SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM buildings WHERE ${guard}) RETURNING id`)
+            .bind(id,user.id,kind,DECORATIONS[kind].cost,requestData,x,z,rotation,user.id,own.decorations_version??0,own.level,own.x,own.z).first():
+            await env.DB.prepare(`UPDATE decorations SET x=?,z=?,rotation=? WHERE id=? AND user_id=? AND EXISTS(SELECT 1 FROM buildings WHERE ${guard}) RETURNING id`)
+            .bind(x,z,rotation,id,user.id,user.id,own.decorations_version??0,own.level,own.x,own.z).first();
+          if(!result){
+            const prior=purchase?await env.DB.prepare('SELECT request_data FROM decorations WHERE id=? AND user_id=?').bind(id,user.id).first<{request_data:string}>():null;
+            if(prior?.request_data===requestData)return json({building:await changed(env,user.id,ctx)});
+            throw new ApiError('Your garden changed while you were placing this. Try again.',409);
+          }
+        }catch(error){
+          const message=String(error);
+          if(message.includes('not enough bricks'))throw new ApiError(`You need ${DECORATIONS[kind].cost} bricks for this decoration.`,409);
+          if(message.includes('decoration limit'))throw new ApiError('Your collection holds up to 24 decorations. Move or store one you already own.',409);
+          if(message.includes('UNIQUE')){
+            const prior=await env.DB.prepare('SELECT request_data FROM decorations WHERE id=? AND user_id=?').bind(id,user.id).first<{request_data:string}>();
+            if(prior?.request_data===requestData)return json({building:await changed(env,user.id,ctx)});
+            throw new ApiError('This purchase already completed. Refresh your decorations.',409);
+          }
+          throw error;
+        }
+        return json({building:await changed(env,user.id,ctx)});
       }
       if(path==='/api/themes/unlock'&&req.method==='POST'){
         const data=await body(req),theme=typeof data.theme==='string'?data.theme:'';
