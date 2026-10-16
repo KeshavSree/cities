@@ -24,6 +24,7 @@ export function LevelProgress({building}:{building:Building}){
     </div>
     {helpOpen&&<aside id={helpId} className="growth-info-popover" aria-label="How to gain XP">
       <h3>How to gain XP</h3>
+      <p>Merged C.I.T.I.E.S contribution: {REWARDS.contribution} XP</p>
       <p>Invite joins: {REWARDS.invite} XP</p>
       <p>Public project completion: {REWARDS.project} XP</p>
       <p>Tower likes: {REWARDS.like} XP</p>

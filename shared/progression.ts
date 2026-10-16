@@ -36,7 +36,7 @@ export interface SegmentDesign{color:Color;style:SegmentStyle;theme:BuildingThem
 export const SEGMENT_STYLES:Record<SegmentStyle,string>={classic:'Classic windows',glass:'Glass facade',balcony:'Balconies'};
 export const DEFAULT_UNLOCKED_THEMES:BuildingTheme[]=['contemporary'];
 export const GITHUB_DAILY_COMMIT_LIMIT=20;
-export const REWARDS={commit:10,commitBricks:10,invite:200,like:50,construction:20,project:200,dailyXp:30,dailyBricks:30};
+export const REWARDS={commit:10,commitBricks:10,contribution:100,invite:200,like:50,construction:20,project:200,dailyXp:30,dailyBricks:30};
 export function segmentDesigns(building:Building):SegmentDesign[]{
   let saved:(SegmentDesign|null)[]=[];try{const parsed=JSON.parse(building.segments);if(Array.isArray(parsed))saved=parsed;}catch{/* Legacy defaults. */}
   return Array.from({length:segmentCount(building.level)},(_,i)=>({color:saved[i]?.color??building.color,style:saved[i]?.style??(building.style==='modern'||tierIndex(building.level)>=6?'glass':'classic'),theme:saved[i]?.theme&&Object.hasOwn(BUILDING_THEMES,saved[i]!.theme)?saved[i]!.theme:'contemporary'}));

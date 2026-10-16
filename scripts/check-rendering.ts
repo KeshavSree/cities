@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import type {Building} from '../shared/types';
+import { PUBLIC_PROJECTS } from '../shared/projects';
 import { CityAssets } from '../src/CityAssets';
 import { buildCity } from '../src/cityGeometry';
 import { neighborhoodDensity } from '../src/neighborhood';
@@ -43,4 +44,10 @@ try{
   mock.onmessage({data:{generation:oldGeneration,result:null}});assert.equal(replies,0,'Old worlds cannot apply stale navigation replies');assert(planner.busy);
   const generation=mock.messages.at(-1).generation;mock.onmessage({data:{generation,result:null}});assert.equal(replies,1);assert(!planner.busy);planner.dispose();assert(mock.terminated,'Unmounting terminates background navigation');
 }finally{if(nativeWorker===undefined)delete (globalThis as any).Worker;else (globalThis as any).Worker=nativeWorker;}
+const square=PUBLIC_PROJECTS.find(p=>p.id==='makers-square')!,squareGroup=new THREE.Group();
+const squareProject={...square,funded:square.goal/2,contributors:2,myContribution:0};
+buildCity(squareGroup,buildings,true,true,neighborhoodDensity(buildings),[squareProject],0,{layer:'project',id:square.id});
+assert(squareGroup.children.some(o=>o.userData.streetLamp),'The merged Makers square retains funded lamps in the extracted renderer');
+assert(squareGroup.children.every(o=>o.userData.project===square.id),'Plaza meshes and light markers retain project ownership after batching');
+disposeGroup(squareGroup);
 console.log('Rendering checks passed: incremental edits, no-op updates, queue coalescing, eviction, shared materials, color fidelity, spatial queries, forest reuse, stable lights, legal fixtures and placement view starts.');

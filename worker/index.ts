@@ -17,7 +17,7 @@ interface Env {
   DB: D1Database; NEIGHBORHOODS: DurableObjectNamespace; ASSETS: Fetcher;
   DEV_MODE?: string; APP_ORIGIN: string;
   GITHUB_CLIENT_ID?: string; GITHUB_CLIENT_SECRET?: string; TOKEN_ENCRYPTION_KEY?: string;
-  FOUNDER_GITHUB_ID?: string;
+  FOUNDER_GITHUB_ID?: string; GITHUB_REPOSITORY?: string;
 }
 interface User { id: string; github_id: string | null; username: string; name: string; is_demo: number; github_token: string | null; }
 const DAY = () => new Date().toISOString().slice(0, 10);
@@ -113,6 +113,12 @@ async function unseal(value: string, env: Env) {
   return new TextDecoder().decode(decoded);
 }
 const ghHeaders = (token: string) => ({ Authorization: `Bearer ${token}`, 'User-Agent': 'cities', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' });
+interface GithubActor { login:string; databaseId?:number|null }
+interface GithubContribution {
+  number:number; title:string; mergedAt:string|null; baseRefName:string;
+  repository:{nameWithOwner:string}; author:GithubActor|null;
+  latestOpinionatedReviews:{nodes:{state:string;author:GithubActor|null}[]};
+}
 // Calendar layout adapted from kdkasad/website; license in public/licenses/kasad-website.txt.
 async function fetchGithubActivity(env: Env, user: User) {
   if (!user.github_token) throw new ApiError('Reconnect GitHub to load activity.',401,'GITHUB_RECONNECT_REQUIRED');
@@ -136,6 +142,33 @@ async function fetchGithubActivity(env: Env, user: User) {
   if(result.errors?.length||!activity||!Array.isArray(activity.contributionCalendar?.weeks))throw new ApiError('GitHub could not return activity. Reconnect your account or try later.',502);
   return activity;
 }
+async function fetchGithubContributions(env:Env,user:User):Promise<GithubContribution[]> {
+  if(!env.GITHUB_REPOSITORY||!env.FOUNDER_GITHUB_ID||!user.github_id||!user.github_token)return [];
+  const [owner,name]=env.GITHUB_REPOSITORY.split('/');
+  if(!owner||!name)return [];
+  const response=await fetch('https://api.github.com/graphql',{
+    method:'POST',headers:ghHeaders(await unseal(user.github_token,env)),
+    body:JSON.stringify({query:`query($owner:String!,$name:String!,$search:String!){
+      repository(owner:$owner,name:$name){defaultBranchRef{name}}
+      search(query:$search,type:ISSUE,first:50){nodes{... on PullRequest{
+        number title mergedAt baseRefName repository{nameWithOwner}
+        author{login ... on User{databaseId}}
+        latestOpinionatedReviews(first:50){nodes{state author{login ... on User{databaseId}}}}
+      }}}
+    }`,variables:{owner,name,search:`repo:${env.GITHUB_REPOSITORY} is:pr is:merged author:${user.username}`}}),
+  });
+  if(!response.ok)throw new Error(`GitHub contribution request failed (HTTP ${response.status})`);
+  const result=await response.json() as {data?:{repository?:{defaultBranchRef?:{name:string}|null};search?:{nodes:(GithubContribution|null)[]}};errors?:unknown[]};
+  const defaultBranch=result.data?.repository?.defaultBranchRef?.name;
+  if(result.errors?.length||!defaultBranch||!Array.isArray(result.data?.search?.nodes))throw new Error('GitHub did not return contribution data');
+  const founderId=Number(env.FOUNDER_GITHUB_ID);
+  return result.data.search.nodes.filter((pr):pr is GithubContribution=>Boolean(
+    pr&&pr.mergedAt&&pr.baseRefName===defaultBranch&&
+    pr.repository.nameWithOwner.toLowerCase()===env.GITHUB_REPOSITORY!.toLowerCase()&&
+    pr.author?.databaseId===Number(user.github_id)&&
+    pr.latestOpinionatedReviews.nodes.some(review=>review.state==='APPROVED'&&review.author?.databaseId===founderId)
+  ));
+}
 function calendarStatement(env: Env, id: string, calendar: ContributionCalendar) {
   return env.DB.prepare("INSERT INTO github_calendars(user_id,calendar) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET calendar=excluded.calendar,fetched_at=datetime('now')").bind(id,JSON.stringify(calendar));
 }
@@ -147,6 +180,9 @@ async function syncGithub(env: Env, user: User, automatic=false) {
   const c = await fetchGithubActivity(env, user);
   const commits = c.totalCommitContributions;
   if(!Number.isSafeInteger(commits)||commits<0)throw new ApiError('GitHub returned an invalid commit count.',502);
+  let contributions:GithubContribution[]=[];
+  try{contributions=await fetchGithubContributions(env,user);}
+  catch(error){console.warn('GitHub contribution sync failed:',String(error));}
   await env.DB.batch([
     calendarStatement(env,user.id,c.contributionCalendar),
     env.DB.prepare(`INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description)
@@ -159,6 +195,11 @@ async function syncGithub(env: Env, user: User, automatic=false) {
         FROM metrics WHERE user_id=? AND synced_at IS NOT NULL AND ?>credited_commits
       ) WHERE eligible>0`)
       .bind(`github-commits:${user.id}:${commits}`,REWARDS.commit,REWARDS.commitBricks,commits,GITHUB_DAILY_COMMIT_LIMIT,REWARDS.commit,DAY(),user.id,commits),
+    ...contributions.map(pr=>env.DB.prepare(`INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description)
+      VALUES(?,?,'contribution',?,0,?)`).bind(
+        `github-pr:${pr.repository.nameWithOwner.toLowerCase()}:${pr.number}`,user.id,REWARDS.contribution,
+        `Merged C.I.T.I.E.S contribution: #${pr.number} ${pr.title.slice(0,120)}`
+      )),
     env.DB.prepare(`UPDATE metrics SET commits=?, credited_commits=MAX(credited_commits, ?),
       synced_at=datetime('now') WHERE user_id=?`).bind(commits, commits, user.id),
   ]);
