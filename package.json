@@ -19,6 +19,7 @@
     "prebuild": "node scripts/changelog.mjs draft",
     "changelog:draft": "node scripts/changelog.mjs draft",
     "changelog:approve": "node scripts/changelog.mjs approve",
+    "check:neighbors": "node scripts/check-roads.mjs scripts/check-owned-neighbors.ts",
     "check:lighting": "node scripts/check-roads.mjs scripts/check-lighting.ts"
   },
   "dependencies": {
