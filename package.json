@@ -21,7 +21,8 @@
     "changelog:approve": "node scripts/changelog.mjs approve",
     "check:neighbors": "node scripts/check-roads.mjs scripts/check-owned-neighbors.ts",
     "check:shops": "node scripts/check-roads.mjs scripts/check-attached-shops.ts",
-    "check:lighting": "node scripts/check-roads.mjs scripts/check-lighting.ts"
+    "check:lighting": "node scripts/check-roads.mjs scripts/check-lighting.ts",
+    "check:rendering": "node scripts/check-roads.mjs scripts/check-rendering.ts"
   },
   "dependencies": {
     "lucide-react": "^1.52.0",
