@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { streetLamp } from './StreetLighting';
 import type { GroundPoint } from './neighborhood';
 
 type Box = (parent: THREE.Group, x: number, y: number, z: number, width: number, height: number, depth: number, color: string) => THREE.Mesh;
@@ -94,6 +95,7 @@ export function buildPlazaLandscape(site:THREE.Group,boundary:GroundPoint[],entr
     box(site,p.x,.92,p.z,.07,1.62,.07,'#667773');
     box(site,p.x,1.77,p.z,.24,.18,.24,night?'#f3d795':'#e9e1c9');
     box(site,p.x,1.89,p.z,.31,.06,.31,'#667773');
+    streetLamp(site,p.x,1.66,p.z,8,6.5);
   };
   if(funded>=.5){
     for(let i=0;i<8;i+=2){

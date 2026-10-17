@@ -1,0 +1,21 @@
+.neighborhood-guide-backdrop{position:fixed;inset:0;z-index:155;display:grid;place-items:center;padding:16px;background:#13253180;backdrop-filter:blur(3px)}
+.neighborhood-guide{width:min(440px,100%);max-height:calc(var(--visible-height,100dvh) - 32px);overflow-y:auto;overscroll-behavior:contain;padding:24px;background:#fff;color:#304851;border-radius:20px;box-shadow:0 14px 65px #122b4938;animation:onboarding-arrive .16s ease-out}
+.neighborhood-guide header,.neighborhood-guide footer{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.neighborhood-guide header>span{display:flex;align-items:center;gap:8px;font-size:9px;font-weight:700;letter-spacing:.1em;color:#6d8981}
+.neighborhood-guide header>button{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;color:#6f858c}
+.neighborhood-guide header>button:hover{background:#eef4f1}
+.neighborhood-guide-visual{display:flex;align-items:center;justify-content:center;gap:24px;min-height:116px;margin:15px 0 20px;border:1px solid #e2ebe6;border-radius:14px;background:#f1f6f2;color:#6b8c77}
+.neighborhood-guide-visual>.lucide-person-standing{color:#bd8e39}
+.guide-street{display:grid;place-items:center;width:82px;height:46px;border-radius:9px;border:2px dashed #95bed0;background:#e4f0f5;color:#5f94ab}
+.guide-price{display:flex;align-items:center;gap:9px;font-size:11px;font-weight:600}.guide-price>span{display:flex;align-items:center;gap:4px;padding:6px 8px;border-radius:20px;background:#e1eadf;font-size:10px}
+.guide-keys{display:flex;align-items:center;gap:5px}.guide-keys kbd,.guide-keys>span{padding:8px;border:1px solid #d8e2dd;border-radius:6px;background:white;box-shadow:0 2px 0 #d8e2dd;font-family:inherit;font-size:11px;color:#5b7667}
+.guide-phases{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center}.guide-phases>span{display:flex;flex-direction:column;align-items:center;gap:7px}.guide-phases strong{font-size:10px;font-weight:600}.guide-phases small{font-size:9px;color:#81968b}.guide-phases>span:nth-child(3){color:#b08a58}.guide-phases>span:nth-child(4){color:#7e7fa9}
+.neighborhood-guide-count{font-size:10px;font-weight:600;color:#8b9e98;margin:0 0 8px}
+.neighborhood-guide h2{margin:0 0 13px;font-size:24px;line-height:1.2;letter-spacing:-.6px;outline:none}
+.neighborhood-guide #neighborhood-guide-description,.neighborhood-guide-detail{font-size:13px;line-height:1.75;margin:0 0 14px;color:#647e8b}
+.neighborhood-guide-detail{font-size:12px;padding:12px 14px;border-radius:10px;background:#f6f8f7;color:#6a8178}
+.neighborhood-guide-progress{display:flex;gap:5px;margin:24px 0 20px}.neighborhood-guide-progress>span{height:3px;flex:1;border-radius:3px;background:#e8eeeb}.neighborhood-guide-progress>.is-complete{background:#88a68c}
+.neighborhood-guide footer button{display:flex;align-items:center;justify-content:center;gap:7px;min-height:42px;padding:10px 15px;border-radius:25px;font-size:12px;cursor:pointer}.guide-back{color:#7f9297;background:transparent}.guide-next{color:#365944;background:#e3eddf}.guide-next:hover{background:#d4e4cf}.neighborhood-guide button:focus-visible{outline:2px solid #588f72;outline-offset:3px}
+.settings-guide-button{display:flex;align-items:center;gap:10px;min-height:44px;width:100%;font-size:11px;font-weight:600;color:#647982;text-align:left}.settings-guide-button:disabled{opacity:.45;cursor:default}
+@media(max-width:760px){.neighborhood-guide{padding:20px}.neighborhood-guide h2{font-size:22px}.neighborhood-guide-visual{gap:16px;min-height:100px}.guide-phases{gap:12px}.neighborhood-guide #neighborhood-guide-description{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.neighborhood-guide{animation:none}}

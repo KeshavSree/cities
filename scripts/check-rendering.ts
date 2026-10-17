@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import type {Building} from '../shared/types';
+import { PUBLIC_PROJECTS } from '../shared/projects';
+import { CityAssets } from '../src/CityAssets';
+import { buildCity } from '../src/cityGeometry';
+import { neighborhoodDensity } from '../src/neighborhood';
+import { batchCityMeshes,BatchMaterials } from '../src/meshBatching';
+import { disposeGroup } from '../src/sceneResources';
+import { SpatialIndex } from '../src/SpatialIndex';
+import { NeighborPlanner } from '../src/NeighborPlanner';
+import { WildNature } from '../src/WildNature';
+import { StreetLighting,streetLamp } from '../src/StreetLighting';
+import { placedDecorations,DECORATIONS } from '../shared/decorations';
+import { denseDemoPurchasePlan } from '../worker/demoPurchases';
+import { streetStartByPoint,canWalk,streetObstacles } from '../src/streetNavigation';
+const resident=(id:string,x=0,z=0,level=4):Building=>({id,username:id,name:id,bio:'',avatar:null,github_url:null,website:null,school:null,is_demo:1,x,z,level,xp:450,bricks:1500,segments:'[]',likes:0,style:'terrace',color:'sand',commits:0,prs:0,reviews:0,synced_at:null,updated_at:''});
+const owner={...resident('owner'),decorations:JSON.stringify([{id:'bench',kind:'bench',x:2,z:0,rotation:0},{id:'lamp',kind:'lamp',x:-2,z:0,rotation:0}])},buildings=[owner,resident('neighbor',1,0,21)];
+const root=new THREE.Group(),assets=new CityAssets(root),reconcile=(values=buildings)=>assets.reconcile(values,false,false,[],0,{x:0,z:0}),drain=()=>{for(let n=0;assets.pending&&n<200;n++)assets.process(100);assert(!assets.pending);};
+reconcile();drain();
+const whole=new THREE.Group();buildCity(whole,buildings,false,false,neighborhoodDensity(buildings),[],0);
+const coverage=(group:THREE.Group)=>{const result:string[]=[];group.traverse(object=>{if(!(object instanceof THREE.Mesh))return;const position=object.geometry.getAttribute('position');for(let i=0;i<position.count;i++)result.push(`${object.userData.owner||''}:${object.userData.decoration||''}:${+object.castShadow}:${Math.round(position.getX(i)*1000)},${Math.round(position.getY(i)*1000)},${Math.round(position.getZ(i)*1000)}`);});return result.sort();};
+assert.deepEqual(coverage(root),coverage(whole),'Incremental construction preserves every triangle and ownership/shadow boundary');disposeGroup(whole);
+const firstBuilt=assets.stats.built,first=new Set(root.children),geometries=root.children.filter(o=>o instanceof THREE.Mesh).map((o:any)=>o.geometry);
+reconcile(buildings.map(b=>({...b,bricks:99,likes:5,xp:999,avatar:'changed'})));assert(!assets.pending,'Financial/profile updates do not schedule geometry');assert.equal(assets.stats.built,firstBuilt);assert.deepEqual(new Set(root.children),first,'GPU objects keep their identity');
+const moved={...owner,decorations:JSON.stringify([{id:'bench',kind:'bench',x:2,z:.25,rotation:1},{id:'lamp',kind:'lamp',x:-2,z:0,rotation:0}])};
+reconcile([moved,buildings[1]]);drain();assert.equal(assets.stats.built,firstBuilt+1,'Moving a decoration rebuilds exactly one item');assert(root.children.filter(o=>o.userData.owner==='neighbor').every(o=>first.has(o)),'Neighbors survive an item move');
+reconcile([{...moved,decorations:'[]'},buildings[1]]);drain();assert(!root.children.some(o=>o.userData.decoration),'Storage removes item meshes and light markers');
+const beforeUpgrade=assets.stats.built;reconcile([moved,{...buildings[1],level:22}]);drain();assert(assets.stats.built>beforeUpgrade,'Level changes update dependent geometry');
+let disposed=0;root.children.filter(o=>o instanceof THREE.Mesh).map((o:any)=>o.geometry).forEach(g=>g.addEventListener('dispose',()=>disposed++));assets.dispose();assert.equal(root.children.length,0);assert(disposed>0,'Cache eviction releases GPU geometry');
+const coalesced=new CityAssets(new THREE.Group());coalesced.reconcile(buildings,false,false,[],0,{x:0,z:0});coalesced.reconcile([{...owner,decorations:'[]'}],false,false,[],0,{x:0,z:0});while(coalesced.pending)coalesced.process(100);assert.equal(coalesced.stats.removed,0,'Obsolete queued work never allocates GPU resources');coalesced.dispose();
+const batch=new THREE.Group(),colors=['#aabbcc','#335577','#cc9955'];for(const [i,color] of colors.entries()){const mesh=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({color,roughness:1,flatShading:true}));mesh.userData.owner='owner';mesh.position.x=i*2;mesh.castShadow=true;mesh.receiveShadow=true;batch.add(mesh);}
+const pool=new BatchMaterials();batchCityMeshes(batch,pool);assert.equal(batch.children.length,1,'Different colors share a single surface batch');const mesh=batch.children[0] as THREE.Mesh;assert(mesh.castShadow&&mesh.receiveShadow&&mesh.userData.owner==='owner');for(const [i,color] of colors.entries()){const expected=new THREE.Color(color),attribute=mesh.geometry.getAttribute('color');assert(Math.abs(attribute.getX(i*36)-expected.r)<1e-6&&Math.abs(attribute.getY(i*36)-expected.g)<1e-6,'Vertex colors preserve linear surface color');}disposeGroup(batch);assert.equal(pool.size,1);pool.dispose();
+const index=new SpatialIndex<number>(4);index.insert(1,{minX:-2,maxX:6,minZ:-2,maxZ:6});index.insert(2,{minX:100,maxX:101,minZ:100,maxZ:101});assert.deepEqual([...index.query({minX:0,maxX:5,minZ:0,maxZ:5})],[1],'Spatial queries deduplicate entries and exclude distant geometry');
+const nature=new WildNature();nature.setBuildings(buildings);nature.update({x:0,z:0});const oldTrees=new Set(nature.group.children),builtTiles=nature.stats.built;nature.update({x:28,z:0});assert(nature.group.children.some(o=>oldTrees.has(o)),'Moving retains existing forest GPU buffers');assert(nature.stats.built-builtTiles<=7,'Only a new edge row of woodland is built');assert(nature.group.userData.tiles<=49,'Woodland has a bounded cache');nature.dispose();
+const lights=new StreetLighting(true),sources=new THREE.Group();for(let i=0;i<12;i++)streetLamp(sources,Math.cos(i*Math.PI/6)*3,1,Math.sin(i*Math.PI/6)*3);lights.setSources(sources);lights.update({x:0,z:0},true);const lightData=lights.surface.uniforms.streetLightData.value,lightCells=lights.surface.uniforms.streetLightCells.value,lightUploads=lights.surface.stats.uploads;for(let i=0;i<100;i++)assert.equal(lights.update({x:Math.sin(i)*100,z:Math.cos(i)*100},true,[],.016),false,'Panning does not change street illumination');assert.equal(lights.surface.stats.uploads,lightUploads);assert.equal(lights.surface.uniforms.streetLightData.value,lightData);assert.equal(lights.surface.uniforms.streetLightCells.value,lightCells);lights.dispose();
+const dense=denseDemoPurchasePlan({...resident('fixture'),decorations:'[]'},[resident('fixture')]);assert(dense.length>=8,'Dense dev fixture fills ground level');const fixture={...resident('fixture'),decorations:JSON.stringify(dense)};assert.equal(placedDecorations(fixture).length,dense.length,'Seeded items are all legal placements');assert(dense.reduce((sum,i)=>sum+DECORATIONS[i.kind].cost,0)>0);const start=streetStartByPoint({x:2,z:2},[fixture]);assert(start&&canWalk(start.point,streetObstacles([fixture])),'Placement view transfer starts on a clear street beside the item');
+const nativeWorker=(globalThis as any).Worker;let mock:any;
+class MockWorker {onmessage:any;onerror:any;messages:any[]=[];terminated=false;constructor(){mock=this;}postMessage(message:any){this.messages.push(message);}terminate(){this.terminated=true;}}
+try{
+  (globalThis as any).Worker=MockWorker;const planner=new NeighborPlanner();planner.reset(buildings);let replies=0;
+  assert(planner.request({x:0,z:0},[{id:'shop',point:{x:2,z:2}}],()=>replies++));assert(planner.busy);assert.equal(planner.request({x:0,z:0},[],()=>{}),false,'At most one route request is outstanding');
+  const oldGeneration=mock.messages[0].generation;planner.reset([owner]);planner.request({x:0,z:0},[],()=>replies++);
+  mock.onmessage({data:{generation:oldGeneration,result:null}});assert.equal(replies,0,'Old worlds cannot apply stale navigation replies');assert(planner.busy);
+  const generation=mock.messages.at(-1).generation;mock.onmessage({data:{generation,result:null}});assert.equal(replies,1);assert(!planner.busy);planner.dispose();assert(mock.terminated,'Unmounting terminates background navigation');
+}finally{if(nativeWorker===undefined)delete (globalThis as any).Worker;else (globalThis as any).Worker=nativeWorker;}
+const square=PUBLIC_PROJECTS.find(p=>p.id==='makers-square')!,squareGroup=new THREE.Group();
+const squareProject={...square,funded:square.goal/2,contributors:2,myContribution:0};
+buildCity(squareGroup,buildings,true,true,neighborhoodDensity(buildings),[squareProject],0,{layer:'project',id:square.id});
+assert(squareGroup.children.some(o=>o.userData.streetLamp),'The merged Makers square retains funded lamps in the extracted renderer');
+assert(squareGroup.children.every(o=>o.userData.project===square.id),'Plaza meshes and light markers retain project ownership after batching');
+disposeGroup(squareGroup);
+console.log('Rendering checks passed: incremental edits, no-op updates, queue coalescing, eviction, shared materials, color fidelity, spatial queries, forest reuse, stable lights, legal fixtures and placement view starts.');

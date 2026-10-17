@@ -42,11 +42,11 @@ Every resident owns a persistent tower with 30 levels and ten visual stages. Lev
 
 ### Bricks and customization
 
-Bricks unlock architectural themes and let residents change tower segments, colors, and facade styles. Unlocked themes remain available for future redesigns.
+Bricks unlock architectural themes and let residents change tower segments, colors, and facade styles. Unlocked themes remain available for future redesigns. Residents can also buy decorations, walking neighbors, corner shops, and storefronts attached to their tower.
 
 ### Neighborhoods
 
-New residents join through invitations and choose a plot near the person who invited them. Roads extend into new areas as the community grows. Residents can explore the 3D city, search for neighbors, view profiles, and like towers.
+New residents join through invitations and choose a plot near the person who invited them. Roads extend into new areas as the community grows. Residents can explore the 3D city, search for neighbors, view profiles, and like towers. Drag the Street view person onto a road or select a highlighted street to explore on foot, then pick up and place owned items around your property.
 
 ### Shared growth
 
@@ -67,3 +67,7 @@ Residents can claim a daily XP and brick bonus. Bricks earned while away are wel
 ### A living city
 
 The city has a continuous coastline, growing roads, trees, parks, lighting that follows the viewer's local time, and detail that adjusts smoothly as you explore near and far.
+
+## Local development
+
+See [the development guide](docs/development.md) for setup, controls, local mock ownership and fixtures, migrations, lighting previews, rendering architecture, and validation commands.

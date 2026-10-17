@@ -1,6 +1,7 @@
 export type Style = 'terrace' | 'modern' | 'spire';
 export type Color = 'sand' | 'lilac' | 'sage' | 'coral' | 'blue';
 export interface Building {
+  decorations?:string;decorations_version?:number;
   id: string; username: string; name: string; bio: string; avatar: string | null;
   linkedin_url?: string | null; github_url: string | null; website: string | null; school: string | null;
   is_demo: number; x: number; z: number; level: number; xp:number; bricks:number|null; segments:string; likes:number;

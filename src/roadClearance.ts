@@ -1,14 +1,13 @@
 import type { Building } from '../shared/types';
 import { plotPlan } from '../shared/plots';
-import { buildingForm, insetPlotPolygon, MODEL_SETBACKS } from './buildingForm';
+import { buildingForm } from './buildingForm';
 import { tierIndex } from '../shared/progression';
 import type { GroundPoint } from './neighborhood';
 
-/** Skyscrapers and later models claim the road edge, leaving its center open. */
+/** Clip roads against the actual foundations, including narrow irregular plots. */
 export function roadObstacles(buildings:Building[],densityAt:(x:number,z:number)=>number){
   return buildings.filter(b=>tierIndex(b.level)>=5).map(b=>{
-    const plan=plotPlan(b.x,b.z),form=buildingForm(b,densityAt(b.x,b.z));
-    return insetPlotPolygon(plan,MODEL_SETBACKS[form.tier]-form.foundationPadding-.025);
+    return buildingForm(b,densityAt(b.x,b.z)).foundationOutline;
   });
 }
 

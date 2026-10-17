@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { streetLamp } from './StreetLighting';
 import type { GroundPoint } from './neighborhood';
 
 type Box = (parent: THREE.Group, x: number, y: number, z: number, width: number, height: number, depth: number, color: string) => THREE.Mesh;
@@ -117,6 +118,7 @@ export function buildParkLandscape(site: THREE.Group, boundary: GroundPoint[], e
         box(site, lamp.x, .95, lamp.z, .07, 1.7, .07, '#748278');
         box(site, lamp.x, 1.83, lamp.z, .25, .16, .25, night ? '#f3d795' : '#e7dfc7');
         box(site, lamp.x, 1.94, lamp.z, .31, .06, .31, '#748278');
+        streetLamp(site,lamp.x,1.72,lamp.z,8,6.5);
       }
     }
     // A picnic table on the courtyard, away from the pavilion's central footprint.

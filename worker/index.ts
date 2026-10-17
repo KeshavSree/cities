@@ -1,6 +1,9 @@
 import { DAILY_REWARD, STYLE_COST, COLOR_COST, STYLES, COLORS } from '../shared/types';
 import type { Building, Style, Color } from '../shared/types';
+import { localMockEnabled } from './localDev';
 import { seedDemo, ensureDemoConnections } from './demo';
+import { demoPurchasePlan,denseDemoPurchasePlan } from './demoPurchases';
+import { DECORATIONS, isDecorationKind, decorationsOf, placementError, suggestedDecorationPosition } from '../shared/decorations';
 import { VIEW_RADIUS } from '../shared/world';
 import { availablePlotPlans, previewPlotPlans } from '../shared/plots';
 import { reward, projects, processConstruction } from './economy';
@@ -20,7 +23,8 @@ interface User { id: string; github_id: string | null; username: string; name: s
 const DAY = () => new Date().toISOString().slice(0, 10);
 const NOW = () => Math.floor(Date.now() / 1000);
 const QUERY = `SELECT u.id, u.username, u.name, u.bio, u.avatar, u.linkedin_url, u.github_url, u.website, u.school,
-  u.is_demo, b.x, b.z, b.level, b.xp, b.bricks, b.segments, b.style, b.color, b.updated_at,
+  u.is_demo, b.x, b.z, b.level, b.xp, b.bricks, b.segments, b.style, b.color, b.updated_at,b.decorations_version,
+  (SELECT json_group_array(json_object('id',d.id,'kind',d.kind,'x',d.x,'z',d.z,'rotation',d.rotation)) FROM decorations d WHERE d.user_id=u.id) decorations,
   (SELECT COUNT(*) FROM tower_likes WHERE tower_id=u.id) likes,
   COALESCE(m.commits, 0) commits, COALESCE(m.prs, 0) prs, COALESCE(m.reviews, 0) reviews, m.synced_at,
   (SELECT i.inviter_id FROM invitation_redemptions r JOIN invitations i ON i.token=r.token WHERE r.user_id=u.id) invited_by,
@@ -41,8 +45,9 @@ const authReady = (e: Env) => Boolean(e.GITHUB_CLIENT_ID && e.GITHUB_CLIENT_SECR
 
 async function currentUser(req: Request, env: Env): Promise<User | null> {
   const token = cookieValue(req, 'cities_session');
-  if (!token) return null;
-  return env.DB.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?').bind(await hash(token), NOW()).first<User>();
+  if(token){const user=await env.DB.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?').bind(await hash(token),NOW()).first<User>();if(user)return user;}
+  if(localMockEnabled(env.DEV_MODE,new URL(env.APP_ORIGIN).hostname))return env.DB.prepare("SELECT * FROM users WHERE id='demo-you' AND is_demo=1").first<User>();
+  return null;
 }
 async function requireUser(req: Request, env: Env) {
   const user = await currentUser(req, env);
@@ -66,6 +71,13 @@ async function building(env: Env, id: string) {
   const row = await env.DB.prepare(`${QUERY} WHERE u.id=?`).bind(id).first<Building>();
   if (!row) throw new ApiError('This tower could not be found.', 404);
   return row;
+}
+async function ensureDevPlayground(env:Env){
+  if(!await env.DB.prepare("SELECT 1 FROM users u JOIN buildings b ON b.user_id=u.id WHERE u.id='demo-you' AND u.is_demo=1").first())return;
+  const gift=await env.DB.prepare("INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description) VALUES('dev-playground-v1','demo-you','demo',0,1500,'Local development playground bricks') RETURNING event_key").first();
+  const empty=await env.DB.prepare("INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description) VALUES('dev-empty-streets-v1','demo-you','demo',0,0,'Start with an empty street') RETURNING event_key").first();
+  if(empty)await env.DB.prepare("UPDATE decorations SET x=NULL,z=NULL WHERE user_id='demo-you' AND cost=0 AND id IN ('demo-you:dev-starter-storefront-v1','demo-you:dev-starter-person-v1','demo-you:dev-starter-planter-v1')").run();
+  if(gift||empty)await env.NEIGHBORHOODS.get(env.NEIGHBORHOODS.idFromName('city-hub-v1')).fetch('https://neighborhood.internal/invalidate',{method:'POST'});
 }
 async function unlockedThemes(env:Env,id:string|null):Promise<BuildingTheme[]>{
   if(!id)return DEFAULT_UNLOCKED_THEMES;
@@ -359,6 +371,7 @@ export default {
       }
       if(path==='/api/self'&&req.method==='GET'){
         if(env.DEV_MODE==='true')await ensureDemoConnections(env.DB);
+        if(localMockEnabled(env.DEV_MODE,new URL(env.APP_ORIGIN).hostname))await ensureDevPlayground(env);
         const user=await currentUser(req,env),placement=user?await pendingPlacement(env,user.id):null;
         const own=user&&!placement?await building(env,user.id):null;
         let nextPlots:{x:number;z:number}[]=[];
@@ -431,6 +444,10 @@ export default {
         return Response.json({ ok: true }, { headers: { ...headers, 'Set-Cookie': cookie(req, 'cities_session', '', 0) } });
       }
       if (path === '/api/auth/github' && req.method === 'GET') {
+        if(localMockEnabled(env.DEV_MODE,new URL(env.APP_ORIGIN).hostname)){
+          const statements=await seedDemo(env.DB);await env.DB.batch(statements.slice(0,21));await ensureDevPlayground(env);
+          return new Response(null,{status:302,headers:{...headers,Location:env.APP_ORIGIN,'Set-Cookie':await session(req,env,'demo-you')}});
+        }
         if (!authReady(env)) throw new ApiError('GitHub login needs server credentials. See the local setup guide.', 503);
         const invite = url.searchParams.get('invite');
         if (invite && !await env.DB.prepare("SELECT token FROM invitations WHERE token=?").bind(invite).first()) throw new ApiError('This invitation is invalid.', 403);
@@ -560,6 +577,49 @@ export default {
         await env.DB.prepare("INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description) VALUES(?,?,'onboarding',0,0,'Onboarding completed')").bind(`onboarding-complete:${user.id}`,user.id).run();
         return json({ok:true});
       }
+      if((path==='/api/decorations/purchase'||path==='/api/decorations/move')&&req.method==='POST'){
+        const data=await body(req),own=await building(env,user.id),purchase=path.endsWith('/purchase');
+        const requestId=typeof data.requestId==='string'?data.requestId:'';
+        const id=purchase?`${user.id}:${requestId}`:typeof data.id==='string'?data.id:'';
+        const existing=purchase?await env.DB.prepare('SELECT kind,request_data FROM decorations WHERE id=? AND user_id=?').bind(id,user.id).first<{kind:string;request_data:string}>():decorationsOf(own).find(item=>item.id===id);
+        if(purchase&&!/^[a-zA-Z0-9-]{16,64}$/.test(requestId))throw new ApiError('Choose a valid purchase request.');
+        if(!purchase&&!existing)throw new ApiError('This decoration does not belong to you.',404);
+        const kind=purchase?data.kind:existing!.kind;
+        if(!isDecorationKind(kind))throw new ApiError('Choose an available decoration.');
+        const stored=!purchase&&data.x===null&&data.z===null;
+        const rotation=data.rotation,x=data.x,z=data.z;
+        if(typeof rotation!=='number'||!Number.isInteger(rotation)||rotation<0||rotation>3||!stored&&(typeof x!=='number'||typeof z!=='number'||!Number.isFinite(x)||!Number.isFinite(z)))throw new ApiError('Choose a valid decoration position.');
+        const requestData=JSON.stringify({kind,x,z,rotation});
+        if(purchase&&existing){
+          if('request_data' in existing&&existing.request_data===requestData)return json({building:await changed(env,user.id,ctx)});
+          throw new ApiError('This purchase already completed. Refresh your decorations before buying another.',409);
+        }
+        if(!stored){const error=placementError(own,kind,{x:x as number,z:z as number,rotation},purchase?undefined:id);if(error)throw new ApiError(error,409);}
+        try{
+          const guard='user_id=? AND decorations_version=? AND level=? AND x=? AND z=?';
+          const result=purchase?await env.DB.prepare(`INSERT INTO decorations(id,user_id,kind,cost,request_data,x,z,rotation)
+            SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM buildings WHERE ${guard}) RETURNING id`)
+            .bind(id,user.id,kind,DECORATIONS[kind].cost,requestData,x,z,rotation,user.id,own.decorations_version??0,own.level,own.x,own.z).first():
+            await env.DB.prepare(`UPDATE decorations SET x=?,z=?,rotation=? WHERE id=? AND user_id=? AND EXISTS(SELECT 1 FROM buildings WHERE ${guard}) RETURNING id`)
+            .bind(x,z,rotation,id,user.id,user.id,own.decorations_version??0,own.level,own.x,own.z).first();
+          if(!result){
+            const prior=purchase?await env.DB.prepare('SELECT request_data FROM decorations WHERE id=? AND user_id=?').bind(id,user.id).first<{request_data:string}>():null;
+            if(prior?.request_data===requestData)return json({building:await changed(env,user.id,ctx)});
+            throw new ApiError('Your garden changed while you were placing this. Try again.',409);
+          }
+        }catch(error){
+          const message=String(error);
+          if(message.includes('not enough bricks'))throw new ApiError(`You need ${DECORATIONS[kind].cost} bricks for this decoration.`,409);
+          if(message.includes('decoration limit'))throw new ApiError('Your collection holds up to 24 decorations. Move or store one you already own.',409);
+          if(message.includes('UNIQUE')){
+            const prior=await env.DB.prepare('SELECT request_data FROM decorations WHERE id=? AND user_id=?').bind(id,user.id).first<{request_data:string}>();
+            if(prior?.request_data===requestData)return json({building:await changed(env,user.id,ctx)});
+            throw new ApiError('This purchase already completed. Refresh your decorations.',409);
+          }
+          throw error;
+        }
+        return json({building:await changed(env,user.id,ctx)});
+      }
       if(path==='/api/themes/unlock'&&req.method==='POST'){
         const data=await body(req),theme=typeof data.theme==='string'?data.theme:'';
         if(!Object.hasOwn(BUILDING_THEMES,theme)||theme==='contemporary')throw new ApiError('Choose a purchasable architectural theme.');
@@ -622,6 +682,27 @@ export default {
         await env.NEIGHBORHOODS.get(env.NEIGHBORHOODS.idFromName('city-hub-v1')).fetch('https://neighborhood.internal/update',{method:'POST',body:JSON.stringify(message)});
         settleConstruction(env,ctx);return json({project:updated,building:await changed(env,user.id,ctx)});
       }
+      // Explicit fixture action: normal bootstrap keeps every new street empty.
+      if((path==='/api/dev/neighborhood-examples'||path==='/api/dev/neighborhood-populate')&&req.method==='POST'){
+        if(!localMockEnabled(env.DEV_MODE,new URL(env.APP_ORIGIN).hostname)||!user.is_demo)throw new ApiError('Dev tools are local only.',404);
+        const dense=path==='/api/dev/neighborhood-populate';
+        const targets=dense?await env.DB.prepare(`${QUERY} WHERE u.is_demo=1 ORDER BY b.x*b.x+b.z*b.z,u.id LIMIT 24`).all<Building>():await env.DB.prepare(`${QUERY} WHERE u.is_demo=1 AND u.id<>? AND u.id<>'demo-you' AND b.level>=10 ORDER BY b.x*b.x+b.z*b.z,u.id LIMIT 4`).bind(user.id).all<Building>();
+        const seeded:{id:string;name:string;items:number}[]=[];
+        for(const target of targets.results){
+          const marker=`${dense?'dev-dense-ground-v2':'dev-neighborhood-examples-v1'}:${target.id}`;
+          if(await env.DB.prepare('SELECT 1 FROM xp_events WHERE event_key=?').bind(marker).first()){await broadcast(env,target);continue;}
+          const items=dense?denseDemoPurchasePlan(target,targets.results):demoPurchasePlan(target,targets.results);
+          if(!items.length)continue;
+          // Credit fixture spending, then use the real purchase triggers and prices.
+          await env.DB.batch([
+            env.DB.prepare("INSERT OR IGNORE INTO xp_events(event_key,user_id,source,xp,bricks,description) VALUES(?,?,'demo',0,?,'Example neighborhood purchase budget')").bind(marker,target.id,items.reduce((sum,item)=>sum+DECORATIONS[item.kind].cost,0)),
+            ...items.map(item=>env.DB.prepare('INSERT INTO decorations(id,user_id,kind,cost,request_data,x,z,rotation) SELECT ?,?,?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM decorations WHERE id=?)').bind(item.id,target.id,item.kind,DECORATIONS[item.kind].cost,JSON.stringify({kind:item.kind,x:item.x,z:item.z,rotation:item.rotation}),item.x,item.z,item.rotation,item.id)),
+          ]);
+          await changed(env,target.id,ctx);
+          seeded.push({id:target.id,name:target.name,items:items.length});
+        }
+        return json({seeded,items:seeded.reduce((sum,resident)=>sum+resident.items,0)});
+      }
       if(path==='/api/dev/progression'&&req.method==='POST'){
         if(env.DEV_MODE!=='true')throw new ApiError('Dev tools are local only.',404);
         const data=await body(req),target=typeof data.tower==='string'?data.tower:user.id;
@@ -635,7 +716,11 @@ export default {
           const source=typeof data.source==='string'?data.source:'github';
           const samples:Record<string,[number,number]>={github:[REWARDS.commit,REWARDS.commitBricks],invite:[REWARDS.invite,0],like:[REWARDS.like,0],construction:[REWARDS.construction,0],project:[REWARDS.project,0],daily:[REWARDS.dailyXp,REWARDS.dailyBricks],bricks:[0,100]};
           const sample=samples[source];if(!sample)throw new ApiError('Choose a sample reward.');
-          await reward(env.DB,`demo:${uuid()}`,target,'demo',sample[0],sample[1],`Simulated ${source} reward`);
+          const amount=source==='bricks'&&data.amount!==undefined?Number(data.amount):sample[1];
+          if(!Number.isSafeInteger(amount)||amount<0||amount>1_000_000)throw new ApiError('Choose a valid dev brick amount.');
+          const requestId=typeof data.requestId==='string'&&/^[a-zA-Z0-9-]{16,64}$/.test(data.requestId)?data.requestId:uuid();
+          await reward(env.DB,`demo:${requestId}`,target,'demo',sample[0],amount,`Simulated ${source} reward`);
+
           settleConstruction(env,ctx);
         }
         return json({building:await changed(env,target,ctx)});

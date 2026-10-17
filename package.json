@@ -14,10 +14,16 @@
     "deploy": "npm run build && wrangler deploy",
     "typecheck": "tsc -b",
     "check:roads": "node scripts/check-roads.mjs",
+    "check:street": "node scripts/check-roads.mjs scripts/check-street.ts && node scripts/check-roads.mjs scripts/check-street-interaction.ts",
+    "check:decorations": "node scripts/check-roads.mjs scripts/check-decorations.ts && node scripts/check-decorations-db.mjs",
     "check:grid": "node scripts/check-roads.mjs scripts/check-grid.ts",
     "prebuild": "node scripts/changelog.mjs draft",
     "changelog:draft": "node scripts/changelog.mjs draft",
-    "changelog:approve": "node scripts/changelog.mjs approve"
+    "changelog:approve": "node scripts/changelog.mjs approve",
+    "check:neighbors": "node scripts/check-roads.mjs scripts/check-owned-neighbors.ts",
+    "check:shops": "node scripts/check-roads.mjs scripts/check-attached-shops.ts",
+    "check:lighting": "node scripts/check-roads.mjs scripts/check-lighting.ts",
+    "check:rendering": "node scripts/check-roads.mjs scripts/check-rendering.ts"
   },
   "dependencies": {
     "lucide-react": "^1.52.0",
