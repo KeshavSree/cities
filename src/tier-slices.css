@@ -1,12 +1,15 @@
-.segment-editor .tier-slices{display:flex;flex-direction:column;align-items:center;gap:4px;margin:18px 0;width:100%;border:0;background:transparent}
-.segment-editor .tier-slice{display:flex;align-items:center;justify-content:center;position:relative;width:100%;min-height:0;padding:0;border:0;background:transparent;line-height:0;box-shadow:22px 0 0 transparent,-22px 0 0 transparent;transition:none}
-.segment-editor .tier-slice:hover,.segment-editor .tier-slice[aria-pressed=true]{background:transparent;box-shadow:22px 0 0 transparent,-22px 0 0 transparent}
-.segment-editor .tier-slice svg{display:block;width:min(var(--tier-width),var(--tier-relative-width));height:var(--tier-height);overflow:visible;flex-shrink:0}
-.segment-editor .tier-slice:focus-visible{outline:2px solid #8172c5;outline-offset:1px}
-.segment-editor .tier-slice[role=img]{cursor:default}
-.segment-editor .tier-slice:hover,.segment-editor .tier-slice:focus-visible{z-index:10;background:#e1f1ff;box-shadow:22px 0 0 #e1f1ff,-22px 0 0 #e1f1ff}
-.segment-editor .tier-hover-label{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:2px;width:100%;padding:0 6px;color:#203b43;line-height:1.15;font-size:12px;text-align:center;pointer-events:none;overflow:hidden;opacity:0;visibility:hidden;transition:none}
-.segment-editor .tier-hover-label strong{font-size:inherit;font-weight:700}
-.segment-editor .tier-hover-label small{font-size:11px;font-weight:400}
-.segment-editor .tier-slice:hover .tier-hover-label,.segment-editor .tier-slice:focus-visible .tier-hover-label{opacity:1;visibility:visible;transition:opacity 60ms ease}
-@media(prefers-reduced-motion:reduce){.segment-editor .tier-slice,.segment-editor .tier-hover-label{transition:none}}
+.segment-editor .tier-slices{position:relative;display:block;width:100%;height:var(--tower-stage-height,580px);margin:0 0 18px;border:0;border-radius:0;background:transparent;overflow:visible}
+.segment-editor .tower-model-preview{position:absolute;inset:0 auto 0 0;width:43%;min-width:118px;pointer-events:none}
+.segment-editor .tower-model-preview canvas{display:block;width:100%;height:100%}
+.segment-editor .tier-slice-list{position:absolute;inset:0}
+.segment-editor .tier-slice{position:absolute;top:var(--tier-top);left:0;display:grid;grid-template-columns:minmax(118px,43%) minmax(0,1fr);align-items:center;width:100%;height:var(--tier-height);min-height:34px;padding:0 8px 0 0;border:0;background:transparent;color:#536970;text-align:left;line-height:1.2;overflow:visible}
+.segment-editor .tier-slice:hover,.segment-editor .tier-slice[aria-pressed=true]{z-index:2;background:transparent;box-shadow:none}
+.segment-editor .tier-slice[aria-pressed=true]::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:2px;background:#8172c5}
+.segment-editor .tier-slice:focus-visible{z-index:3;outline:2px solid #8172c5;outline-offset:-2px}.segment-editor .tier-slice[role=img]{cursor:default}
+.segment-editor .tier-model-hit{display:block;width:100%;height:100%}
+.segment-editor .tier-slice-copy{display:block;min-width:0;padding-left:8px;transform:translateY(var(--tier-label-y-offset,0));transition:transform 150ms ease}.segment-editor .tier-slice-copy strong,.segment-editor .tier-slice-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.segment-editor .tier-slice-copy strong{font-size:10px;font-weight:700;color:#435b62}.segment-editor .tier-slice-copy small{margin-top:4px;font-size:8px;color:#8a9a9f}.segment-editor .tier-slice:hover .tier-slice-copy strong,.segment-editor .tier-slice[aria-pressed=true] .tier-slice-copy strong{color:#6d5bad}
+.segment-editor .streetview-button{position:absolute;z-index:4;top:var(--street-button-top);left:0;width:43%;min-width:118px;height:42px;padding:0 12px;border:1px solid #bed0c3;border-radius:0;background:#eef5ef;color:#405c4b;font-family:inherit;font-size:16px;font-weight:800;line-height:1;text-align:center;cursor:pointer;transition:background 150ms ease,color 150ms ease,border-color 150ms ease}.segment-editor .streetview-button:hover,.segment-editor .streetview-button:focus-visible{border-color:#73917a;background:#e3eee5;color:#2e4d37}.segment-editor .streetview-button:focus-visible{outline:2px solid #8172c5;outline-offset:2px}
+@media(max-width:420px){.segment-editor .tower-model-preview{width:40%;min-width:108px}.segment-editor .tier-slice{grid-template-columns:minmax(108px,40%) minmax(0,1fr);padding-right:5px}.segment-editor .tier-slice-copy{padding-left:5px}.segment-editor .tier-slice-copy strong{font-size:9px}}
+@media(max-width:420px){.segment-editor .streetview-button{width:40%;min-width:108px}}
+@media(prefers-reduced-motion:reduce){.segment-editor .tier-slice-copy,.segment-editor .streetview-button{transition:none}}

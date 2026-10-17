@@ -1,50 +1,83 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Footprints, Lamp, Moon, Move, Package, PersonStanding, ShoppingBag, Store, Sun, Sunrise, Sunset, X } from 'lucide-react';
-import { DECORATIONS } from '../shared/decorations';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { Footprints, Grid3X3, Map, MousePointer2, Package, PersonStanding, X } from 'lucide-react';
 import { useViewport } from './useViewport';
 import './neighborhood-guide.css';
 
-const guideKey=(owner:string)=>`cities-neighborhood-guide:v1:${owner}`;
+const guideKey=(owner:string)=>`cities-neighborhood-guide:v2:${owner}`;
 export function hasSeenNeighborhoodGuide(owner:string){try{return localStorage.getItem(guideKey(owner))==='seen';}catch{return false;}}
 export function rememberNeighborhoodGuide(owner:string){try{localStorage.setItem(guideKey(owner),'seen');}catch{/* The session still remembers dismissal when storage is unavailable. */}}
 
-export function NeighborhoodGuide({onClose,onExplore}:{onClose:()=>void;onExplore:()=>void}){
-  const [step,setStep]=useState(0);
-  const {mobile}=useViewport();
-  const panel=useRef<HTMLElement>(null),heading=useRef<HTMLHeadingElement>(null);
-  const close=useRef(onClose);close.current=onClose;
+interface Props {onClose:()=>void;onComplete:()=>void;editorOpen:boolean;hasDraft:boolean;placementValid:boolean;pickingStreet:boolean;streetView:boolean;}
+const steps=[
+  {selector:'[data-guide="your-streetview"]',title:'Open Your Streetview',text:'Select Your Streetview in your tower.',Icon:Grid3X3},
+  {selector:'[data-decoration-kind="planter"]',title:'Choose a model',text:'Pick the flower planter from the model shelf.',Icon:Package},
+  {selector:'.street-editor-stage-target',title:'Choose a spot',text:'',Icon:MousePointer2},
+  {selector:'[data-editor-action="confirm"]',title:'Place it',text:'Place the planter. You will stay in the editor.',Icon:Package},
+  {selector:'[data-editor-action="close"]',title:'Return to the city',text:'Leave the editor when your street is ready.',Icon:Map},
+  {selector:'.street-person',title:'Start a walk',text:'Select the Street view person.',Icon:PersonStanding},
+  {selector:'.street-tutorial-point',title:'Choose your street',text:'Choose this highlighted spot to begin walking.',Icon:Footprints},
+] as const;
+
+export function NeighborhoodGuide({onClose,onComplete,editorOpen,hasDraft,placementValid,pickingStreet,streetView}:Props){
+  const {width:screenWidth,height:screenHeight}=useViewport();
+  const [step,setStep]=useState(0),[rect,setRect]=useState<DOMRect|null>(null),[cardHeight,setCardHeight]=useState(170),[placementSettled,setPlacementSettled]=useState(false);
+  const card=useRef<HTMLElement>(null),placementPending=useRef(false);
+  const current=steps[step],Icon=current.Icon;
+  useLayoutEffect(()=>{
+    if(!card.current)return;const element=card.current,measure=()=>setCardHeight(element.getBoundingClientRect().height);
+    measure();const observer=new ResizeObserver(measure);observer.observe(element);return()=>observer.disconnect();
+  },[step,rect]);
   useEffect(()=>{
-    const previous=document.activeElement as HTMLElement|null;
-    const key=(event:KeyboardEvent)=>{
-      if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();close.current();}
-      if(event.key!=='Tab')return;
-      const buttons=[...panel.current!.querySelectorAll<HTMLButtonElement>('button:not([disabled])')],first=buttons[0],last=buttons[buttons.length-1];
-      if(event.shiftKey&&(document.activeElement===first||document.activeElement===heading.current)){event.preventDefault();last?.focus();}
-      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
+    let previous:DOMRect|null=null,lastTarget:Element|null=null,stableSince=performance.now();setRect(null);
+    const measure=()=>{
+      const target=document.querySelector(current.selector);
+      if(target&&target!==lastTarget){
+        lastTarget=target;
+        const scroller=target.closest('.inspector') as HTMLElement|null;
+        if(scroller){const targetRect=target.getBoundingClientRect(),scrollerRect=scroller.getBoundingClientRect();scroller.scrollTop+=targetRect.top-scrollerRect.top-(scroller.clientHeight-targetRect.height)/2;}
+        else target.scrollIntoView({block:'nearest',inline:'nearest'});
+        previous=null;stableSince=performance.now();
+      }
+      const next=target?.getBoundingClientRect();
+      if(!target||!next||!next.width||!next.height||next.bottom<=0||next.top>=screenHeight||next.right<=0||next.left>=screenWidth){setRect(null);return;}
+      const changed=!previous||Math.abs(previous.x-next.x)+Math.abs(previous.y-next.y)+Math.abs(previous.width-next.width)+Math.abs(previous.height-next.height)>.5;
+      previous=next;if(changed){stableSince=performance.now();setRect(null);return;}if(performance.now()-stableSince>80)setRect(value=>value??next);
     };
-    document.addEventListener('keydown',key,true);
-    return()=>{document.removeEventListener('keydown',key,true);previous?.focus();};
-  },[]);
-  useEffect(()=>{heading.current?.focus({preventScroll:true});panel.current?.scrollTo(0,0);},[step]);
-  const steps=[
-    {title:'Start on your street',icon:PersonStanding,text:'Drag the little person from City view onto a highlighted street. Or select the person, then choose a highlighted street. You decide where your walk begins.',detail:mobile?'Swipe to look around. Hold the walking arrows to move. Choose City view to return.':'Move your mouse to look and use WASD to walk. Click the scene to capture your mouse; Esc releases it. If capture is blocked, Q/E and arrow keys let you look around.',visual:<><PersonStanding size={36}/><span className="guide-street"><Footprints size={24}/></span><ArrowRight size={22}/></>},
-    {title:'Build a neighborhood with bricks',icon:ShoppingBag,text:`Open ${mobile?'Me':'My tower'}, then scroll to Neighborhood shop. In Street view, use the Shop button. Preview trees, benches, lamps, shops, or neighbors and choose a spot on your own plot.`,detail:'Your plot starts empty, including streetlights. Bricks are spent only when you place a new item. Canceling a preview costs nothing.',visual:<><ShoppingBag size={32}/><span className="guide-price"><Lamp size={23}/>Garden lamp <span><Package size={14}/>{DECORATIONS.lamp.cost}</span></span></>},
-    {title:'Pick it up. Walk it over.',icon:Move,text:mobile?'Look at one of your own items until it highlights, then tap to pick it up. Walk while holding it and tap again to place it.':'Look directly at an item you own on your property until it highlights. Click once to pick it up, walk while holding it, then click again to place it.',detail:mobile?'Use the rotate and cancel buttons while holding an item. Moving or storing items you already own is free. Switch between City view and Street view while placing to check the same spot.':'R rotates a held item; Esc cancels the move. Moving or storing owned items is free. Switch between City view and Street view while placing to check the same spot.',visual:<><Move size={32}/><span className="guide-keys">{mobile?<><span>Tap</span><ArrowRight size={16}/><span>Walk</span><ArrowRight size={16}/><span>Tap</span></>:<><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>R</kbd></>}</span></>},
-    {title:'Give your neighbors places to go',icon:Store,text:`Buy a Tower storefront for ${DECORATIONS.base_shop.cost} bricks once your tower reaches level 4. It snaps to a highlighted slot at the base of your building. Corner shops can stand in your yard.`,detail:`Add a Neighbor for ${DECORATIONS.person.cost} bricks and place their home on your plot. They stroll around the neighborhood, visit reachable shops, and head home on their own.`,visual:<><Store size={35}/><span className="guide-street"><Footprints size={24}/></span><PersonStanding size={30}/></>},
-    {title:'Watch the neighborhood change',icon:Sunset,text:'The city follows your local time. Bought streetlights and shop windows light the sidewalks in the evening and at night, while a mix of lit tower windows makes the city feel lived in.',detail:'Ready for a walk? Choose a street next. You can replay this guide from Settings or How it works anytime.',visual:<div className="guide-phases">{([[Sunrise,'Morning','6–9am'],[Sun,'Day','9am–6pm'],[Sunset,'Evening','6–9pm'],[Moon,'Night','9pm–6am']] as const).map(([PhaseIcon,label,hours])=><span key={label}><PhaseIcon size={22}/><strong>{label}</strong><small>{hours}</small></span>)}</div>},
-  ];
-  const current=steps[step],Icon=current.icon;
-  return <div className="neighborhood-guide-backdrop">
-    <section ref={panel} className="neighborhood-guide" role="dialog" aria-modal="true" aria-labelledby="neighborhood-guide-title" aria-describedby="neighborhood-guide-description">
-      <header><span><Icon size={16}/>NEIGHBORHOOD GUIDE</span><button aria-label="Close neighborhood guide" onClick={onClose}><X size={20}/></button></header>
-      <div className="neighborhood-guide-visual" aria-hidden="true">{current.visual}</div>
-      <p className="neighborhood-guide-count">{step+1} of {steps.length}</p>
-      <h2 ref={heading} tabIndex={-1} id="neighborhood-guide-title">{current.title}</h2>
-      <p id="neighborhood-guide-description">{current.text}</p><p className="neighborhood-guide-detail">{current.detail}</p>
-      <div className="neighborhood-guide-progress" aria-hidden="true">{steps.map((item,index)=><span key={item.title} className={index<=step?'is-complete':''}/>)}</div>
-      <footer>{step===0?<button className="guide-back" onClick={onClose}>Skip for now</button>:<button className="guide-back" onClick={()=>setStep(value=>value-1)}><ArrowLeft size={15}/>Back</button>}
-        <button className="guide-next" onClick={step===steps.length-1?onExplore:()=>setStep(value=>value+1)}>{step===steps.length-1?'Choose a street':'Next'}<ArrowRight size={16}/></button>
-      </footer>
+    measure();const timer=setInterval(measure,32);return()=>clearInterval(timer);
+  },[current.selector,screenHeight,screenWidth]);
+  useEffect(()=>{
+    const click=(event:MouseEvent)=>{
+      const target=event.target as Element;
+      if(step===0&&target.closest(steps[0].selector))setStep(1);
+      else if(step===1&&target.closest(steps[1].selector))setStep(2);
+      else if(step===3&&target.closest(steps[3].selector))placementPending.current=true;
+    };
+    const move=(event:PointerEvent)=>{if(step===2&&(event.target as Element).closest('.scene canvas'))setPlacementSettled(false);};
+    const up=(event:PointerEvent)=>{if(step===2&&(event.target as Element).closest('.scene canvas'))setPlacementSettled(true);};
+    document.addEventListener('click',click);document.addEventListener('pointermove',move);document.addEventListener('pointerup',up);
+    return()=>{document.removeEventListener('click',click);document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);};
+  },[step]);
+  useEffect(()=>{if(step===0&&editorOpen)setStep(1);},[step,editorOpen]);
+  useEffect(()=>{if(step===1&&hasDraft)setStep(2);},[step,hasDraft]);
+  useEffect(()=>{if(step===2&&placementSettled&&placementValid)setStep(3);},[step,placementSettled,placementValid]);
+  useEffect(()=>{if(step===3&&placementPending.current&&!hasDraft){placementPending.current=false;setStep(4);}},[step,hasDraft]);
+  useEffect(()=>{if(step===4&&!editorOpen)setStep(5);},[step,editorOpen]);
+  useEffect(()=>{if(step===5&&pickingStreet)setStep(6);},[step,pickingStreet]);
+  useEffect(()=>{if(step===6&&streetView)onComplete();},[step,streetView,onComplete]);
+  if(!rect)return null;
+  const pad=7,left=Math.max(0,rect.left-pad),top=Math.max(0,rect.top-pad),right=Math.min(screenWidth,rect.right+pad),bottom=Math.min(screenHeight,rect.bottom+pad),cardWidth=Math.min(326,screenWidth-32);
+  const targetY=Math.max(top+10,Math.min(bottom-10,rect.top+rect.height/2)),beside=rect.left>=cardWidth+36&&targetY>=45;
+  const cardLeft=beside?rect.left-cardWidth-20:Math.max(16,Math.min(screenWidth-cardWidth-16,rect.left+rect.width/2-cardWidth/2));
+  const above=!beside&&rect.bottom+18+cardHeight>screenHeight-16&&rect.top>=cardHeight+34;
+  const cardTop=Math.max(16,Math.min(screenHeight-cardHeight-16,beside?targetY-cardHeight/2:above?rect.top-cardHeight-18:rect.bottom+18));
+  const anchorX=Math.max(22,Math.min(cardWidth-22,rect.left+rect.width/2-cardLeft)),anchorY=targetY-cardTop;
+  const pointer=beside?`M ${cardWidth} ${anchorY-8} L ${cardWidth+12} ${anchorY} L ${cardWidth} ${anchorY+8} Z`:above?`M ${anchorX-8} ${cardHeight} L ${anchorX} ${cardHeight+12} L ${anchorX+8} ${cardHeight} Z`:`M ${anchorX-8} 0 L ${anchorX} -12 L ${anchorX+8} 0 Z`;
+  return <div className="neighborhood-guide" aria-label="Neighborhood guide">
+    <div className="neighborhood-guide-shade" style={{inset:'0 0 auto 0',height:top}}/><div className="neighborhood-guide-shade" style={{top,bottom:screenHeight-bottom,left:0,width:left}}/><div className="neighborhood-guide-shade" style={{top,bottom:screenHeight-bottom,left:right,right:0}}/><div className="neighborhood-guide-shade" style={{top:bottom,left:0,right:0,bottom:0}}/><div className="neighborhood-guide-spotlight" style={{left,top,width:right-left,height:bottom-top}}/>
+    <section ref={card} className="neighborhood-guide-card" role="dialog" aria-label={current.title} style={{left:cardLeft,top:cardTop,width:cardWidth}}>
+      <svg className="neighborhood-guide-pointer" style={{left:0,top:0} as CSSProperties} aria-hidden="true"><path d={pointer}/></svg>
+      <header><span><Icon size={15}/>{step+1} / {steps.length}</span><button aria-label="Skip neighborhood guide" onClick={onClose}><X size={17}/></button></header>
+      <h2>{current.title}</h2>{current.text&&<p>{current.text}</p>}
     </section>
   </div>;
 }

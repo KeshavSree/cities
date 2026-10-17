@@ -26,7 +26,7 @@ export function cityBuildContext(buildings:Building[]){
   return {...network,densityAt,obstacles,obstacleIndex};
 }
 export type CityBuildContext=ReturnType<typeof cityBuildContext>;
-export interface CityBuildOptions {materials?:BatchMaterials;context?:CityBuildContext;layer?:'streets'|'building'|'decoration'|'project';id?:string;chunk?:string;}
+export interface CityBuildOptions {materials?:BatchMaterials;context?:CityBuildContext;layer?:'streets'|'building'|'decoration'|'project';id?:string;chunk?:string;preserveSegments?:boolean;includeDecorations?:boolean;}
 
 export function buildCity(group: THREE.Group, buildings: Building[], night: boolean,lightsOn:boolean,densityAt:(x:number,z:number)=>number,projects:PublicProject[],detail:0|1|2,options:CityBuildOptions={}) {
   const materials = new Map<string,THREE.MeshStandardMaterial>();
@@ -78,7 +78,7 @@ export function buildCity(group: THREE.Group, buildings: Building[], night: bool
     const attachment=item.kind==='base_shop'?shopAttachment(b,item):null,origin=plotPosition(b.x,b.z),decoration=new THREE.Group();
     decoration.position.set(item.x+(local?0:origin.x),attachment?.y??.115,item.z+(local?0:origin.z));decoration.rotation.y=attachment?.angle??item.rotation*Math.PI/2;parent.add(decoration);
     decorationModel(decoration,item.kind,lightsOn,box,mat,b.id);
-    decoration.traverse(object=>{if(object instanceof THREE.Mesh||object.userData.streetLamp){object.userData.decoration=item.id;object.userData.owner=b.id;}});
+    decoration.traverse(object=>{if(object instanceof THREE.Mesh||object.userData.streetLamp){object.userData.decoration=item.id;object.userData.owner=b.id;object.userData.segment=-1;}});
   };
   if(options.layer==='decoration')for(const b of buildings)for(const item of placedDecorations(b))if(item.kind!=='person'&&item.id===options.id)drawItem(b,item,group,false);
 
@@ -184,7 +184,7 @@ export function buildCity(group: THREE.Group, buildings: Building[], night: bool
     const lot=lotPolygon(b,roads).map(p=>({x:p.x-position.x,z:p.z-position.z}));
     surface(plot,lot,.085,lotColor);
     const architecture=new THREE.Group();architecture.rotation.y=plan.rotation;plot.add(architecture);
-    if(!options.layer)for(const item of placedDecorations(b).filter(item=>item.kind!=='person'))drawItem(b,item,plot,true);
+    if(!options.layer||options.includeDecorations)for(const item of placedDecorations(b).filter(item=>options.includeDecorations||item.kind!=='person'))drawItem(b,item,plot,true);
     // Rotate the rectangular building independently of its irregular ground lot.
     const soilStone=mixGroundColor(form.definition.stone,paving,urban*.2);
     const foundationColor=mixGroundColor(soilStone,groundVisual.wall,groundTheme==='contemporary'?(b.style==='modern'?.12:.07):.28);
@@ -222,6 +222,7 @@ export function buildCity(group: THREE.Group, buildings: Building[], night: bool
       mesh.rotation.y=-Math.atan2(dz,dx);return mesh;
     };
     for(const p of parts){
+      const segmentStart=architecture.children.length;
       const design=form.segments[p.segment],visual=themeVisuals[design.theme];
       const bodyMix=design.theme==='contemporary'?(form.tier>=3?.35:.08):design.theme==='cyberpunk'?.94:design.theme==='nocturne'?.72:.58;
       const bodyColor=mixGroundColor(COLORS[design.color].hex,visual.wall,bodyMix);
@@ -360,7 +361,9 @@ export function buildCity(group: THREE.Group, buildings: Building[], night: bool
       }else if(p.terrace&&form.tier>=3&&design.theme==='metabolism'&&fitsRoof(center.x,center.z,.3)){
         box(architecture,center.x,roofY+.18,center.z,.62,.28,.46,visual.metal,b.id);
       }
+      for(const child of architecture.children.slice(segmentStart))child.traverse(object=>{object.userData.segment=p.segment;});
     }
+    const crownStart=architecture.children.length;
     const top=parts[parts.length-1],roofY=baseY+h;
     const topCenter={x:top.polygon.reduce((sum,p)=>sum+p.x,0)/top.polygon.length,z:top.polygon.reduce((sum,p)=>sum+p.z,0)/top.polygon.length};
     const roofW=Math.max(...top.polygon.map(p=>p.x))-Math.min(...top.polygon.map(p=>p.x)),roofD=Math.max(...top.polygon.map(p=>p.z))-Math.min(...top.polygon.map(p=>p.z));
@@ -417,6 +420,7 @@ export function buildCity(group: THREE.Group, buildings: Building[], night: bool
       prism(architecture,canopy,roofY+.09+pavilionHeight,.09,concrete,b.id);
       for(const v of pavilion)box(architecture,v.x,roofY+.08+pavilionHeight/2,v.z,.055,pavilionHeight,.055,timber,b.id);
     }
+    for(const child of architecture.children.slice(crownStart))child.traverse(object=>{object.userData.segment=parts.length-1;});
     const front=podium?Math.max(...podium.map(p=>p.z)):footprint.d/2;
     if(groundTheme!=='cyberpunk'){
       // Fit the entrance to a real facade edge, including skewed podiums.
@@ -474,6 +478,7 @@ export function buildCity(group: THREE.Group, buildings: Building[], night: bool
       });
       for(const object of removed){object.removeFromParent();if(object.geometry!==cube)object.geometry.dispose();}
     }
+    if(options.preserveSegments)plot.traverse(object=>{if(object instanceof THREE.Mesh&&!Number.isInteger(object.userData.segment))object.userData.segment=-1;});
   }
   const residentPositions=buildings.map(b=>plotPosition(b.x,b.z));
   for(const project of projects.filter(p=>!options.layer||options.layer==='project'&&p.id===options.id)){
@@ -494,7 +499,7 @@ export function buildCity(group: THREE.Group, buildings: Building[], night: bool
     buildPlazaLandscape(site,boundary,entrance,ratio,lightsOn,box,mat,detail===1);
     site.traverse(object=>{if(object instanceof THREE.Mesh||object.userData.streetLamp)object.userData.project=project.id;});
   }
-  batchCityMeshes(group,options.materials);
+  batchCityMeshes(group,options.materials,options.preserveSegments);
 }
 function tree(parent:THREE.Group,x:number,z:number,scale:number,box:(p:THREE.Group,x:number,y:number,z:number,w:number,h:number,d:number,c:string)=>THREE.Mesh,mat:(c:string)=>THREE.Material,base=0,simplified=false){
   box(parent,x,base+.5*scale,z,.16*scale,scale,.16*scale,'#ae9172');

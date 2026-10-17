@@ -40,7 +40,7 @@ export class NeighborRoutes {
       for(const shop of placedDecorations(building).filter(item=>item.kind==='storefront'||item.kind==='base_shop')){
         const angle=shop.kind==='base_shop'?shopAttachment(building,shop)!.angle:shop.rotation*Math.PI/2,c=Math.cos(angle),s=Math.sin(angle),face={x:origin.x+shop.x,z:origin.z+shop.z};
         for(const along of [0,-.25,.25]){
-          const depth=DECORATIONS[shop.kind].depth/2+.25,point={x:face.x+along*c-depth*s,z:face.z-along*s-depth*c};
+          const depth=shop.kind==='base_shop'?DECORATIONS[shop.kind].depth-.05+NEIGHBOR_RADIUS+.08:DECORATIONS[shop.kind].depth/2+.25,point={x:face.x+along*c-depth*s,z:face.z-along*s-depth*c};
           if(this.clear(point)){this.shops.push({id:shop.id,point,face,label:DECORATIONS[shop.kind].label,kind:'shop',purchased:true});break;}
         }
       }

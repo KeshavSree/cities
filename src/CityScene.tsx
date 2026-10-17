@@ -35,7 +35,7 @@ import { decorationModel } from './DecorationModels';
 import { decorationFootprint, placementError, DECORATION_ROAD_INSET, type DecorationDraft } from '../shared/decorations';
 import './tower-upgrade.css';
 
-export interface SceneHandle { takeItem:()=>DecorationDraft|null;focus: (b: {x:number;z:number;level?:number}) => void; reset: () => void; zoom: (amount: number) => void; walk:(direction:WalkDirection,held:boolean)=>void; streetDropPoint:(x:number,y:number)=>StreetStart|null; look:()=>void; rotateItem:()=>void; cancelItem:()=>void; }
+export interface SceneHandle { takeItem:()=>DecorationDraft|null;focus: (b: {x:number;z:number;level?:number}) => void; reset: () => void; zoom: (amount: number) => void; walk:(direction:WalkDirection,held:boolean)=>void; streetDropPoint:(x:number,y:number)=>StreetStart|null; streetGuidePoint:()=>({x:number;y:number;start:StreetStart}|null); look:()=>void; rotateItem:()=>void; cancelItem:()=>void; }
 interface Props { preserveStreetDraft?:boolean;streetDraft?:DecorationDraft|null; onStreetSave?:(draft:DecorationDraft)=>Promise<boolean>; onStreetDraftCancel?:()=>void; onStreetState?:(state:StreetInteractionState)=>void; onMouseLock?:(locked:boolean,blocked?:boolean)=>void; ownerId?:string|null; pageVisible?:boolean; streetView?:boolean; pickingStreet?:boolean; streetStart?:StreetStart|null; onStreetPick?:(start:StreetStart|null)=>void; onStreetEnter?:(start:StreetStart)=>void; decorationOwner?:string|null; decorationDraft?:DecorationDraft|null; onDecorationPosition?:(x:number,z:number)=>void; onDecorationCancel?:()=>void; navigationPaused?:boolean; onStreetExit?:()=>void; buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; debugScores:boolean; lodEnabled:boolean; previews:PlotPreview[]; placementMode?:boolean; placementOrigin?:{x:number;z:number}; placementChoice?:string|null; onPlacement?:(key:string)=>void; projects:PublicProject[]; onProject:(id:string)=>void; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 type DetailLevel=0|1|2;
@@ -81,6 +81,21 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
       if(ray.intersectObjects(e.city.children,true)[0]?.object.userData.owner)return null;
       const point=ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-.11),new THREE.Vector3());
       return point?pickStreetStart(point,e.startRoads.values(),e.startObstacles):null;
+    },
+    streetGuidePoint(){
+      const e=engine.current;if(!e||e.walk.enabled)return null;
+      const r=e.renderer.domElement.getBoundingClientRect();
+      if(!e.startRoads.size){e.startRoads=streetNetwork(props.current.buildings,neighborhoodDensity(props.current.buildings)).roads;e.startObstacles=streetObstacles(props.current.buildings);}
+      const ray=new THREE.Raycaster(),plane=new THREE.Plane(new THREE.Vector3(0,1,0),-.11),point=new THREE.Vector3();
+      for(const yRatio of [.5,.4,.6,.3,.7,.25,.75])for(const xOffset of [0,-.08,.08,-.16,.16,-.24,.24,-.32,.32,-.4,.4]){
+        const x=r.left+r.width*(.5+xOffset),y=r.top+r.height*yRatio;
+        ray.setFromCamera(new THREE.Vector2((x-r.left)/r.width*2-1,1-(y-r.top)/r.height*2),e.camera);
+        if(ray.intersectObjects(e.city.children,true)[0]?.object.userData.owner)continue;
+        if(!ray.ray.intersectPlane(plane,point))continue;
+        const start=pickStreetStart(point,e.startRoads.values(),e.startObstacles);
+        if(start)return {x,y,start};
+      }
+      return null;
     },
     zoom(amount) { const e = engine.current; if (!e||e.walk.enabled) return; e.camera.zoom = THREE.MathUtils.clamp(e.camera.zoom * amount, .4, 3.8); e.camera.updateProjectionMatrix(); e.invalidate(500); },
   }), []);
@@ -131,6 +146,9 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
     composer.addPass(outline);
     const output=new OutputPass();composer.addPass(output);
     const refreshShadows=()=>{renderer.shadowMap.needsUpdate=true;sun.shadow.needsUpdate=true;};
+    const contextLost=(event:Event)=>event.preventDefault();
+    const contextRestored=()=>{refreshShadows();resize();invalidate(1000);};
+    renderer.domElement.addEventListener('webglcontextlost',contextLost);renderer.domElement.addEventListener('webglcontextrestored',contextRestored);
     let lastActorShadow=0;
 
     let idleTimer:ReturnType<typeof setTimeout>|undefined;
@@ -168,7 +186,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
       if(props.current.decorationOwner){
         const own=props.current.buildings.find(b=>b.id===props.current.decorationOwner);
         const point=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-.115),new THREE.Vector3());
-        if(own&&point){const origin=plotPosition(own.x,own.z);props.current.onDecorationPosition?.(Math.round((point.x-origin.x)*20)/20,Math.round((point.z-origin.z)*20)/20);}return;
+        if(own&&point&&props.current.decorationDraft){const snapped=snapDecorationPoint(own,props.current.decorationDraft,point);props.current.onDecorationPosition?.(snapped.x,snapped.z);}return;
       }
       if(props.current.pickingStreet)return;
       if(props.current.placementMode){
@@ -184,11 +202,16 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
       if(pointerActive&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>6)tapMoved=true;
       const r = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX-r.left)/r.width*2-1, -(e.clientY-r.top)/r.height*2+1);
       raycaster.setFromCamera(pointer,activeCamera());
+      if(props.current.decorationOwner){
+        const own=props.current.buildings.find(b=>b.id===props.current.decorationOwner),point=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-.115),new THREE.Vector3());
+        if(own&&point&&props.current.decorationDraft){const snapped=snapDecorationPoint(own,props.current.decorationDraft,point);props.current.onDecorationPosition?.(snapped.x,snapped.z);}
+        renderer.domElement.style.cursor='crosshair';return;
+      }
       if(props.current.placementMode){
         renderer.domElement.style.cursor=raycaster.intersectObjects(planned.children,true).some(v=>v.object.userData.placement)?'pointer':'grab';
         return;
       }
-      if(walk.enabled||props.current.decorationOwner){renderer.domElement.style.cursor=walk.enabled&&walk.mouseLocked?'none':'crosshair';return;}
+      if(walk.enabled){renderer.domElement.style.cursor=walk.mouseLocked?'none':'crosshair';return;}
       if(props.current.pickingStreet){
         const point=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-.11),new THREE.Vector3()),e=engine.current;
         const visible=raycaster.intersectObjects(city.children,true)[0];
@@ -294,7 +317,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
       if(lightSourcesRevision!==city.userData.revision){streetLights.setSources(city);lightSourcesRevision=city.userData.revision;}
       for(const object of city.children){
         const owner=props.current.decorationOwner;
-        object.visible=!(owner&&object.userData.owner===owner&&(!object.userData.decoration||object.userData.decoration===props.current.decorationDraft?.id))&&!(interactions.carriedId&&object.userData.decoration===interactions.carriedId);
+        object.visible=!(owner&&object.userData.owner===owner&&object.userData.decoration===props.current.decorationDraft?.id)&&!(interactions.carriedId&&object.userData.decoration===interactions.carriedId);
       }
       const renderingCamera=activeCamera();
       if(props.current.pickingStreet){
@@ -339,8 +362,8 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
       renderer.domElement.removeEventListener('pointerdown',pointerDown); renderer.domElement.removeEventListener('pointerup',pointerUp);renderer.domElement.removeEventListener('click',chooseStreet);
       renderer.domElement.removeEventListener('pointercancel',pointerCancel);
       renderer.domElement.removeEventListener('keyup',keyUp);
-      renderer.domElement.removeEventListener('pointermove',move);controls.removeEventListener('start',controlsStart);controls.removeEventListener('end',controlsEnd); terrain.dispose();nature.dispose();owned.dispose();disposeGroup(decorationOverlay);disposeGroup(startPaths);disposeGroup(startMarker); assets.dispose();disposeGroup(planned);celebrations.children.forEach(b=>b.userData.label.element.remove());disposeGroup(celebrations);
-      outline.dispose();output.dispose();composer.dispose();renderer.dispose();
+      renderer.domElement.removeEventListener('pointermove',move);renderer.domElement.removeEventListener('webglcontextlost',contextLost);renderer.domElement.removeEventListener('webglcontextrestored',contextRestored);controls.removeEventListener('start',controlsStart);controls.removeEventListener('end',controlsEnd); terrain.dispose();nature.dispose();owned.dispose();disposeGroup(decorationOverlay);disposeGroup(startPaths);disposeGroup(startMarker); assets.dispose();disposeGroup(planned);celebrations.children.forEach(b=>b.userData.label.element.remove());disposeGroup(celebrations);
+      outline.dispose();output.dispose();composer.dispose();renderer.dispose();renderer.forceContextLoss();
       labels.clear();labelRenderer.domElement.remove();
       renderer.domElement.remove(); engine.current = null;
     };
@@ -402,21 +425,21 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
 
   useEffect(()=>{
     const e=engine.current,own=buildings.find(b=>b.id===decorationOwner);if(!e||!own)return;
-    const saved={position:e.camera.position.clone(),target:e.controls.target.clone(),zoom:e.camera.zoom};
+    const saved={position:e.camera.position.clone(),target:e.controls.target.clone(),zoom:e.camera.zoom,up:e.camera.up.clone()};
     const origin=plotPosition(own.x,own.z);e.focus=null;e.controls.enabled=false;
-    const target={x:origin.x+(props.current.decorationDraft?.x??0),z:origin.z+(props.current.decorationDraft?.z??.65)};
-    e.controls.target.set(target.x,0,target.z);e.camera.position.set(target.x,280,target.z+.01);e.camera.lookAt(e.controls.target);e.camera.zoom=3.8;e.camera.updateProjectionMatrix();
+    const target={x:origin.x,z:origin.z};
+    e.controls.target.set(target.x,0,target.z);e.camera.up.set(0,0,-1);e.camera.position.set(target.x,280,target.z);e.camera.lookAt(e.controls.target);e.camera.zoom=3;e.camera.updateProjectionMatrix();
     e.outline.selectedObjects=[];e.shadowsDirty=true;e.invalidate(400);e.renderer.domElement.focus({preventScroll:true});
     const key=(event:KeyboardEvent)=>{if(event.key==='Escape')props.current.onDecorationCancel?.();};window.addEventListener('keydown',key);
     return()=>{
-      window.removeEventListener('keydown',key);e.camera.position.copy(saved.position);e.controls.target.copy(saved.target);e.camera.zoom=saved.zoom;e.camera.lookAt(saved.target);e.camera.updateProjectionMatrix();e.controls.enabled=true;e.focus=null;e.shadowsDirty=true;e.invalidate(500);
+      window.removeEventListener('keydown',key);e.camera.up.copy(saved.up);e.camera.position.copy(saved.position);e.controls.target.copy(saved.target);e.camera.zoom=saved.zoom;e.camera.lookAt(saved.target);e.camera.updateProjectionMatrix();e.controls.enabled=true;e.focus=null;e.shadowsDirty=true;e.invalidate(500);
     };
   },[decorationOwner]);
 
   useEffect(()=>{
     const e=engine.current;if(!e)return;disposeGroup(e.decorationOverlay);
     const own=buildings.find(b=>b.id===decorationOwner);
-    if(own&&decorationDraft)drawDecorationPlacement(e.decorationOverlay,own,decorationDraft,lightsOn);
+    if(own)drawDecorationPlacement(e.decorationOverlay,own,decorationDraft,lightsOn);
     e.shadowsDirty=true;e.invalidate();
   },[decorationOwner,decorationDraft,buildings,lightsOn]);
 
@@ -505,7 +528,30 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
   return <div className="scene" ref={host}>{unavailable && <div className="webgl-fallback"><h2>Your city needs WebGL</h2><p>Enable hardware acceleration or open a browser that supports WebGL. You can still use the resident list and building controls.</p></div>}</div>;
 });
 
-function drawDecorationPlacement(group:THREE.Group,building:Building,draft:DecorationDraft,lightsOn:boolean){
+const DECORATION_GRID_SIZE=.25;
+const decorationGridFrames=new WeakMap<Building,ReturnType<typeof buildDecorationGridFrame>>();
+function buildDecorationGridFrame(building:Building){
+  const plan=plotPlan(building.x,building.z),origin=plan.position,c=Math.cos(plan.rotation),s=Math.sin(plan.rotation);
+  const toLocal=(point:{x:number;z:number})=>{const x=point.x-origin.x,z=point.z-origin.z;return {x:x*c-z*s,z:x*s+z*c};};
+  const toWorld=(point:{x:number;z:number})=>({x:origin.x+point.x*c+point.z*s,z:origin.z-point.x*s+point.z*c});
+  const yard=insetPlotPolygon(plan,DECORATION_ROAD_INSET).map(toLocal),yardMinX=Math.min(...yard.map(p=>p.x)),yardMaxX=Math.max(...yard.map(p=>p.x)),yardMinZ=Math.min(...yard.map(p=>p.z)),yardMaxZ=Math.max(...yard.map(p=>p.z));
+  const centerX=(yardMinX+yardMaxX)/2,centerZ=(yardMinZ+yardMaxZ)/2,cells=Math.max(1,Math.floor(Math.min(yardMaxX-yardMinX,yardMaxZ-yardMinZ)/DECORATION_GRID_SIZE)),side=cells*DECORATION_GRID_SIZE,minX=centerX-side/2,maxX=centerX+side/2,minZ=centerZ-side/2,maxZ=centerZ+side/2;
+  const foundation=buildingForm(building,1).foundationOutline.map(toLocal),rawMinX=Math.min(...foundation.map(p=>p.x)),rawMaxX=Math.max(...foundation.map(p=>p.x)),rawMinZ=Math.min(...foundation.map(p=>p.z)),rawMaxZ=Math.max(...foundation.map(p=>p.z));
+  const lowX=Math.floor((rawMinX-minX)/DECORATION_GRID_SIZE),highX=Math.ceil((rawMaxX-minX)/DECORATION_GRID_SIZE),lowZ=Math.floor((rawMinZ-minZ)/DECORATION_GRID_SIZE),highZ=Math.ceil((rawMaxZ-minZ)/DECORATION_GRID_SIZE),innerCells=Math.max(highX-lowX,highZ-lowZ);
+  const fit=(low:number,high:number)=>{let start=low-Math.floor((innerCells-(high-low))/2),end=start+innerCells;if(start<0){end-=start;start=0;}if(end>cells){start-=end-cells;end=cells;}return [start,end] as const;};
+  const [innerStartX,innerEndX]=fit(lowX,highX),[innerStartZ,innerEndZ]=fit(lowZ,highZ),innerMinX=minX+innerStartX*DECORATION_GRID_SIZE,innerMaxX=minX+innerEndX*DECORATION_GRID_SIZE,innerMinZ=minZ+innerStartZ*DECORATION_GRID_SIZE,innerMaxZ=minZ+innerEndZ*DECORATION_GRID_SIZE;
+  const polygon=(a:number,b:number,c:number,d:number)=>[{x:a,z:c},{x:b,z:c},{x:b,z:d},{x:a,z:d}].map(toWorld);
+  return {origin,toLocal,toWorld,cells,minX,maxX,minZ,maxZ,innerMinX,innerMaxX,innerMinZ,innerMaxZ,outer:polygon(minX,maxX,minZ,maxZ),inner:polygon(innerMinX,innerMaxX,innerMinZ,innerMaxZ)};
+}
+function decorationGridFrame(building:Building){const cached=decorationGridFrames.get(building);if(cached)return cached;const frame=buildDecorationGridFrame(building);decorationGridFrames.set(building,frame);return frame;}
+function snapDecorationPoint(building:Building,draft:DecorationDraft,point:{x:number;z:number}){
+  const frame=decorationGridFrame(building),local=frame.toLocal(point),footprint=decorationFootprint(building,draft.kind,{x:0,z:0,rotation:draft.rotation}).map(frame.toLocal),footprintMinX=Math.min(...footprint.map(p=>p.x)),footprintMaxX=Math.max(...footprint.map(p=>p.x)),footprintMinZ=Math.min(...footprint.map(p=>p.z)),footprintMaxZ=Math.max(...footprint.map(p=>p.z));
+  const minX=frame.minX-footprintMinX,maxX=frame.maxX-footprintMaxX,minZ=frame.minZ-footprintMinZ,maxZ=frame.maxZ-footprintMaxZ;
+  const x=Math.max(minX,Math.min(maxX,minX+Math.round((local.x-minX)/DECORATION_GRID_SIZE)*DECORATION_GRID_SIZE)),z=Math.max(minZ,Math.min(maxZ,minZ+Math.round((local.z-minZ)/DECORATION_GRID_SIZE)*DECORATION_GRID_SIZE)),world=frame.toWorld({x,z});
+  return {x:Math.round((world.x-frame.origin.x)*10000)/10000,z:Math.round((world.z-frame.origin.z)*10000)/10000};
+}
+
+function drawDecorationPlacement(group:THREE.Group,building:Building,draft:DecorationDraft|null,lightsOn:boolean){
   const surface=(polygon:StreetPoint[],height:number,color:string,opacity:number)=>{
     if(polygon.length<3)return;
     const shape=new THREE.Shape(polygon.map(p=>new THREE.Vector2(p.x,-p.z))),geometry=new THREE.ShapeGeometry(shape);
@@ -513,8 +559,19 @@ function drawDecorationPlacement(group:THREE.Group,building:Building,draft:Decor
     const mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({color,transparent:opacity<1,opacity,side:THREE.DoubleSide,depthWrite:false}));mesh.position.y=height;mesh.renderOrder=2;group.add(mesh);
     const line=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(polygon.map(p=>new THREE.Vector3(p.x,height+.002,p.z))),new THREE.LineBasicMaterial({color}));line.renderOrder=3;group.add(line);
   };
-  surface(insetPlotPolygon(plotPlan(building.x,building.z),DECORATION_ROAD_INSET),.15,'#8bbd80',.45);
-  surface(buildingForm(building,1).foundationOutline,.16,'#8d9c93',1);
+  const frame=decorationGridFrame(building),minor:number[]=[],major:number[]=[];
+  surface(frame.outer,.145,'#8bbd80',.2);surface(frame.inner,.166,'#586a70',.58);
+  const addSegment=(from:{x:number;z:number},to:{x:number;z:number},isMajor:boolean)=>{const a=frame.toWorld(from),b=frame.toWorld(to);(isMajor?major:minor).push(a.x,.164,a.z,b.x,.164,b.z);};
+  for(let i=1;i<frame.cells;i++){
+    const x=frame.minX+i*DECORATION_GRID_SIZE,z=frame.minZ+i*DECORATION_GRID_SIZE,isMajor=i%4===0;
+    if(x>=frame.innerMinX&&x<=frame.innerMaxX){addSegment({x,z:frame.minZ},{x,z:frame.innerMinZ},isMajor);addSegment({x,z:frame.innerMaxZ},{x,z:frame.maxZ},isMajor);}
+    else addSegment({x,z:frame.minZ},{x,z:frame.maxZ},isMajor);
+    if(z>=frame.innerMinZ&&z<=frame.innerMaxZ){addSegment({x:frame.minX,z},{x:frame.innerMinX,z},isMajor);addSegment({x:frame.innerMaxX,z},{x:frame.maxX,z},isMajor);}
+    else addSegment({x:frame.minX,z},{x:frame.maxX,z},isMajor);
+  }
+  const drawGrid=(positions:number[],color:string,opacity:number)=>{if(!positions.length)return;const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));const lines=new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color,transparent:true,opacity,depthWrite:false}));lines.renderOrder=3;group.add(lines);};
+  drawGrid(minor,'#6aa5b8',.38);drawGrid(major,'#3f8299',.72);
+  if(!draft)return;
   if(draft.kind==='base_shop')for(const slot of baseShopSlots(building))surface(decorationFootprint(building,draft.kind,slot),slot.y+.03,placementError(building,draft.kind,slot,draft.id)?'#c88075':'#438e6c',.8);
   if(draft.x===null||draft.z===null)return;
   const position={x:draft.x,z:draft.z,rotation:draft.rotation},error=placementError(building,draft.kind,position,draft.id),color=error?'#c88075':'#438e6c';

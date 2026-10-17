@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Clock3, Footprints, Map, PersonStanding, RotateCw, ShoppingBag, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Clock3, Footprints, Grid3X3, Map, PersonStanding, RotateCw, X } from 'lucide-react';
 import type { WalkDirection } from './StreetWalk';
 import type { StreetStart } from './streetNavigation';
 import type { StreetInteractionState } from './streetInteractionState';
@@ -38,7 +38,7 @@ export function StreetControls({placing=false,switchingDisabled=false,onLighting
       <div className="street-guide" aria-live="polite"><Footprints size={18}/><div><strong>{paused?'Walking paused':'Take a walk'}</strong><span>{paused?'Close the panel to keep exploring.':interaction.carrying&&!mouseLocked?'WASD to move · Q/E or arrows to look · Click to place':'Mouse to look · WASD to walk · Esc releases mouse'}</span><small>{paused?'':'Swipe to look. Hold the arrows to walk. Tap to pick up or place.'}</small></div></div>
       {!paused&&<div className="street-item-tools">
         {onLightingSettings&&<button onClick={onLightingSettings} aria-label="Lighting preview settings"><Clock3 size={18}/><span>Lighting</span></button>}
-        {hasHome&&<button onClick={onShop} aria-label="Open neighborhood shop"><ShoppingBag size={18}/><span>Shop</span></button>}
+        {hasHome&&<button onClick={onShop} aria-label="Open Your Streetview editor"><Grid3X3 size={18}/><span>Build</span></button>}
         {interaction.carrying&&<>{!interaction.attached&&<button disabled={interaction.saving} onClick={onRotate} aria-label="Rotate held item"><RotateCw size={18}/></button>}<button disabled={interaction.saving} onClick={onCancelItem} aria-label="Cancel carrying item"><X size={18}/></button></>}
       </div>}
       <div className="street-walk-pad" role="group" aria-label="Walking controls">

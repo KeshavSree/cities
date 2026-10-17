@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { DECORATIONS, decorationsOf, decorationFootprint, decorationSpace, placementError, placedDecorations, suggestedDecorationPosition, type DecorationKind } from '../shared/decorations';
+import { DECORATIONS, DECORATION_ROAD_INSET, decorationsOf, decorationFootprint, decorationSpace, placementError, placedDecorations, suggestedDecorationPosition, type DecorationKind } from '../shared/decorations';
 import { streetPlacement } from '../src/streetPlacement';
 import { persistDecoration } from '../src/decorationPersistence';
 import { plotPlan } from '../shared/plots';
-import { buildingForm } from '../src/buildingForm';
+import { buildingForm, insetPlotPolygon } from '../src/buildingForm';
 import type { Building } from '../shared/types';
 const resident=(x:number,z:number,level:number):Building=>({id:'test',username:'test',name:'Test',bio:'',avatar:null,github_url:null,website:null,school:null,is_demo:1,x,z,level,xp:0,bricks:360,segments:'[]',likes:0,style:'terrace',color:'sand',commits:0,prs:0,reviews:0,synced_at:null,updated_at:''});
 let positions=0;
@@ -33,6 +33,15 @@ assert(decorationSpace(owner,'planter',{x:3.5,z:0,rotation:0}),'Cannot obstruct 
 assert(decorationSpace(owner,'planter',{x:10,z:10,rotation:0}),'Cannot decorate another plot');
 assert(decorationSpace(owner,'planter',{x:NaN,z:0,rotation:0}),'Reject nonfinite positions');
 assert(decorationSpace(owner,'planter',{x:1,z:1,rotation:4}),'Reject invalid rotation');
+const edgeStart=suggestedDecorationPosition(owner,'lamp')!,yard=insetPlotPolygon(plotPlan(owner.x,owner.z),DECORATION_ROAD_INSET),edgeFootprint=decorationFootprint(owner,'lamp',edgeStart);
+let edgeContact:{position:{x:number;z:number;rotation:number};normal:{x:number;z:number}}|null=null;
+for(let i=0;i<yard.length&&!edgeContact;i++){
+  const a=yard[i],b=yard[(i+1)%yard.length],dx=b.x-a.x,dz=b.z-a.z,length=Math.hypot(dx,dz),normal={x:-dz/length,z:dx/length},clearance=Math.min(...edgeFootprint.map(p=>(dx*(p.z-a.z)-dz*(p.x-a.x))/length)),position={...edgeStart,x:edgeStart.x-normal.x*clearance,z:edgeStart.z-normal.z*clearance};
+  if(!decorationSpace(owner,'lamp',position))edgeContact={position,normal};
+}
+assert(edgeContact,'Find a legal decoration position touching the plot boundary');
+assert.equal(decorationSpace(owner,'lamp',edgeContact.position),null,'A footprint exactly touching the plot boundary is valid');
+assert(decorationSpace(owner,'lamp',{...edgeContact.position,x:edgeContact.position.x-edgeContact.normal.x*.01,z:edgeContact.position.z-edgeContact.normal.z*.01}),'A footprint beyond the plot boundary remains invalid');
 owner.decorations=JSON.stringify([{id:'stored',kind:'bench',x:null,z:null,rotation:0}]);
 assert.equal(placedDecorations(owner).length,0,'Stored items remain owned without rendering');
 owner.decorations=JSON.stringify([{id:'growth',kind:'planter',x:0,z:1.6,rotation:0}]);

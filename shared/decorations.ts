@@ -20,6 +20,7 @@ export interface DecorationPosition {x:number;z:number;rotation:number;}
 export interface DecorationDraft {id?:string;kind:DecorationKind;x:number|null;z:number|null;rotation:number;requestId:string;}
 export const MAX_DECORATIONS=24;
 export const DECORATION_ROAD_INSET=1.12;
+const EDGE_CONTACT_TOLERANCE=.001;
 export const isDecorationKind=(value:unknown):value is DecorationKind=>typeof value==='string'&&Object.hasOwn(DECORATIONS,value);
 const inventoryCache=new WeakMap<object,{json:string;items:readonly Decoration[]}>();
 const geometryCache=new WeakMap<Building,{key:string;yard:{x:number;z:number}[];foundation:{x:number;z:number}[]}>();
@@ -37,13 +38,16 @@ export function decorationsOf(building:Pick<Building,'decorations'>):readonly De
 }
 
 export function decorationFootprint(building:Building,kind:DecorationKind,position:DecorationPosition){
-  const origin=plotPlan(building.x,building.z).position,{width,depth}=DECORATIONS[kind],angle=kind==='base_shop'?(shopAttachment(building,position)?.angle??position.rotation*Math.PI/2):position.rotation*Math.PI/2,c=Math.cos(angle),s=Math.sin(angle);
-  return [[-width/2,-depth/2],[width/2,-depth/2],[width/2,depth/2],[-width/2,depth/2]].map(([x,z])=>({x:origin.x+position.x+x*c+z*s,z:origin.z+position.z-x*s+z*c}));
+  const origin=plotPlan(building.x,building.z).position,{width,depth}=DECORATIONS[kind],attachment=kind==='base_shop'?shopAttachment(building,position):null,angle=attachment?.angle??position.rotation*Math.PI/2,c=Math.cos(angle),s=Math.sin(angle);
+  // Attached shops are flush to a real wall. Their footprint extends outward
+  // under the awning instead of straddling the building facade.
+  const offset=attachment?{x:attachment.normal.x*(depth/2-.05),z:attachment.normal.z*(depth/2-.05)}:{x:0,z:0};
+  return [[-width/2,-depth/2],[width/2,-depth/2],[width/2,depth/2],[-width/2,depth/2]].map(([x,z])=>({x:origin.x+position.x+offset.x+x*c+z*s,z:origin.z+position.z+offset.z-x*s+z*c}));
 }
 export function decorationSpace(building:Building,kind:DecorationKind,position:DecorationPosition):string|null{
   if(!Number.isFinite(position.x)||!Number.isFinite(position.z)||Math.abs(position.x)>12||Math.abs(position.z)>12||!Number.isInteger(position.rotation)||position.rotation<0||position.rotation>3)return 'Choose a valid position.';
   const {yard,foundation}=geometryFor(building),footprint=decorationFootprint(building,kind,position);
-  if(yard.length<3||footprint.some(p=>!yard.every((a,i)=>{const b=yard[(i+1)%yard.length];return (b.x-a.x)*(p.z-a.z)-(b.z-a.z)*(p.x-a.x)>=-1e-7;})))return 'Keep the decoration inside your plot and clear of the sidewalk.';
+  if(yard.length<3||footprint.some(p=>!yard.every((a,i)=>{const b=yard[(i+1)%yard.length],dx=b.x-a.x,dz=b.z-a.z;return dx*(p.z-a.z)-dz*(p.x-a.x)>=-EDGE_CONTACT_TOLERANCE*Math.hypot(dx,dz);})))return 'Keep the decoration inside your plot and clear of the sidewalk.';
   if(footprint.some(p=>p.z>coastZ(p.x)-2.2))return 'Keep the decoration off the beach.';
   if(kind==='base_shop')return shopAttachment(building,position)?null:building.level<4?'Tower storefronts need a cottage or larger building (level 4).':'Choose a highlighted slot on your own building’s base.';
   if(outlineArea(clipOutline(footprint,foundation,.06))>1e-6)return 'Leave a little room beside your building.';
