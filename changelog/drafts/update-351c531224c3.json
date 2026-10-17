@@ -1,0 +1,48 @@
+{
+  "id": "update-351c531224c3",
+  "date": "2026-10-15",
+  "title": "Explore your city on foot",
+  "summary": "Step down from the skyline and walk through your neighborhood.",
+  "changes": [
+    "Switch between City view and a new eye-level Street view outside a selected tower.",
+    "Walk with WASD or touch controls, drag to look around, and select buildings to meet their residents.",
+    "Explore detailed entrances and raised sidewalks, with building and shoreline collision.",
+    "Return to your previous City view with Escape or the view switch."
+  ],
+  "source": {
+    "baseRevision": "540f4fa9ee685bebbb5e7b681351871c46411f07",
+    "revision": "a4043c67bcde258911a02896b14074784fbff7d3",
+    "fingerprint": "351c531224c3b27e20054c2b4bdeb61e365f84efc7b97684cd2cb0d6076a206e",
+    "commits": [
+      "Prevent mobile invitation pane jumping on reopen",
+      "Improve mobile navigation and add reviewed changelogs"
+    ],
+    "files": [
+      "README.md",
+      "package.json",
+      "scripts/changelog.mjs",
+      "scripts/check-street.ts",
+      "src/App.tsx",
+      "src/CameraKeyboard.ts",
+      "src/Changelog.tsx",
+      "src/CityScene.tsx",
+      "src/InvitationPane.tsx",
+      "src/Onboarding.tsx",
+      "src/ProgressionPanel.tsx",
+      "src/ResidentSearch.tsx",
+      "src/SegmentEditor.tsx",
+      "src/SegmentMenu.tsx",
+      "src/StreetControls.tsx",
+      "src/StreetWalk.ts",
+      "src/TierSlices.tsx",
+      "src/WorldTerrain.ts",
+      "src/changelog.css",
+      "src/main.tsx",
+      "src/mobile-fixes.css",
+      "src/onboarding.css",
+      "src/street-view.css",
+      "src/streetNavigation.ts",
+      "src/useViewport.ts"
+    ]
+  }
+}

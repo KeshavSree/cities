@@ -98,8 +98,8 @@ export function streetNetwork(buildings:Building[],densityAt:(x:number,z:number)
   return {roads,junctions};
 }
 
-export const roadWidth=(density:number)=>.45+Math.min(1,density/SETTLEMENT_THRESHOLDS.urban)*.9;
-export const roadShoulder=(density:number)=>.2+Math.min(1,density/SETTLEMENT_THRESHOLDS.urban)*.2;
+export const roadWidth=(density:number)=>.65+Math.min(1,density/SETTLEMENT_THRESHOLDS.urban)*.9;
+export const roadShoulder=(density:number)=>.3+Math.min(1,density/SETTLEMENT_THRESHOLDS.urban)*.2;
 export function streetDensity(road:Street,t:number){
   const [start,middle,end]=road.densities;
   return t<=.5?start+(middle-start)*t*2:middle+(end-middle)*(t-.5)*2;

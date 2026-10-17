@@ -1,40 +1,38 @@
-import type { CSSProperties } from 'react';
+import { useCallback, useMemo, useState, type CSSProperties } from 'react';
+import type { Building } from '../shared/types';
 import { BUILDING_THEMES, SEGMENT_STYLES, TIERS, type SegmentDesign } from '../shared/progression';
+import { TowerModelPreview } from './TowerModelPreview';
 import './tier-slices.css';
 
-// UI-only proportions by visual position, from top to bottom. The single
-// fill identifies the saved theme of the corresponding tower tier.
-const PROPORTIONS=[[48,30],[76,35],[112,38],[146,43],[176,48],[204,53],[220,55],[236,58],[250,60],[264,63]];
-const hasShoulder=(index:number)=>index>=3&&index%2===1;
-// The smaller top rectangle is 20% narrower, with a shallow raised section.
-const SHOULDER_WIDTH=256/320;
-export const THEME_COLORS:Record<string,string>={contemporary:'#98aaa2',earthen:'#bd8666',deco:'#bca36c',metabolism:'#789c9f',nocturne:'#8c78aa',cyberpunk:'#9564c8'};
-function silhouette(stacked:boolean){
-  return stacked
-    ?'M0 72V20Q0 12 8 12H24Q32 12 32 8V4Q32 0 36 0H284Q288 0 288 4V8Q288 12 296 12H312Q320 12 320 20V72Z'
-    :'M0 72V8Q0 0 8 0H312Q320 0 320 8V72Z';
-}
-export function TierSlices({designs,selectedIndex,onSelect,editable=true}:{designs:SegmentDesign[];selectedIndex:number;onSelect:(index:number)=>void;editable?:boolean}){
-  // Tower tiers count upward from the base; display the highest one first.
-  const layers=designs.map((design,index)=>({design,index})).reverse();
-  const widths=designs.map((_,index)=>PROPORTIONS[index][0]);
-  // Work upward from the bottom: fit each silhouette within the actual top
-  // rectangle below it. Flat silhouettes also step inward by at least 20%.
-  for(let index=widths.length-2;index>=0;index--){
-    widths[index]=Math.min(widths[index],widths[index+1]*(hasShoulder(index+1)?SHOULDER_WIDTH:0.8));
-  }
-  const bottomWidth=widths[widths.length-1];
-  return <div className="tier-slices" aria-label={editable?'Select a building tier':'Building tiers'}>
-    {layers.map(({design,index},position)=>{
-      const width=widths[position],height=PROPORTIONS[position][1],color=THEME_COLORS[design.theme]||THEME_COLORS.contemporary;
-      const details=BUILDING_THEMES[design.theme].label+(design.theme==='cyberpunk'?'':` · ${SEGMENT_STYLES[design.style]}`);
-      const Element=editable?'button':'div';
-      return <Element key={index} className="tier-slice" role={editable?undefined:'img'} aria-pressed={editable?index===selectedIndex:undefined} aria-expanded={editable?index===selectedIndex:undefined}
-        aria-label={`${editable?'Customize tier':'Tier'} ${index+1}, ${TIERS[index].name}, ${details}`}
-        style={{'--tier-width':`${width}px`,'--tier-relative-width':`${width/bottomWidth*100}%`,'--tier-height':`${height}px`,'--tier-color':color} as CSSProperties} onClick={editable?()=>onSelect(index):undefined}>
-        <svg viewBox="0 0 320 72" preserveAspectRatio="none" aria-hidden="true"><path fill={color} vectorEffect="non-scaling-stroke" d={silhouette(hasShoulder(position))}/></svg>
-        <span className="tier-hover-label" aria-hidden="true"><strong>{BUILDING_THEMES[design.theme].label}</strong>{design.theme!=='cyberpunk'&&<small>{SEGMENT_STYLES[design.style]}</small>}</span>
+export function TierSlices({building,designs,selectedIndex,onSelect,onStreetview,editable=true}:{building:Building;designs:SegmentDesign[];selectedIndex:number;onSelect:(index:number)=>void;onStreetview?:()=>void;editable?:boolean}){
+  const [hovered,setHovered]=useState<number|null>(null),[layout,setLayout]=useState<{tiers:number[];street:number|null}>({tiers:[],street:null}),layers=designs.map((design,index)=>({design,index})).reverse();
+  const stageHeight=Math.min(450,190+designs.length*22),stageStyle={'--tower-stage-height':`${stageHeight}px`} as CSSProperties;
+  const previewBuilding=useMemo(()=>({...building,segments:JSON.stringify(designs)}),[building,designs]);
+  const updateLayout=useCallback((tiers:number[],street:number)=>setLayout(current=>current.tiers.length===tiers.length&&current.tiers.every((value,index)=>Math.abs(value-tiers[index])<.001)&&current.street!==null&&Math.abs(current.street-street)<.001?current:{tiers,street}),[]);
+  const actualCenter=(index:number)=>layout.tiers[index]??(designs.length-index-.5)/designs.length;
+  const labelCenters=new Map<number,number>(),minimumLabelGap=35/stageHeight,placed=designs.map((_,index)=>actualCenter(index));
+  for(let index=1;index<placed.length;index++)placed[index]=Math.min(placed[index],placed[index-1]-minimumLabelGap);
+  placed.forEach((center,index)=>labelCenters.set(index,center));
+  const position=(index:number)=>{
+    const center=actualCenter(index);
+    const above=index===designs.length-1?Math.max(0,center-((layout.tiers[index-1]??center)-center)/2):(center+(layout.tiers[index+1]??center))/2;
+    const below=index===0&&layout.street!==null?(center+layout.street)/2:index===0?Math.min(1,center+(center-(layout.tiers[index+1]??center))/2):(center+(layout.tiers[index-1]??center))/2;
+    const top=Math.max(0,above),bottom=Math.min(1,below),hitCenter=(top+bottom)/2;
+    return {'--tier-top':`${top*100}%`,'--tier-height':`${Math.max(.055,bottom-top)*100}%`,'--tier-label-y-offset':`${((labelCenters.get(index)??center)-hitCenter)*stageHeight}px`} as CSSProperties;
+  };
+  const streetCenter=layout.street??Math.min(.88,actualCenter(0)+.09);
+  const streetButtonPosition={'--street-button-top':`${streetCenter*stageHeight+40}px`} as CSSProperties;
+  return <div className={`tier-slices ${editable?'is-editable':''}`} style={stageStyle} aria-label={editable?'Select a building tier':'Building tiers'}>
+    <TowerModelPreview building={previewBuilding} activeSegment={hovered??selectedIndex} onLayout={updateLayout}/>
+    <div className="tier-slice-list">{layers.map(({design,index})=>{
+      const details=BUILDING_THEMES[design.theme].label+(design.theme==='cyberpunk'?'':` · ${SEGMENT_STYLES[design.style]}`),Element=editable?'button':'div';
+      return <Element key={index} className={`tier-slice ${design.theme}`} style={position(index)} role={editable?undefined:'img'} aria-pressed={editable?index===selectedIndex:undefined} aria-expanded={editable?index===selectedIndex:undefined}
+        aria-label={`${editable?'Customize tier':'Tier'} ${index+1}, ${TIERS[index].name}, ${details}`} onPointerEnter={()=>setHovered(index)} onPointerLeave={()=>setHovered(null)} onFocus={()=>setHovered(index)} onBlur={()=>setHovered(null)} onClick={editable?()=>onSelect(index):undefined}>
+        <span className="tier-model-hit" aria-hidden="true"/><span className="tier-slice-copy"><strong>{BUILDING_THEMES[design.theme].label}</strong><small>Tier {index+1}{design.theme==='cyberpunk'?'':` · ${SEGMENT_STYLES[design.style]}`}</small></span>
       </Element>;
-    })}
+    })}</div>
+    {editable&&onStreetview&&<button type="button" className="streetview-button" style={streetButtonPosition} data-guide="your-streetview" onPointerEnter={()=>setHovered(-1)} onPointerLeave={()=>setHovered(null)} onFocus={()=>setHovered(-1)} onBlur={()=>setHovered(null)} onClick={()=>onStreetview()}>
+      Streetview
+    </button>}
   </div>;
 }

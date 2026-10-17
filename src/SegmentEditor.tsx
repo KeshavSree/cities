@@ -4,7 +4,7 @@ import { TierSlices } from './TierSlices';
 import { SegmentMenu } from './SegmentMenu';
 import { segmentDesigns, SEGMENT_STYLES, BUILDING_THEMES, type BuildingTheme, type SegmentStyle } from '../shared/progression';
 
-export function SegmentEditor({building,own,active=true,busy,unlockedThemes,onUnlock,onSave}:{building:Building;own:boolean;active?:boolean;busy:boolean;unlockedThemes:readonly string[];onUnlock:(theme:BuildingTheme)=>void;onSave:(segment:number,color:Color,style:SegmentStyle,theme:BuildingTheme)=>void}){
+export function SegmentEditor({building,own,active=true,busy,unlockedThemes,onUnlock,onSave,onStreetview}:{building:Building;own:boolean;active?:boolean;busy:boolean;unlockedThemes:readonly string[];onUnlock:(theme:BuildingTheme)=>void;onSave:(segment:number,color:Color,style:SegmentStyle,theme:BuildingTheme)=>void;onStreetview?:()=>void}){
   const [selectedIndex,setIndex]=useState(0),[draftStyle,setStyle]=useState<SegmentStyle|null>(null),[draftTheme,setTheme]=useState<BuildingTheme|null>(null);
   const [menuOpen,setMenuOpen]=useState(false),[pendingTheme,setPendingTheme]=useState<BuildingTheme|null>(null);
   const closeMenu=()=>{setPendingTheme(null);setMenuOpen(false);setStyle(null);setTheme(null);};
@@ -18,7 +18,7 @@ export function SegmentEditor({building,own,active=true,busy,unlockedThemes,onUn
   },[pendingTheme,busy,unlockedThemes,index,color,style,onSave]);
   return <section className="segment-editor" aria-label={own?"Customize tower":"Tower"}>
     <div className="section-heading"><h3>Tower</h3></div>
-    <TierSlices editable={own} designs={designs.map((saved,i)=>own&&menuOpen&&i===index?{color,style,theme}:saved)} selectedIndex={own&&menuOpen?index:-1} onSelect={i=>{if(!own)return;if(menuOpen&&i===index){closeMenu();return;}setPendingTheme(null);setIndex(i);setStyle(null);setTheme(null);setMenuOpen(true);}}/>
+    <TierSlices building={building} editable={own} designs={designs.map((saved,i)=>own&&menuOpen&&i===index?{color,style,theme}:saved)} selectedIndex={own&&menuOpen?index:-2} onStreetview={own?onStreetview:undefined} onSelect={i=>{if(!own)return;if(menuOpen&&i===index){closeMenu();return;}setPendingTheme(null);setIndex(i);setStyle(null);setTheme(null);setMenuOpen(true);}}/>
     {own&&menuOpen&&<SegmentMenu title={`Tier ${index+1}`} onClose={closeMenu}>
     <span className="segment-label">Tier {index+1} theme</span>
     {own?<div className="theme-options">{(Object.entries(BUILDING_THEMES) as [BuildingTheme,(typeof BUILDING_THEMES)[BuildingTheme]][]).map(([id,t])=>{

@@ -5,6 +5,7 @@ const movementKeys=new Set(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','ShiftLeft
 
 /** Continuous camera motion, independent of keyboard repeat speed and frame rate. */
 export class CameraKeyboard {
+  enabled=true;
   private held=new Set<string>();
   private forward=new THREE.Vector3();
   private right=new THREE.Vector3();
@@ -23,6 +24,7 @@ export class CameraKeyboard {
   private blocked=()=>Boolean(document.querySelector('[aria-modal="true"]')||
     document.activeElement?.closest('input,textarea,select,button,a,[contenteditable]:not([contenteditable="false"]),[role="tab"],[role="textbox"]'));
   private keyDown=(event:KeyboardEvent)=>{
+    if(!this.enabled)return;
     if(event.ctrlKey||event.metaKey||event.altKey){this.clear();return;}
     if(!movementKeys.has(event.code)||this.blocked())return;
     event.preventDefault();
@@ -35,6 +37,7 @@ export class CameraKeyboard {
   private focusChanged=()=>{if(this.blocked())this.clear();};
 
   update(seconds:number){
+    if(!this.enabled){this.clear();return false;}
     if(!this.held.size)return false;
     if(this.blocked()){this.clear();return false;}
     const down=(key:string)=>Number(this.held.has(key));
