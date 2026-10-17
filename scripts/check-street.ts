@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { canWalk, streetArrival, streetObstacles, buildingObstacles, pickStreetStart, walkStep, WALK_RADIUS } from '../src/streetNavigation';
+import { canWalk, streetArrival, streetObstacles, buildingObstacles, pickStreetStart, streetStartChoices, walkStep, WALK_RADIUS } from '../src/streetNavigation';
 import { streetNetwork, neighborhoodDensity } from '../src/neighborhood';
 import { coastZ, isLandPlot } from '../shared/world';
 import type { Building } from '../shared/types';
@@ -49,3 +49,11 @@ for(let x=-12;x<=12;x++)for(let z=-12;z<=6;z++){
   }
 }
 console.log(`Street navigation checks passed: ${arrivals} safe arrivals, ${streetPicks} chosen starts, empty street defaults, wall sliding, tunneling, and shoreline collision.`);
+
+const keyboardRoads=streetNetwork(sample,neighborhoodDensity(sample)).roads,keyboardObstacles=streetObstacles(sample),keyboardChoices=streetStartChoices({x:0,z:0},keyboardRoads.values(),keyboardObstacles);
+assert(keyboardChoices.length>1,'Keyboard users can select among multiple actual streets');
+assert.equal(new Set(keyboardChoices.map(choice=>choice.roadKey)).size,keyboardChoices.length,'Each road appears once');
+let lastDistance=-1;
+for(const choice of keyboardChoices){assert(keyboardRoads.has(choice.roadKey));assert(canWalk(choice.point,keyboardObstacles));assert.equal(pickStreetStart(choice.point,[keyboardRoads.get(choice.roadKey)!],keyboardObstacles)?.roadKey,choice.roadKey);const distance=Math.hypot(choice.point.x,choice.point.z);assert(distance>=lastDistance);lastDistance=distance;}
+assert.equal(streetStartChoices({x:0,z:0},[],[]).length,0);
+console.log(`Keyboard street choices passed: ${keyboardChoices.length} unique, clear roads ordered by distance.`);

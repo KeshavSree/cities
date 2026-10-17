@@ -10,7 +10,7 @@ Object.assign(globalThis,{window:new EventTarget()});
 const canvas=new EventTarget() as HTMLCanvasElement,city=new THREE.Group(),camera=new THREE.PerspectiveCamera(66,1,.025,180);
 const own={id:'owner',x:0,z:0,level:4,segments:'[]',style:'terrace',color:'sand',bricks:360,decorations:JSON.stringify([{id:'owned',kind:'planter',x:0,z:2,rotation:0}])} as Building;
 const object=new THREE.Mesh(new THREE.BoxGeometry(.38,.2,.38),new THREE.MeshBasicMaterial());object.position.set(0,.22,2);object.userData={owner:'owner',decoration:'owned'};city.add(object);
-const walk={enabled:true,mouseLocked:true,camera,face:(point:{x:number;z:number},height=.2)=>{camera.lookAt(point.x,height,point.z);camera.updateMatrixWorld();},setBuildings:(_:Building[],id?:string)=>{ignored=id;}} as unknown as StreetWalk;
+const walk={enabled:true,mouseLocked:true,mouseCaptureBlocked:false,camera,face:(point:{x:number;z:number},height=.2)=>{camera.lookAt(point.x,height,point.z);camera.updateMatrixWorld();},setBuildings:(_:Building[],id?:string)=>{ignored=id;}} as unknown as StreetWalk;
 let ignored:string|undefined,state:StreetInteractionState=emptyStreetInteraction,paused=false,cancelled=0,saves:DecorationDraft[]=[],resolveSave:((saved:boolean)=>void)|undefined;
 let lightsOn=false;
 const interaction=new StreetInteraction(canvas,city,walk,()=>({buildings:[own],ownerId:'owner',lightsOn,paused,onState:s=>{state=s;},onCancel:()=>{cancelled++;},onSave:draft=>{saves.push(draft);return new Promise(resolve=>{resolveSave=resolve;});}}),()=>{});
@@ -24,7 +24,11 @@ object.userData.owner='neighbor';aim();assert.equal(state.target,null,'Another r
 const wall=new THREE.Mesh(new THREE.BoxGeometry(1,1,.1),new THREE.MeshBasicMaterial());wall.position.set(0,.4,2.7);city.add(wall);aim();assert.equal(state.target,null,'A building wall occludes objects behind it');city.remove(wall);wall.geometry.dispose();(wall.material as THREE.Material).dispose();
 aim(0,7);assert.equal(state.target,null,'Distant items cannot be picked up');
 paused=true;aim();assert.equal(state.target,null,'Panels pause object interaction');paused=false;
-aim();walk.mouseLocked=false;pointer('pointerdown',{pointerType:'mouse',pointerId:1,button:0});walk.mouseLocked=true;pointer('click',{button:0});assert.equal(interaction.carriedId,undefined,'The capture click cannot also pick up');
+aim();walk.mouseLocked=false;
+const capture=walk as StreetWalk&{mouseCaptureBlocked:boolean};capture.mouseCaptureBlocked=false;
+pointer('pointerdown',{pointerType:'mouse',pointerId:1,button:0});capture.mouseCaptureBlocked=true;pointer('click',{button:0});assert.equal(interaction.carriedId,undefined,'A rejected initial capture click cannot pick up');
+click();assert.equal(interaction.carriedId,'owned','The next click picks up when capture has been rejected');interaction.cancel();capture.mouseCaptureBlocked=false;aim();
+walk.mouseLocked=false;pointer('pointerdown',{pointerType:'mouse',pointerId:1,button:0});walk.mouseLocked=true;pointer('click',{button:0});assert.equal(interaction.carriedId,undefined,'The capture click cannot also pick up');
 click();interaction.update(outline);assert.equal(interaction.carriedId,'owned');assert.equal(ignored,'owned','Carrying temporarily excludes only that item from walking collisions');assert.equal(saves.length,0,'Picking up never spends or writes a position');
 const first=interaction.group.position.clone();aim(.3,3.5,.3,2);assert(first.distanceTo(interaction.group.position)>.1,'The preview follows the walker');assert.equal(saves.length,0,'Walking does not save intermediate positions');
 interaction.cancel();interaction.update(outline);assert.equal(interaction.carriedId,undefined);assert.equal(ignored,undefined);assert.equal(saves.length,0,'Cancelling leaves the saved original untouched');
@@ -44,6 +48,11 @@ tap();assert.equal(interaction.carriedId,'owned','One touch tap picks up');inter
 await new Promise(resolve=>setTimeout(resolve,610));
 const transferDraft:DecorationDraft={kind:'sculpture',x:2,z:1,rotation:0,requestId:'transfer-preserves-request'};
 interaction.begin(transferDraft,true);interaction.update(outline);assert.equal(interaction.group.position.x,2);assert.equal(interaction.group.position.z,1,'Entering Street view preserves the map position until moving');interaction.rotate();interaction.update(outline);const saveCount=saves.length,transferred=interaction.takeDraft();assert.equal(transferred?.requestId,transferDraft.requestId);assert.equal(transferred?.rotation,1,'Cross-view transfer preserves rotated placement');assert.equal(transferred?.x,2);assert.equal(transferred?.z,1);assert.equal(interaction.carriedId,undefined);assert.equal(saves.length,saveCount,'Switching views never saves or purchases');
+Object.assign(globalThis,{document:{activeElement:canvas}});await new Promise(resolve=>setTimeout(resolve,610));aim();walk.mouseLocked=false;
+const useKey=(props:Record<string,unknown>={})=>{const event=new Event('keydown',{cancelable:true});Object.assign(event,{code:'KeyF',repeat:false},props);window.dispatchEvent(event);};
+paused=true;useKey();assert.equal(interaction.carriedId,undefined,'Keyboard interaction respects paused panels');paused=false;
+useKey({ctrlKey:true});assert.equal(interaction.carriedId,undefined,'Modified shortcuts cannot pick up');useKey();assert.equal(interaction.carriedId,'owned','F picks up the aimed item without mouse capture');
+useKey({repeat:true});assert.equal(saves.length,saveCount,'Holding F cannot repeatedly place');camera.lookAt(0,.115,2);camera.updateMatrixWorld();interaction.update(outline);useKey();assert.equal(saves.length,saveCount+1,'F places a valid held item without capture');resolveSave!(false);await tick();interaction.cancel();walk.mouseLocked=true;
 interaction.dispose();
 // Moving neighbors use their current mesh positions, including ancestor visibility.
 walk.enabled=true;const moving=new THREE.Group(),person=new THREE.Group();person.userData={owner:'owner',decoration:'walker'};

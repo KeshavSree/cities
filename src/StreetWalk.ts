@@ -76,6 +76,7 @@ export class StreetWalk {
     this.pitch=height===undefined?.07:Math.atan2(height-this.camera.position.y,Math.hypot(point.x-this.camera.position.x,point.z-this.camera.position.z));this.orient();this.invalidate();
   }
   get mouseLocked(){return document.pointerLockElement===this.canvas;}
+  get mouseCaptureBlocked(){return this.canvas.dataset.mouseLook==='blocked';}
   requestMouseLook(){
     if(!this.enabled||this.blocked()||this.mouseLocked)return;
     if(window.matchMedia('(pointer:coarse)').matches&&!window.matchMedia('(any-pointer:fine)').matches)return;

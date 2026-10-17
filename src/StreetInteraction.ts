@@ -161,13 +161,13 @@ export class StreetInteraction {
   private click=(event:MouseEvent)=>{
     const readyAtStart=this.mouseDownCanInteract;this.mouseDownCanInteract=false;
     if(event.button!==0||performance.now()-this.lastTouch<600||!readyAtStart)return;
-    event.preventDefault();if(this.walk.mouseLocked||this.held)void this.interact();
+    event.preventDefault();if(this.walk.mouseLocked||this.walk.mouseCaptureBlocked||this.held)void this.interact();
   };
   private touches=new Set<number>();
   private touchDownPoint:{id:number;x:number;y:number}|null=null;
   private pointerDown=(event:PointerEvent)=>{
-    // Capture clicks cannot pick up an item. A held preview is already in placement mode, including browsers without capture.
-    if(event.pointerType==='mouse'){this.mouseDownCanInteract=event.button===0&&(this.walk.mouseLocked||Boolean(this.held));return;}
+    // Snapshot before requesting capture: the initial capture click cannot also pick up.
+    if(event.pointerType==='mouse'){this.mouseDownCanInteract=event.button===0&&(this.walk.mouseLocked||this.walk.mouseCaptureBlocked||Boolean(this.held));return;}
     if(event.pointerType!=='touch')return;
     this.touches.add(event.pointerId);
     if(this.touches.size>1){this.touchDownPoint=null;return;}
@@ -186,7 +186,9 @@ export class StreetInteraction {
     void this.interact();
   };
   private keyDown=(event:KeyboardEvent)=>{
-    if(!this.walk.enabled||!this.held)return;
+    if(!this.walk.enabled)return;
+    if(event.code==='KeyF'&&!event.repeat&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&document.activeElement===this.canvas){event.preventDefault();void this.interact();return;}
+    if(!this.held)return;
     if(event.code==='Escape'){this.cancel();return;}
     if(this.options().paused)return;
     if(event.code==='KeyR'){event.preventDefault();this.rotate();}

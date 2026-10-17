@@ -33,6 +33,21 @@ export function pickStreetStart(point:StreetPoint,roads:Iterable<Street>,obstacl
   return best?.start??null;
 }
 
+/** Keyboard entry offers the same clear roads as the canvas picker, nearest first. */
+export function streetStartChoices(origin:StreetPoint,roads:Iterable<Street>,obstacles:StreetPoint[][]):StreetStart[]{
+  const choices:StreetStart[]=[];
+  for(const road of roads){
+    const [a,b]=road.points,dx=b.x-a.x,dz=b.z-a.z,length=dx*dx+dz*dz;
+    if(length<1e-8)continue;
+    const nearest=Math.max(.08,Math.min(.92,((origin.x-a.x)*dx+(origin.z-a.z)*dz)/length));
+    for(const t of [nearest,.5,.25,.75]){
+      const start=pickStreetStart({x:a.x+t*dx,z:a.z+t*dz},[road],obstacles);
+      if(start){choices.push(start);break;}
+    }
+  }
+  return choices.sort((a,b)=>Math.hypot(a.point.x-origin.x,a.point.z-origin.z)-Math.hypot(b.point.x-origin.x,b.point.z-origin.z)||a.roadKey.localeCompare(b.roadKey));
+}
+
 export function buildingObstacles(buildings:Building[]) {
   const density=neighborhoodDensity(buildings);
   return buildings.map(building=>buildingForm(building,density(building.x,building.z)).foundationOutline);

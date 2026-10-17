@@ -21,7 +21,7 @@ import { CameraKeyboard } from './CameraKeyboard';
 import { StreetInteraction } from './StreetInteraction';
 import type { StreetInteractionState } from './streetInteractionState';
 import { StreetWalk, type WalkDirection } from './StreetWalk';
-import { canWalk, pickStreetStart, streetObstacles, type StreetStart, type StreetPoint } from './streetNavigation';
+import { canWalk, pickStreetStart, streetStartChoices, streetObstacles, type StreetStart, type StreetPoint } from './streetNavigation';
 
 import { buildingForm, insetPlotPolygon } from './buildingForm';
 import { clearRoadSurface, roadObstacles } from './roadClearance';
@@ -35,7 +35,7 @@ import { decorationModel } from './DecorationModels';
 import { decorationFootprint, placementError, DECORATION_ROAD_INSET, type DecorationDraft } from '../shared/decorations';
 import './tower-upgrade.css';
 
-export interface SceneHandle { takeItem:()=>DecorationDraft|null;focus: (b: {x:number;z:number;level?:number}) => void; reset: () => void; zoom: (amount: number) => void; walk:(direction:WalkDirection,held:boolean)=>void; streetDropPoint:(x:number,y:number)=>StreetStart|null; look:()=>void; rotateItem:()=>void; cancelItem:()=>void; }
+export interface SceneHandle { streetChoices:()=>StreetStart[];takeItem:()=>DecorationDraft|null;focus: (b: {x:number;z:number;level?:number}) => void; reset: () => void; zoom: (amount: number) => void; walk:(direction:WalkDirection,held:boolean)=>void; streetDropPoint:(x:number,y:number)=>StreetStart|null; look:()=>void; rotateItem:()=>void; cancelItem:()=>void; }
 interface Props { preserveStreetDraft?:boolean;streetDraft?:DecorationDraft|null; onStreetSave?:(draft:DecorationDraft)=>Promise<boolean>; onStreetDraftCancel?:()=>void; onStreetState?:(state:StreetInteractionState)=>void; onMouseLock?:(locked:boolean,blocked?:boolean)=>void; ownerId?:string|null; pageVisible?:boolean; streetView?:boolean; pickingStreet?:boolean; streetStart?:StreetStart|null; onStreetPick?:(start:StreetStart|null)=>void; onStreetEnter?:(start:StreetStart)=>void; decorationOwner?:string|null; decorationDraft?:DecorationDraft|null; onDecorationPosition?:(x:number,z:number)=>void; onDecorationCancel?:()=>void; navigationPaused?:boolean; onStreetExit?:()=>void; buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; debugScores:boolean; lodEnabled:boolean; previews:PlotPreview[]; placementMode?:boolean; placementOrigin?:{x:number;z:number}; placementChoice?:string|null; onPlacement?:(key:string)=>void; projects:PublicProject[]; onProject:(id:string)=>void; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 type DetailLevel=0|1|2;
@@ -71,6 +71,11 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
     rotateItem(){engine.current?.interactions.rotate();},
     cancelItem(){engine.current?.interactions.cancel();},
     walk(direction,held){engine.current?.walk.input(direction,held);},
+    streetChoices(){
+      const e=engine.current;if(!e)return [];
+      const roads=streetNetwork(props.current.buildings,neighborhoodDensity(props.current.buildings)).roads;
+      return streetStartChoices(e.controls.target,roads.values(),streetObstacles(props.current.buildings));
+    },
     streetDropPoint(x,y){
       const e=engine.current;if(!e||e.walk.enabled)return null;
       const r=e.renderer.domElement.getBoundingClientRect();
