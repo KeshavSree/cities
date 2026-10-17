@@ -1,5 +1,23 @@
 [
   {
+    "id": "update-575e2b886c34",
+    "date": "2026-10-17",
+    "title": "Your street comes to life",
+    "summary": "Walk your neighborhood in Street view, design your yard in the new Your Streetview editor, and watch neighbors and lights bring the city to life.",
+    "changes": [
+      "Added Street view. Drag the little person onto a highlighted street, or select it and choose a street, to explore the city in first person.",
+      "Added Your Streetview, a top-down editor opened from your tower layers. Pick a 3D model from the shelf to preview it, snap it to your plot's grid, rotate it, and place it without leaving the editor.",
+      "Spend bricks on flower planters, benches, lamps, small trees, sculptures, neighbors, and corner shops. Level 4 towers can add storefronts that sit flush against the building's walls.",
+      "Pick up your own items in Street view, walk them somewhere new, and set them down again. Moving items you already own is free.",
+      "Neighbors you buy now stroll to nearby shops and head back home, walking around buildings and furnishings.",
+      "The city follows your local time of day. Lamps and shop windows warmly light the sidewalks in the evening, and lighting stays steady while you pan.",
+      "Wild woodland now grows around undeveloped land beyond the city's edge.",
+      "A new neighborhood guide spotlights real controls and moves forward as you open the editor, place your first item, and start a walk. Skip it anytime or replay it from Settings.",
+      "The city draws faster and more smoothly as it grows, and recovers if your graphics context is interrupted.",
+      "Purchases interrupted by a lost connection now finish safely, without charging twice or losing the item's placement."
+    ]
+  },
+  {
     "id": "update-2e1480f6b939",
     "date": "2026-10-15",
     "title": "Build the city together",
