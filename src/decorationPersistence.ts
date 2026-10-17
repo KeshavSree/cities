@@ -14,18 +14,25 @@ export async function persistDecoration(owner:Building,draft:DecorationDraft,onR
   const error=placementError(owner,draft.kind,{x:draft.x,z:draft.z,rotation:draft.rotation},prior?.id||draft.id);
   if(error)throw new Error(error);
   const saving=prior?{...draft,id:prior.id}:draft;
-  try{return (await request<{building:Building}>(saving.id?'/decorations/move':'/decorations/purchase',saving)).building;}
+  let result:Building,failure:unknown;
+  try{result=(await request<{building:Building}>(saving.id?'/decorations/move':'/decorations/purchase',saving)).building;}
   catch(error){
     const fresh=await request<{building:Building}>('/me').catch(()=>null);
     if(!fresh)throw error;
-    onRefresh(fresh.building);
-    const owned=decorationsOf(fresh.building).find(item=>item.id===receiptId);
-    if(!owned||owned.kind!==draft.kind)throw error;
-    if(sameSpot(owned,draft))return fresh.building;
-    if(saving.id)throw error;
-    // The earlier purchase completed at another spot. Finish this placement as a free move.
-    const invalid=placementError(fresh.building,draft.kind,{x:draft.x,z:draft.z,rotation:draft.rotation},owned.id);
-    if(invalid)throw new Error(invalid);
-    return (await request<{building:Building}>('/decorations/move',{...draft,id:owned.id})).building;
+    result=fresh.building;failure=error;
   }
+  const unconfirmed=()=>new Error('The item was not confirmed at this spot. Check your collection and try again.');
+  if(result.id!==owner.id)throw failure??unconfirmed();
+  const owned=decorationsOf(result).find(item=>item.id===receiptId);
+  if(owned?.kind===draft.kind&&sameSpot(owned,draft))return result;
+  onRefresh(result);
+  if(!owned||owned.kind!==draft.kind||saving.id)throw failure??unconfirmed();
+  // Receipt replays can succeed after another tab moved or stored the purchase.
+  const invalid=placementError(result,draft.kind,{x:draft.x,z:draft.z,rotation:draft.rotation},owned.id);
+  if(invalid)throw new Error(invalid);
+  const moved=(await request<{building:Building}>('/decorations/move',{...draft,id:owned.id})).building;
+  if(moved.id!==owner.id)throw unconfirmed();
+  const confirmed=decorationsOf(moved).find(item=>item.id===receiptId&&item.kind===draft.kind);
+  if(!confirmed||!sameSpot(confirmed,draft)){onRefresh(moved);throw unconfirmed();}
+  return moved;
 }

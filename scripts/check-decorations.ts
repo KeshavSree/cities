@@ -79,3 +79,20 @@ const failedMove=new Error('Move was not saved');calls=[];
 await assert.rejects(persistDecoration(purchased,{...saveDraft,id:receipt.id},()=>{},async <T>(path:string)=>{calls.push({path});if(path==='/me')return {building:purchased} as T;throw failedMove;}),error=>error===failedMove);
 assert.deepEqual(calls.map(c=>c.path),['/decorations/move','/me'],'Failed owned moves retain their error rather than creating a second write');
 console.log('Decoration save recovery checks passed: lost responses, changed positions, receipt reuse, authoritative confirmation, failed refreshes, and failed owned moves.');
+
+for(const previous of [receipt,{...receipt,x:null,z:null},{...receipt,x:saveDraft.x,z:saveDraft.z,rotation:2}]){
+ const replayed={...purchased,decorations:JSON.stringify([previous])};calls=[];
+ const result=await persistDecoration(saveOwner,saveDraft,()=>{},async <T>(path:string,data?:unknown)=>{calls.push({path,data});return {building:path==='/decorations/purchase'?replayed:placed} as T;});
+ assert.equal(result,placed);assert.deepEqual(calls.map(c=>c.path),['/decorations/purchase','/decorations/move'],'Successful receipt replays at a moved, stored, or rotated position finish with a free move');
+}
+for(const changed of [{...receipt,id:'another-item'},{...receipt,kind:'bench'}]){
+ calls=[];await assert.rejects(persistDecoration(saveOwner,saveDraft,()=>{},async <T>(path:string)=>{calls.push({path});return {building:{...purchased,decorations:JSON.stringify([changed])}} as T;}),/not confirmed/);
+ assert.deepEqual(calls.map(c=>c.path),['/decorations/purchase'],'A different item cannot confirm this purchase or trigger a move');
+}
+await assert.rejects(persistDecoration(saveOwner,saveDraft,()=>{},async <T>()=>({building:{...placed,id:'other-owner'}} as T)),/not confirmed/,'Another owner cannot confirm a placement');
+for(const lost of [false,true]){
+ calls=[];await assert.rejects(persistDecoration(saveOwner,saveDraft,()=>{},async <T>(path:string)=>{calls.push({path});if(lost&&path==='/decorations/purchase')throw lostResponse;return {building:purchased} as T;}),/not confirmed/,'A free move must confirm the requested spot too');
+ assert.deepEqual(calls.map(c=>c.path),lost?['/decorations/purchase','/me','/decorations/move']:['/decorations/purchase','/decorations/move'],'Mismatched responses never cause an unbounded retry');
+}
+await assert.rejects(persistDecoration(purchased,{...saveDraft,id:receipt.id},()=>{},async <T>()=>({building:purchased} as T)),/not confirmed/,'Owned move responses must confirm the requested position');
+console.log('Receipt response checks passed: moved/stored/rotated HTTP 200 replays, item and owner identity, recovered move confirmation, and bounded writes.');
