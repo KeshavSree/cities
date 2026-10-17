@@ -5,7 +5,7 @@ export class AmbientStreetLights {
   readonly group=new THREE.Group();
   private geometry=new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2);
   private material=new THREE.ShaderMaterial({
-    uniforms:{warmth:{value:new THREE.Color('#ffd598')}},transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,fog:true,
+    uniforms:THREE.UniformsUtils.merge([THREE.UniformsLib.fog,{warmth:{value:new THREE.Color('#ffd598')}}]),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,fog:true,
     vertexShader:`#include <common>
       #include <fog_pars_vertex>
       varying vec2 poolUv;
