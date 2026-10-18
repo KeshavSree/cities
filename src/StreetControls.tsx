@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Clock3, Footprints, Map, PersonStanding, RotateCw, ShoppingBag, X } from 'lucide-react';
+import { ArrowRight, Clock3, Footprints, Map, PersonStanding, RotateCw, ShoppingBag, X } from 'lucide-react';
 import type { WalkDirection } from './StreetWalk';
 import type { StreetStart } from './streetNavigation';
 import type { StreetInteractionState } from './streetInteractionState';
+import { MobileStreetControls } from './MobileStreetControls';
+import { StreetWalkPad } from './StreetWalkPad';
 import './street-view.css';
 function StreetPerson(){return <PersonStanding className="street-person-figure" size={26} aria-hidden="true"/>;}
-const directions=[['left','Walk left',ArrowLeft],['forward','Walk forward',ArrowUp],['right','Walk right',ArrowRight],['back','Walk backward',ArrowDown]] as const;
-interface Props {placing?:boolean;switchingDisabled?:boolean;onLightingSettings?:()=>void;active:boolean;available:boolean;paused:boolean;picking:boolean;hasHome:boolean;mouseLocked:boolean;mouseCaptureBlocked:boolean;interaction:StreetInteractionState;onLook:()=>void;onRotate:()=>void;onCancelItem:()=>void;onShop:()=>void;onChange:(active:boolean)=>void;onWalk:(direction:WalkDirection,held:boolean)=>void;onStreetChoices:()=>StreetStart[];onStreetPreview:(start:StreetStart)=>void;onDragPoint:(x:number,y:number)=>StreetStart|null;onDrop:(start:StreetStart)=>void;}
-export function StreetControls({placing=false,switchingDisabled=false,onLightingSettings,active,available,paused,picking,hasHome,mouseLocked,mouseCaptureBlocked,interaction,onLook,onRotate,onCancelItem,onShop,onChange,onWalk,onStreetChoices,onStreetPreview,onDragPoint,onDrop}:Props){
+interface Props {mobileUI:boolean;onUseItem:()=>void;onResume:()=>void;placing?:boolean;switchingDisabled?:boolean;onLightingSettings?:()=>void;active:boolean;available:boolean;paused:boolean;picking:boolean;hasHome:boolean;mouseLocked:boolean;mouseCaptureBlocked:boolean;interaction:StreetInteractionState;onLook:()=>void;onRotate:()=>void;onCancelItem:()=>void;onShop:()=>void;onChange:(active:boolean)=>void;onWalk:(direction:WalkDirection,held:boolean)=>void;onStreetChoices:()=>StreetStart[];onStreetPreview:(start:StreetStart)=>void;onDragPoint:(x:number,y:number)=>StreetStart|null;onDrop:(start:StreetStart)=>void;}
+export function StreetControls({mobileUI,onUseItem,onResume,placing=false,switchingDisabled=false,onLightingSettings,active,available,paused,picking,hasHome,mouseLocked,mouseCaptureBlocked,interaction,onLook,onRotate,onCancelItem,onShop,onChange,onWalk,onStreetChoices,onStreetPreview,onDragPoint,onDrop}:Props){
   const gesture=useRef<{id:number;x:number;y:number;moved:boolean;wasPicking:boolean}|null>(null);
   const [drag,setDrag]=useState<{x:number;y:number;valid:boolean}|null>(null);
   const [choices,setChoices]=useState<StreetStart[]>([]),[choice,setChoice]=useState(''),[keyboardPicking,setKeyboardPicking]=useState(false);
@@ -21,6 +22,7 @@ export function StreetControls({placing=false,switchingDisabled=false,onLighting
     return()=>{window.removeEventListener('blur',cancel);window.removeEventListener('keydown',key);};
   },[onChange,picking]);
   useEffect(()=>{if(!picking){gesture.current=null;setDrag(null);}},[picking]);
+  if(active&&mobileUI)return <MobileStreetControls paused={paused} hasHome={hasHome} switchingDisabled={switchingDisabled} interaction={interaction} onChange={onChange} onShop={onShop} onResume={onResume} onUseItem={onUseItem} onRotate={onRotate} onCancelItem={onCancelItem} onWalk={onWalk} onLightingSettings={onLightingSettings}/>;
   return <>
     <div className="view-switch" role="group" aria-label="View mode">
       <button disabled={switchingDisabled} aria-pressed={!active&&!picking} onClick={()=>onChange(false)}><Map size={16}/><span>City view</span></button>
@@ -32,15 +34,15 @@ export function StreetControls({placing=false,switchingDisabled=false,onLighting
         onPointerCancel={()=>{gesture.current=null;setDrag(null);onChange(false);}}
         onLostPointerCapture={()=>{if(gesture.current){gesture.current=null;setDrag(null);onChange(false);}}}><StreetPerson/><span>Street view</span></button>}
     </div>
-    {!active&&!placing&&!drag&&<p id="street-entry-hint" className="street-entry-hint">{picking?'Click a highlighted street or choose from the list':'Drag the person or click to choose a street'}</p>}
+    {!active&&!placing&&!drag&&<p id="street-entry-hint" className="street-entry-hint">{picking?(mobileUI?'Tap a highlighted street or choose from the list':'Click a highlighted street or choose from the list'):(mobileUI?'Drag the person or tap to choose a street':'Drag the person or click to choose a street')}</p>}
     {drag&&<div className={`street-person-ghost ${drag.valid?'is-valid':''}`} style={{left:drag.x,top:drag.y}} aria-hidden="true"><StreetPerson/><span>{drag.valid?'Drop to enter':'Drop onto a highlighted street'}</span></div>}
-    {picking&&!drag&&<form className="street-start-picker" onSubmit={event=>{event.preventDefault();const start=choices.find(start=>start.roadKey===choice);if(start&&!paused&&!switchingDisabled)onDrop(start);}}>
+    {picking&&!drag&&<form className={`street-start-picker ${mobileUI?'street-start-mobile':''}`} onSubmit={event=>{event.preventDefault();const start=choices.find(start=>start.roadKey===choice);if(start&&!paused&&!switchingDisabled)onDrop(start);}}>
       <label htmlFor="street-start-choice">Choose a starting street</label>
       <select ref={streetSelect} id="street-start-choice" value={choice} disabled={paused||switchingDisabled} onChange={event=>{const key=event.target.value;setChoice(key);const start=choices.find(start=>start.roadKey===key);if(start)onStreetPreview(start);}}>
         <option value="">{choices.length?'Select a nearby street':'No clear streets available'}</option>{choices.map((start,index)=><option key={start.roadKey} value={start.roadKey}>{start.label}, section {index+1}</option>)}
       </select><button type="submit" disabled={!choice||paused||switchingDisabled}>Enter Street view <ArrowRight size={15}/></button>
     </form>}
-    {picking&&<div className="street-drop-guide" role="status">{drag?(drag.valid?'Drop here to enter Street view':'Drag onto a highlighted street'):'Choose a highlighted street'} <span>Esc to cancel</span></div>}
+    {picking&&<div className="street-drop-guide" role="status">{drag?(drag.valid?'Drop here to enter Street view':'Drag onto a highlighted street'):'Choose a highlighted street'} {mobileUI?<button type="button" onClick={()=>onChange(false)}>Cancel</button>:<span>Esc to cancel</span>}</div>}
     {active&&<>
       {!paused&&<div className={`street-reticle ${interaction.target?'has-target':''} ${interaction.carrying?(interaction.error?'invalid':'carrying'):''}`} aria-hidden="true"/>}
       {!paused&&!mouseLocked&&!interaction.carrying&&<div className="street-lock-prompt">{mouseCaptureBlocked&&<p role="status">This browser blocked mouse capture. Open this page in Chrome or Safari to keep the mouse inside Street view.</p>}<button onClick={onLook}>{mouseCaptureBlocked?'Retry mouse capture':'Click to look around'}</button><span>{mouseCaptureBlocked?'You can still use Q/E and arrow keys to look.':'Esc releases your mouse'}</span></div>}
@@ -51,13 +53,7 @@ export function StreetControls({placing=false,switchingDisabled=false,onLighting
         {hasHome&&<button onClick={onShop} aria-label="Open neighborhood shop"><ShoppingBag size={18}/><span>Shop</span></button>}
         {interaction.carrying&&<>{!interaction.attached&&<button disabled={interaction.saving} onClick={onRotate} aria-label="Rotate held item"><RotateCw size={18}/></button>}<button disabled={interaction.saving} onClick={onCancelItem} aria-label="Cancel carrying item"><X size={18}/></button></>}
       </div>}
-      <div className="street-walk-pad" role="group" aria-label="Walking controls">
-        {directions.map(([direction,label,Icon])=><button key={direction} className={`walk-${direction}`} aria-label={label} disabled={paused}
-          onPointerDown={event=>{event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);onWalk(direction,true);}}
-          onPointerUp={()=>onWalk(direction,false)} onPointerCancel={()=>onWalk(direction,false)} onLostPointerCapture={()=>onWalk(direction,false)}
-          onKeyDown={event=>{if(event.key===' '||event.key==='Enter'){event.preventDefault();onWalk(direction,true);}}}
-          onKeyUp={()=>onWalk(direction,false)} onBlur={()=>onWalk(direction,false)}><Icon size={21}/></button>)}
-      </div>
+      <StreetWalkPad paused={paused} onWalk={onWalk}/>
     </>}
   </>;
 }

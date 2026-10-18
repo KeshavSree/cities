@@ -35,7 +35,7 @@ import { decorationModel } from './DecorationModels';
 import { decorationFootprint, placementError, DECORATION_ROAD_INSET, type DecorationDraft } from '../shared/decorations';
 import './tower-upgrade.css';
 
-export interface SceneHandle { streetChoices:()=>StreetStart[];takeItem:()=>DecorationDraft|null;focus: (b: {x:number;z:number;level?:number}) => void; reset: () => void; zoom: (amount: number) => void; walk:(direction:WalkDirection,held:boolean)=>void; streetDropPoint:(x:number,y:number)=>StreetStart|null; look:()=>void; rotateItem:()=>void; cancelItem:()=>void; }
+export interface SceneHandle { useItem:()=>void;streetChoices:()=>StreetStart[];takeItem:()=>DecorationDraft|null;focus: (b: {x:number;z:number;level?:number}) => void; reset: () => void; zoom: (amount: number) => void; walk:(direction:WalkDirection,held:boolean)=>void; streetDropPoint:(x:number,y:number)=>StreetStart|null; look:()=>void; rotateItem:()=>void; cancelItem:()=>void; }
 interface Props { preserveStreetDraft?:boolean;streetDraft?:DecorationDraft|null; onStreetSave?:(draft:DecorationDraft)=>Promise<boolean>; onStreetDraftCancel?:()=>void; onStreetState?:(state:StreetInteractionState)=>void; onMouseLock?:(locked:boolean,blocked?:boolean)=>void; ownerId?:string|null; pageVisible?:boolean; streetView?:boolean; pickingStreet?:boolean; streetStart?:StreetStart|null; onStreetPick?:(start:StreetStart|null)=>void; onStreetEnter?:(start:StreetStart)=>void; decorationOwner?:string|null; decorationDraft?:DecorationDraft|null; onDecorationPosition?:(x:number,z:number)=>void; onDecorationCancel?:()=>void; navigationPaused?:boolean; onStreetExit?:()=>void; buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; debugScores:boolean; lodEnabled:boolean; previews:PlotPreview[]; placementMode?:boolean; placementOrigin?:{x:number;z:number}; placementChoice?:string|null; onPlacement?:(key:string)=>void; projects:PublicProject[]; onProject:(id:string)=>void; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 type DetailLevel=0|1|2;
@@ -68,6 +68,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ pre
     reset() { const e = engine.current; if (!e) return; e.focus = new THREE.Vector3(0,0,0); e.camera.position.set(38, 36, 46).multiplyScalar(4).add(e.controls.target); e.camera.zoom = .83; e.camera.updateProjectionMatrix(); e.invalidate(1600); },
     takeItem(){return engine.current?.interactions.takeDraft()??null;},
     look(){const e=engine.current;if(e){e.walk.setPaused(props.current.navigationPaused||!props.current.pageVisible);e.walk.requestMouseLook();}},
+    useItem(){void engine.current?.interactions.interact();},
     rotateItem(){engine.current?.interactions.rotate();},
     cancelItem(){engine.current?.interactions.cancel();},
     walk(direction,held){engine.current?.walk.input(direction,held);},

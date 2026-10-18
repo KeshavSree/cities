@@ -142,7 +142,7 @@ export class StreetInteraction {
     }
     this.emit(emptyStreetInteraction);
   }
-  private interact=async()=>{
+  interact=async()=>{
     const config=this.options();if(!this.walk.enabled||config.paused||this.saving)return;
     const owner=config.buildings.find(b=>b.id===config.ownerId);if(!owner)return;
     if(!this.held){
