@@ -10,7 +10,7 @@ import { SpatialIndex } from './SpatialIndex';
 import type { StreetWalk } from './StreetWalk';
 
 import { emptyStreetInteraction, type StreetInteractionState } from './streetInteractionState';
-interface Options {buildings:Building[];ownerId:string|null;lightsOn:boolean;paused:boolean;onState:(state:StreetInteractionState)=>void;onSave:(draft:DecorationDraft)=>Promise<boolean>;onCancel:()=>void;}
+interface Options {buttonOnly?:boolean;buildings:Building[];ownerId:string|null;lightsOn:boolean;paused:boolean;onState:(state:StreetInteractionState)=>void;onSave:(draft:DecorationDraft)=>Promise<boolean>;onCancel:()=>void;}
 
 /** Reticle picking and carried previews stay in the render loop, outside React. */
 export class StreetInteraction {
@@ -42,9 +42,6 @@ export class StreetInteraction {
     this.ray.far=3.2;
     canvas.addEventListener('click',this.click);
     canvas.addEventListener('pointerdown',this.pointerDown,true);
-    canvas.addEventListener('pointermove',this.touchMove);
-    canvas.addEventListener('pointerup',this.touchUp);
-    canvas.addEventListener('pointercancel',this.touchCancel);
     window.addEventListener('keydown',this.keyDown);
   }
   get carriedId(){return this.held?.id;}
@@ -160,30 +157,15 @@ export class StreetInteraction {
   };
   private click=(event:MouseEvent)=>{
     const readyAtStart=this.mouseDownCanInteract;this.mouseDownCanInteract=false;
-    if(event.button!==0||performance.now()-this.lastTouch<600||!readyAtStart)return;
+    if(this.options().buttonOnly||event.button!==0||performance.now()-this.lastTouch<600||!readyAtStart)return;
     event.preventDefault();if(this.walk.mouseLocked||this.held)void this.interact();
   };
-  private touches=new Set<number>();
-  private touchDownPoint:{id:number;x:number;y:number}|null=null;
   private pointerDown=(event:PointerEvent)=>{
-    // Capture clicks cannot pick up an item. A held preview is already in placement mode, including browsers without capture.
-    if(event.pointerType==='mouse'){this.mouseDownCanInteract=event.button===0&&(this.walk.mouseLocked||Boolean(this.held));return;}
-    if(event.pointerType!=='touch')return;
-    this.touches.add(event.pointerId);
-    if(this.touches.size>1){this.touchDownPoint=null;return;}
-    this.touchDownPoint={id:event.pointerId,x:event.clientX,y:event.clientY};
-  };
-  private touchMove=(event:PointerEvent)=>{
-    const start=this.touchDownPoint;
-    if(start?.id===event.pointerId&&Math.hypot(event.clientX-start.x,event.clientY-start.y)>8)this.touchDownPoint=null;
-  };
-  private touchCancel=(event:PointerEvent)=>{this.touches.delete(event.pointerId);this.touchDownPoint=null;this.mouseDownCanInteract=false;};
-  private touchUp=(event:PointerEvent)=>{
-    if(event.pointerType!=='touch')return;
-    this.touches.delete(event.pointerId);this.lastTouch=performance.now();
-    const start=this.touchDownPoint;this.touchDownPoint=null;
-    if(!start||start.id!==event.pointerId||Math.hypot(event.clientX-start.x,event.clientY-start.y)>8)return;
-    void this.interact();
+    // Touches and pens navigate only. Mobile pickup/placement is explicit in
+    // the HUD; compatibility mouse clicks must never turn a look into a move.
+    const navigation=event.pointerType!=='mouse';
+    if(navigation)this.lastTouch=performance.now();
+    this.mouseDownCanInteract=!navigation&&!this.options().buttonOnly&&event.button===0&&(this.walk.mouseLocked||Boolean(this.held));
   };
   private keyDown=(event:KeyboardEvent)=>{
     if(!this.walk.enabled||!this.held)return;
@@ -202,5 +184,5 @@ export class StreetInteraction {
   private disposeGhost(){
     const materials=new Set<THREE.Material>();this.group.traverse(object=>{if(object instanceof THREE.Mesh){object.geometry.dispose();const m=object.material;for(const material of Array.isArray(m)?m:[m])materials.add(material);}});materials.forEach(m=>m.dispose());this.group.clear();
   }
-  dispose(){this.alive=false;this.canvas.removeEventListener('click',this.click);this.canvas.removeEventListener('pointerdown',this.pointerDown,true);this.canvas.removeEventListener('pointermove',this.touchMove);this.canvas.removeEventListener('pointerup',this.touchUp);this.canvas.removeEventListener('pointercancel',this.touchCancel);window.removeEventListener('keydown',this.keyDown);this.disposeGhost();}
+  dispose(){this.alive=false;this.canvas.removeEventListener('click',this.click);this.canvas.removeEventListener('pointerdown',this.pointerDown,true);window.removeEventListener('keydown',this.keyDown);this.disposeGhost();}
 }

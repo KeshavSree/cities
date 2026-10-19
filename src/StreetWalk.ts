@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { captureStreetPointer } from './streetPointer';
 import { canWalk, EYE_HEIGHT, WALK_RADIUS, streetArrival, streetObstacles, walkStep, type StreetPoint, type StreetStart } from './streetNavigation';
 import type { Building } from '../shared/types';
 import { plotPlan } from '../shared/plots';
@@ -21,7 +22,7 @@ export class StreetWalk {
   private touch=new Set<WalkDirection>();
   private stickSide=0;
   private stickForward=0;
-  private drag:{id:number;x:number;y:number}|null=null;
+  private drag:{kind:'pointer'|'touch';id:number;x:number;y:number}|null=null;
   private wantMouseLook=false;
   private hadNativeLock=false;
   private obstacles:StreetPoint[][]=[];
@@ -34,9 +35,10 @@ export class StreetWalk {
     document.addEventListener('visibilitychange',this.clear);
     document.addEventListener('focusin',this.focusChanged);
     canvas.addEventListener('pointerdown',this.pointerDown);
-    canvas.addEventListener('pointermove',this.pointerMove);
-    canvas.addEventListener('pointerup',this.pointerEnd);
-    canvas.addEventListener('pointercancel',this.pointerEnd);
+    window.addEventListener('pointermove',this.pointerMove);
+    window.addEventListener('pointerup',this.pointerEnd);
+    window.addEventListener('pointercancel',this.pointerEnd);
+    canvas.addEventListener('touchstart',this.touchStart,{passive:false});window.addEventListener('touchmove',this.touchMove,{passive:false});window.addEventListener('touchend',this.touchEnd);window.addEventListener('touchcancel',this.touchEnd);
     canvas.addEventListener('lostpointercapture',this.pointerEnd);
     canvas.addEventListener('contextmenu',this.contextMenu);
     document.addEventListener('pointerlockchange',this.lockChanged);
@@ -129,18 +131,30 @@ export class StreetWalk {
   private clear=()=>{this.keys.clear();this.touch.clear();this.stickSide=0;this.stickForward=0;this.drag=null;};
   private focusChanged=()=>{if(document.activeElement!==this.canvas){this.keys.clear();this.drag=null;}};
   private pointerDown=(event:PointerEvent)=>{
-    if(!this.enabled||this.blocked()||event.button!==0||this.drag)return;
+    if(!this.enabled||this.blocked()||(event.pointerType==='touch'&&'ontouchstart' in window)||event.button!==0||this.drag)return;
     if(event.pointerType==='mouse'){if(!this.mouseLocked)this.requestMouseLook();return;}
-    this.drag={id:event.pointerId,x:event.clientX,y:event.clientY};
-    this.canvas.setPointerCapture(event.pointerId);
+    this.drag={kind:'pointer',id:event.pointerId,x:event.clientX,y:event.clientY};
+    captureStreetPointer(this.canvas,event.pointerId);
   };
   private pointerMove=(event:PointerEvent)=>{
-    if(!this.enabled||!this.drag||this.drag.id!==event.pointerId||this.blocked())return;
-    this.yaw-=(event.clientX-this.drag.x)*.004;
-    this.pitch=THREE.MathUtils.clamp(this.pitch-(event.clientY-this.drag.y)*.004,-1.15,1.4);
-    this.drag.x=event.clientX;this.drag.y=event.clientY;this.orient();this.invalidate();
+    if(this.drag?.kind==='pointer'&&this.drag.id===event.pointerId)this.moveDrag(event.clientX,event.clientY);
   };
-  private pointerEnd=(event:PointerEvent)=>{if(this.drag?.id===event.pointerId)this.drag=null;};
+  private moveDrag(x:number,y:number){
+    if(!this.enabled||!this.drag||this.blocked())return;
+    this.yaw-=(x-this.drag.x)*.004;
+    this.pitch=THREE.MathUtils.clamp(this.pitch-(y-this.drag.y)*.004,-1.15,1.4);
+    this.drag.x=x;this.drag.y=y;this.orient();this.invalidate();
+  };
+  private pointerEnd=(event:PointerEvent)=>{if(this.drag?.kind==='pointer'&&this.drag.id===event.pointerId)this.drag=null;};
+  private touchStart=(event:TouchEvent)=>{
+    if(!this.enabled||this.blocked()||this.drag)return;const touch=event.changedTouches[0];if(!touch)return;
+    event.preventDefault();this.drag={kind:'touch',id:touch.identifier,x:touch.clientX,y:touch.clientY};
+  };
+  private touchMove=(event:TouchEvent)=>{
+    const drag=this.drag;if(drag?.kind!=='touch')return;const touch=Array.from(event.changedTouches).find(t=>t.identifier===drag.id);
+    if(touch){event.preventDefault();this.moveDrag(touch.clientX,touch.clientY);}
+  };
+  private touchEnd=(event:TouchEvent)=>{const drag=this.drag;if(drag?.kind==='touch'&&Array.from(event.changedTouches).some(t=>t.identifier===drag.id))this.drag=null;};
   private contextMenu=(event:Event)=>{if(this.enabled)event.preventDefault();};
   private orient(){this.camera.rotation.set(this.pitch,this.yaw,0);this.camera.updateMatrixWorld();}
 
@@ -164,8 +178,9 @@ export class StreetWalk {
   dispose(){
     window.removeEventListener('keydown',this.keyDown);window.removeEventListener('keyup',this.keyUp);window.removeEventListener('blur',this.releaseMouse);
     document.removeEventListener('visibilitychange',this.clear);document.removeEventListener('focusin',this.focusChanged);
-    this.canvas.removeEventListener('pointerdown',this.pointerDown);this.canvas.removeEventListener('pointermove',this.pointerMove);
-    this.canvas.removeEventListener('pointerup',this.pointerEnd);this.canvas.removeEventListener('pointercancel',this.pointerEnd);
+    this.canvas.removeEventListener('pointerdown',this.pointerDown);window.removeEventListener('pointermove',this.pointerMove);
+    window.removeEventListener('pointerup',this.pointerEnd);window.removeEventListener('pointercancel',this.pointerEnd);
+    this.canvas.removeEventListener('touchstart',this.touchStart);window.removeEventListener('touchmove',this.touchMove);window.removeEventListener('touchend',this.touchEnd);window.removeEventListener('touchcancel',this.touchEnd);
     this.canvas.removeEventListener('lostpointercapture',this.pointerEnd);this.canvas.removeEventListener('contextmenu',this.contextMenu);document.removeEventListener('pointerlockchange',this.lockChanged);document.removeEventListener('pointerlockerror',this.lockFailed);document.removeEventListener('mousemove',this.nativeMouseMove);this.releaseMouse();
   }
 }

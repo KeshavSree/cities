@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent, type MouseEvent } from 'react';
+import { captureStreetPointer } from './streetPointer';
 import { ArrowLeft, Check, Clock3, Hand, LoaderCircle, Package, Play, RotateCw, Grid3X3, X } from 'lucide-react';
 import type { StreetInteractionState } from './streetInteractionState';
 import { StreetJoystick } from './StreetJoystick';
@@ -11,7 +12,7 @@ function useTouchActions(){
   return (action:()=>void)=>({
     onPointerDown:(event:PointerEvent<HTMLButtonElement>)=>{
       if(event.pointerType==='mouse'||event.button!==0||event.currentTarget.disabled)return;
-      event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);lastTouch.current=performance.now();
+      event.preventDefault();captureStreetPointer(event.currentTarget,event.pointerId);lastTouch.current=performance.now();
       pointers.current.set(event.pointerId,{x:event.clientX,y:event.clientY,action});
     },
     onPointerMove:(event:PointerEvent<HTMLButtonElement>)=>{const start=pointers.current.get(event.pointerId);if(start&&Math.hypot(event.clientX-start.x,event.clientY-start.y)>12)pointers.current.delete(event.pointerId);},
