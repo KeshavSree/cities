@@ -45,13 +45,13 @@ export function MobileStreetControls({paused,hasHome,switchingDisabled,interacti
       </>}</div>
     </nav>
     {!paused&&<>
+      <StreetJoystick onMove={onJoystick}/>
       <div className={`street-reticle ${target?'has-target':''} ${carrying?(error?'invalid':'carrying'):''}`} aria-hidden="true"/>
       <div className="mobile-street-bottom">
         <div id="mobile-street-status" className={`mobile-street-status ${error?'invalid':''}`} role="status">
-          {carrying?<><strong>Holding {carrying.toLowerCase()}</strong><span>{saving?'Saving your spot…':error|| (attached?'Snaps to the base of your tower':'Walk to a clear spot on your property')}</span></>:target?<><strong>{target}</strong><span>Your item is within reach</span></>:<span>Drag the joystick to walk. Swipe to look.</span>}
+          {carrying?<><strong>Holding {carrying.toLowerCase()}</strong><span>{saving?'Saving your spot…':error|| (attached?'Snaps to the base of your tower':'Walk to a clear spot on your property')}</span></>:target?<><strong>{target}</strong><span>Your item is within reach</span></>:<span>Touch and drag on the left to walk. Swipe on the right to look.</span>}
         </div>
         <div className="mobile-street-thumbs">
-          <StreetJoystick onMove={onJoystick}/>
           {hasHome&&<div className="mobile-street-actions">
             <button className={`mobile-street-use ${carrying?'is-placing':''}`} aria-label={carrying?'Place held item':'Pick up highlighted item'} aria-describedby="mobile-street-status" disabled={!canUse} {...press(onUseItem)}>
               {saving?<LoaderCircle size={22} className="spin"/>:carrying?<Check size={22}/>:<Hand size={22}/>}
