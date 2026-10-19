@@ -7,8 +7,8 @@ import { MobileStreetControls } from './MobileStreetControls';
 import { StreetWalkPad } from './StreetWalkPad';
 import './street-view.css';
 function StreetPerson(){return <PersonStanding className="street-person-figure" size={26} aria-hidden="true"/>;}
-interface Props {mobileUI:boolean;onUseItem:()=>void;onResume:()=>void;placing?:boolean;switchingDisabled?:boolean;onLightingSettings?:()=>void;active:boolean;available:boolean;paused:boolean;picking:boolean;hasHome:boolean;mouseLocked:boolean;mouseCaptureBlocked:boolean;interaction:StreetInteractionState;onLook:()=>void;onRotate:()=>void;onCancelItem:()=>void;onShop:()=>void;onChange:(active:boolean)=>void;onWalk:(direction:WalkDirection,held:boolean)=>void;onStreetChoices:()=>StreetStart[];onStreetPreview:(start:StreetStart)=>void;onDragPoint:(x:number,y:number)=>StreetStart|null;onDrop:(start:StreetStart)=>void;}
-export function StreetControls({mobileUI,onUseItem,onResume,placing=false,switchingDisabled=false,onLightingSettings,active,available,paused,picking,hasHome,mouseLocked,mouseCaptureBlocked,interaction,onLook,onRotate,onCancelItem,onShop,onChange,onWalk,onStreetChoices,onStreetPreview,onDragPoint,onDrop}:Props){
+interface Props {onJoystick:(side:number,forward:number)=>void;mobileUI:boolean;onUseItem:()=>void;onResume:()=>void;placing?:boolean;switchingDisabled?:boolean;onLightingSettings?:()=>void;active:boolean;available:boolean;paused:boolean;picking:boolean;hasHome:boolean;mouseLocked:boolean;mouseCaptureBlocked:boolean;interaction:StreetInteractionState;onLook:()=>void;onRotate:()=>void;onCancelItem:()=>void;onShop:()=>void;onChange:(active:boolean)=>void;onWalk:(direction:WalkDirection,held:boolean)=>void;onStreetChoices:()=>StreetStart[];onStreetPreview:(start:StreetStart)=>void;onDragPoint:(x:number,y:number)=>StreetStart|null;onDrop:(start:StreetStart)=>void;}
+export function StreetControls({onJoystick,mobileUI,onUseItem,onResume,placing=false,switchingDisabled=false,onLightingSettings,active,available,paused,picking,hasHome,mouseLocked,mouseCaptureBlocked,interaction,onLook,onRotate,onCancelItem,onShop,onChange,onWalk,onStreetChoices,onStreetPreview,onDragPoint,onDrop}:Props){
   const gesture=useRef<{id:number;x:number;y:number;moved:boolean;wasPicking:boolean}|null>(null);
   const [drag,setDrag]=useState<{x:number;y:number;valid:boolean}|null>(null);
   const [choices,setChoices]=useState<StreetStart[]>([]),[choice,setChoice]=useState(''),[keyboardPicking,setKeyboardPicking]=useState(false);
@@ -22,7 +22,7 @@ export function StreetControls({mobileUI,onUseItem,onResume,placing=false,switch
     return()=>{window.removeEventListener('blur',cancel);window.removeEventListener('keydown',key);};
   },[onChange,picking]);
   useEffect(()=>{if(!picking){gesture.current=null;setDrag(null);}},[picking]);
-  if(active&&mobileUI)return <MobileStreetControls paused={paused} hasHome={hasHome} switchingDisabled={switchingDisabled} interaction={interaction} onChange={onChange} onShop={onShop} onResume={onResume} onUseItem={onUseItem} onRotate={onRotate} onCancelItem={onCancelItem} onWalk={onWalk} onLightingSettings={onLightingSettings}/>;
+  if(active&&mobileUI)return <MobileStreetControls paused={paused} hasHome={hasHome} switchingDisabled={switchingDisabled} interaction={interaction} onChange={onChange} onShop={onShop} onResume={onResume} onUseItem={onUseItem} onRotate={onRotate} onCancelItem={onCancelItem} onJoystick={onJoystick} onLightingSettings={onLightingSettings}/>;
   return <>
     <div className="view-switch" role="group" aria-label="View mode">
       <button disabled={switchingDisabled} aria-pressed={!active&&!picking} onClick={()=>onChange(false)}><Map size={16}/><span>City view</span></button>

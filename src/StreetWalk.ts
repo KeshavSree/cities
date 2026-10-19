@@ -19,6 +19,8 @@ export class StreetWalk {
   private pitch=0;
   private keys=new Set<string>();
   private touch=new Set<WalkDirection>();
+  private stickSide=0;
+  private stickForward=0;
   private drag:{id:number;x:number;y:number}|null=null;
   private wantMouseLook=false;
   private hadNativeLock=false;
@@ -113,6 +115,10 @@ export class StreetWalk {
     if(held)this.touch.add(direction);else this.touch.delete(direction);
     this.invalidate();
   }
+  joystick(side:number,forward:number){
+    if(!this.enabled||this.paused||!Number.isFinite(side)||!Number.isFinite(forward)){side=0;forward=0;}
+    const length=Math.max(1,Math.hypot(side,forward));this.stickSide=side/length;this.stickForward=forward/length;this.invalidate();
+  }
   private blocked=()=>this.paused||document.hidden||Boolean(document.querySelector('[aria-modal="true"]'));
   private keyDown=(event:KeyboardEvent)=>{
     if(!this.enabled)return;
@@ -121,7 +127,7 @@ export class StreetWalk {
     event.preventDefault();this.keys.add(event.code);this.invalidate();
   };
   private keyUp=(event:KeyboardEvent)=>{this.keys.delete(event.code);};
-  private clear=()=>{this.keys.clear();this.touch.clear();this.drag=null;};
+  private clear=()=>{this.keys.clear();this.touch.clear();this.stickSide=0;this.stickForward=0;this.drag=null;};
   private focusChanged=()=>{if(document.activeElement!==this.canvas){this.keys.clear();this.drag=null;}};
   private pointerDown=(event:PointerEvent)=>{
     if(!this.enabled||this.blocked()||event.button!==0||this.drag)return;
@@ -142,8 +148,8 @@ export class StreetWalk {
   update(seconds:number){
     if(!this.enabled||this.blocked()){this.clear();return false;}
     const down=(key:string)=>Number(this.keys.has(key));
-    const forward=down('KeyW')-down('KeyS')+Number(this.touch.has('forward'))-Number(this.touch.has('back'));
-    const side=down('KeyD')-down('KeyA')+Number(this.touch.has('right'))-Number(this.touch.has('left'));
+    const forward=down('KeyW')-down('KeyS')+Number(this.touch.has('forward'))-Number(this.touch.has('back'))+this.stickForward;
+    const side=down('KeyD')-down('KeyA')+Number(this.touch.has('right'))-Number(this.touch.has('left'))+this.stickSide;
     const turn=down('KeyQ')-down('KeyE')+down('ArrowLeft')-down('ArrowRight');
     const tilt=down('ArrowUp')-down('ArrowDown');
     if(!forward&&!side&&!turn&&!tilt)return false;

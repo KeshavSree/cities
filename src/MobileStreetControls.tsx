@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent, type MouseEvent } from 'react';
 import { ArrowLeft, Check, Clock3, Hand, LoaderCircle, Package, Play, RotateCw, ShoppingBag, X } from 'lucide-react';
 import type { StreetInteractionState } from './streetInteractionState';
-import type { WalkDirection } from './StreetWalk';
-import { StreetWalkPad } from './StreetWalkPad';
+import { StreetJoystick } from './StreetJoystick';
 import './mobile-street.css';
 
 const mobileStreetQuery='(max-width: 760px), (pointer: coarse)';
@@ -31,8 +30,8 @@ export function useMobileStreetUI(){
   useEffect(()=>{const media=window.matchMedia(mobileStreetQuery),change=()=>setMobile(media.matches);media.addEventListener('change',change);change();return()=>media.removeEventListener('change',change);},[]);
   return mobile;
 }
-interface Props {paused:boolean;hasHome:boolean;switchingDisabled:boolean;interaction:StreetInteractionState;onChange:(active:boolean)=>void;onShop:()=>void;onResume:()=>void;onUseItem:()=>void;onRotate:()=>void;onCancelItem:()=>void;onWalk:(direction:WalkDirection,held:boolean)=>void;onLightingSettings?:()=>void;}
-export function MobileStreetControls({paused,hasHome,switchingDisabled,interaction,onChange,onShop,onResume,onUseItem,onRotate,onCancelItem,onWalk,onLightingSettings}:Props){
+interface Props {paused:boolean;hasHome:boolean;switchingDisabled:boolean;interaction:StreetInteractionState;onChange:(active:boolean)=>void;onShop:()=>void;onResume:()=>void;onUseItem:()=>void;onRotate:()=>void;onCancelItem:()=>void;onJoystick:(side:number,forward:number)=>void;onLightingSettings?:()=>void;}
+export function MobileStreetControls({paused,hasHome,switchingDisabled,interaction,onChange,onShop,onResume,onUseItem,onRotate,onCancelItem,onJoystick,onLightingSettings}:Props){
   const press=useTouchActions();
   const {target,carrying,error,saving,purchase,cost,attached}=interaction;
   const canUse=!saving&&(carrying?!error:Boolean(target));
@@ -49,10 +48,10 @@ export function MobileStreetControls({paused,hasHome,switchingDisabled,interacti
       <div className={`street-reticle ${target?'has-target':''} ${carrying?(error?'invalid':'carrying'):''}`} aria-hidden="true"/>
       <div className="mobile-street-bottom">
         <div id="mobile-street-status" className={`mobile-street-status ${error?'invalid':''}`} role="status">
-          {carrying?<><strong>Holding {carrying.toLowerCase()}</strong><span>{saving?'Saving your spot…':error|| (attached?'Snaps to the base of your tower':'Walk to a clear spot on your property')}</span></>:target?<><strong>{target}</strong><span>Your item is within reach</span></>:<span>Swipe to look. Hold the arrows to walk.</span>}
+          {carrying?<><strong>Holding {carrying.toLowerCase()}</strong><span>{saving?'Saving your spot…':error|| (attached?'Snaps to the base of your tower':'Walk to a clear spot on your property')}</span></>:target?<><strong>{target}</strong><span>Your item is within reach</span></>:<span>Drag the joystick to walk. Swipe to look.</span>}
         </div>
         <div className="mobile-street-thumbs">
-          <StreetWalkPad paused={false} onWalk={onWalk}/>
+          <StreetJoystick onMove={onJoystick}/>
           {hasHome&&<div className="mobile-street-actions">
             <button className={`mobile-street-use ${carrying?'is-placing':''}`} aria-label={carrying?'Place held item':'Pick up highlighted item'} aria-describedby="mobile-street-status" disabled={!canUse} {...press(onUseItem)}>
               {saving?<LoaderCircle size={22} className="spin"/>:carrying?<Check size={22}/>:<Hand size={22}/>}
