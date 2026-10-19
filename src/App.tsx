@@ -8,10 +8,10 @@ import { emptyStreetInteraction, type StreetInteractionState } from './streetInt
 import { StreetControls } from './StreetControls';
 import { useMobileStreetUI } from './MobileStreetControls';
 import { DECORATIONS, decorationsOf, placementError, suggestedDecorationPosition, type DecorationDraft, type DecorationKind, type Decoration } from '../shared/decorations';
-import type { StreetStart } from './streetNavigation';
+import { streetStartByPoint, type StreetStart } from './streetNavigation';
 import { api, ApiError, uploadAvatar, readSnapshot, refreshPersonal } from './api';
 import { type Bootstrap, type Building, type Color } from '../shared/types';
-import { VIEW_RADIUS } from '../shared/world';
+import { VIEW_RADIUS, plotPosition } from '../shared/world';
 import { lightingAt, type TimeOfDay } from './lighting';
 import { TowerDrawer } from './TowerDrawer';
 import { useViewport } from './useViewport';
@@ -123,6 +123,7 @@ export default function App() {
   const [streetView,setStreetView]=useState(false);
   const [streetEditorOpen,setStreetEditorOpen]=useState(false);
   const [decorationDraft,setDecorationDraft]=useState<DecorationDraft|null>(null);
+  const [decorationPointLocked,setDecorationPointLocked]=useState(false);
   const [preserveStreetDraft,setPreserveStreetDraft]=useState(false);
   const [streetDraft,setStreetDraft]=useState<DecorationDraft|null>(null);
   const [streetInteraction,setStreetInteraction]=useState<StreetInteractionState>(emptyStreetInteraction);
@@ -398,19 +399,37 @@ export default function App() {
   };
   const saveSegment=(segment:number,color:Color,style:SegmentStyle,theme:BuildingTheme)=>action('segment',async()=>{const r=await api<{building:Building}>('/segments',{segment,color,style,theme});update(r.building);notify('Segment updated.');});
   const openStreetEditor=(held?:DecorationDraft)=>{
-    if(!me)return;
-    flushSync(()=>{setStreetView(false);setPickingStreet(false);setStreetDraft(null);setPreserveStreetDraft(false);setDecorationDraft(held??null);setDrawerOpen(false);setModal(null);setSearchOpen(false);setSettingsOpen(false);setSelected(me.id);setStreetEditorOpen(true);});
+    if(!me||busy||streetInteraction.saving)return;
+    flushSync(()=>{setPickingStreet(false);setStreetDraft(null);setPreserveStreetDraft(false);setDecorationDraft(held??null);setDecorationPointLocked(Boolean(held&&held.x!==null&&held.z!==null));setDrawerOpen(false);setModal(null);setSearchOpen(false);setSettingsOpen(false);setSelected(me.id);setStreetEditorOpen(true);});
   };
-  const closeStreetEditor=()=>{if(busy)return;setDecorationDraft(null);setStreetEditorOpen(false);};
+  const closeStreetEditor=()=>{
+    if(busy)return;
+    flushSync(()=>{if(streetView&&decorationDraft){setStreetDraft(decorationDraft);setPreserveStreetDraft(true);}setDecorationDraft(null);setStreetEditorOpen(false);});
+    if(streetView)scene.current?.look();
+  };
   const chooseDecoration=(kind:DecorationKind,item?:Decoration)=>{
-    if(!me)return;
+    if(!me||busy)return;
     const rotation=item?.rotation??0,suggestion=item&&item.x!==null&&item.z!==null?{x:item.x,z:item.z,rotation}:suggestedDecorationPosition(me,kind,rotation,item?.id);
-    setDecorationDraft({kind,id:item?.id,x:suggestion?.x??null,z:suggestion?.z??null,rotation:suggestion?.rotation??rotation,requestId:crypto.randomUUID()});
+    const draft={kind,id:item?.id,x:suggestion?.x??null,z:suggestion?.z??null,rotation:suggestion?.rotation??rotation,requestId:crypto.randomUUID()};
+    if(streetView){
+      flushSync(()=>{setDecorationDraft(null);setStreetDraft(draft);setPreserveStreetDraft(false);setStreetEditorOpen(false);});
+      scene.current?.look();
+    }else{setDecorationDraft(draft);setDecorationPointLocked(false);}
+  };
+  const switchEditorView=()=>{
+    if(!me||busy)return;
+    if(streetView){setStreetView(false);return;}
+    if(!decorationDraft)return;
+    const origin=plotPosition(me.x,me.z),target={x:origin.x+(decorationDraft?.x??0),z:origin.z+(decorationDraft?.z??0)};
+    const start=streetStartByPoint(target,buildings,decorationDraft?.id);
+    if(!start){notify('No clear street nearby. Choose another spot first.',true);return;}
+    flushSync(()=>{setStreetStart(start);setStreetView(true);setPickingStreet(false);setStreetDraft(decorationDraft);setPreserveStreetDraft(true);setDecorationDraft(null);setStreetEditorOpen(false);});
+    scene.current?.look();
   };
   const returnToCity=()=>{
     if(busy||streetInteraction.saving)return;
     const held=scene.current?.takeItem()??streetDraft;
-    flushSync(()=>{setStreetView(false);setPickingStreet(false);setStreetDraft(null);setPreserveStreetDraft(false);if(held){setDecorationDraft(held);setStreetEditorOpen(true);}});
+    flushSync(()=>{setStreetView(false);setPickingStreet(false);setStreetDraft(null);setPreserveStreetDraft(false);if(held){setDecorationDraft(held);setDecorationPointLocked(held.x!==null&&held.z!==null);setStreetEditorOpen(true);}});
   };
   const cancelDecoration=()=>{if(busy)return;setDecorationDraft(null);};
   const commitDecoration=async(draft:DecorationDraft)=>{
@@ -422,7 +441,7 @@ export default function App() {
     }));
   };
   const saveDecoration=()=>action('decoration-save',async()=>{
-    if(!decorationDraft)return;await commitDecoration(decorationDraft);
+    if(!decorationDraft||!decorationPointLocked)return;await commitDecoration(decorationDraft);
     setDecorationDraft(null);notify(decorationDraft.id?'Item moved.':`${DECORATIONS[decorationDraft.kind].label} added to your neighborhood.`);
   });
   const saveStreetItem=async(draft:DecorationDraft)=>{
@@ -473,7 +492,7 @@ export default function App() {
     </header>
 
     <main>
-      <Suspense fallback={<div className="scene-loading"><LoaderCircle className="spin" size={24}/><span>Drawing your little city…</span></div>}><CityScene ref={scene} buttonOnlyItems={mobileStreetUI} preserveStreetDraft={preserveStreetDraft} streetDraft={streetDraft} onStreetSave={saveStreetItem} onStreetDraftCancel={()=>setStreetDraft(null)} onStreetState={setStreetInteraction} onMouseLock={(locked,blocked=false)=>{setMouseLocked(locked);setMouseCaptureBlocked(blocked);}} ownerId={snapshot?.me||null} pageVisible={pageVisible} streetView={streetView&&!placementActive} pickingStreet={pickingStreet&&!placementActive} streetStart={streetStart} onStreetPick={start=>{setStreetStart(start);}} onStreetEnter={enterStreet} onStreetExit={returnToCity} navigationPaused={drawerOpen||Boolean(modal)||settingsOpen||searchOpen||onboardingOpen} buildings={buildings} selected={selected} lighting={lighting} center={center} debugScores={showScores} lodEnabled={lodEnabled} previews={placementActive?placementOptions:previews} placementMode={placementActive} placementOrigin={placementOrigin} placementChoice={placementChoice} onPlacement={choosePlacement} projects={snapshot?.projects||[]} onProject={selectProject} onSelect={id=>{const b=buildings.find(b=>b.id===id);if(b)select(b);}} decorationOwner={streetEditorOpen?me?.id:null} decorationDraft={decorationDraft} onDecorationPosition={(x,z)=>{if(busy)return;setDecorationDraft(previous=>{if(!previous)return null;const slot=previous.kind==='base_shop'&&me?nearestShopSlot(me,{x,z}):null,nextX=slot?.x??x,nextZ=slot?.z??z,nextRotation=slot?.rotation??previous.rotation;if(previous.x===nextX&&previous.z===nextZ&&previous.rotation===nextRotation)return previous;return {...previous,x:nextX,z:nextZ,rotation:nextRotation};});}} onDecorationCancel={cancelDecoration} onPan={(x,z)=>setCenter({x,z})}/></Suspense>
+      <Suspense fallback={<div className="scene-loading"><LoaderCircle className="spin" size={24}/><span>Drawing your little city…</span></div>}><CityScene ref={scene} buttonOnlyItems={mobileStreetUI} preserveStreetDraft={preserveStreetDraft} streetDraft={streetDraft} onStreetSave={saveStreetItem} onStreetDraftCancel={()=>setStreetDraft(null)} onStreetState={setStreetInteraction} onMouseLock={(locked,blocked=false)=>{setMouseLocked(locked);setMouseCaptureBlocked(blocked);}} ownerId={snapshot?.me||null} pageVisible={pageVisible} streetView={streetView&&!placementActive} pickingStreet={pickingStreet&&!placementActive} streetStart={streetStart} onStreetPick={start=>{setStreetStart(start);}} onStreetEnter={enterStreet} onStreetExit={returnToCity} navigationPaused={streetEditorOpen||drawerOpen||Boolean(modal)||settingsOpen||searchOpen||onboardingOpen} buildings={buildings} selected={selected} lighting={lighting} center={center} debugScores={showScores} lodEnabled={lodEnabled} previews={placementActive?placementOptions:previews} placementMode={placementActive} placementOrigin={placementOrigin} placementChoice={placementChoice} onPlacement={choosePlacement} projects={snapshot?.projects||[]} onProject={selectProject} onSelect={id=>{const b=buildings.find(b=>b.id===id);if(b)select(b);}} decorationOwner={streetEditorOpen&&!streetView?me?.id:null} decorationDraft={decorationDraft} decorationPointLocked={decorationPointLocked} onDecorationPosition={(x,z,lock)=>{if(busy)return;if(lock)setDecorationPointLocked(true);setDecorationDraft(previous=>{if(!previous)return null;const slot=previous.kind==='base_shop'&&me?nearestShopSlot(me,{x,z}):null,nextX=slot?.x??x,nextZ=slot?.z??z,nextRotation=slot?.rotation??previous.rotation;if(previous.x===nextX&&previous.z===nextZ&&previous.rotation===nextRotation)return previous;return {...previous,x:nextX,z:nextZ,rotation:nextRotation};});}} onDecorationCancel={cancelDecoration} onPan={(x,z)=>setCenter({x,z})}/></Suspense>
 
       {!placementActive&&!streetEditorOpen&&<StreetControls onJoystick={(side,forward)=>scene.current?.joystick(side,forward)} mobileUI={mobileStreetUI} onUseItem={()=>scene.current?.useItem()} onResume={()=>{setDrawerOpen(false);setSettingsOpen(false);setModal(null);setSearchOpen(false);}} placing={false} switchingDisabled={Boolean(busy)||streetInteraction.saving} onLightingSettings={canDebug?()=>setSettingsOpen(true):undefined} active={streetView} available={Boolean(buildings.length)&&!onboardingOpen} paused={drawerOpen||Boolean(modal)||settingsOpen||searchOpen||onboardingOpen}
         picking={pickingStreet} hasHome={Boolean(me)} mouseLocked={mouseLocked} mouseCaptureBlocked={mouseCaptureBlocked} interaction={streetInteraction} onLook={()=>scene.current?.look()} onRotate={()=>scene.current?.rotateItem()} onCancelItem={()=>scene.current?.cancelItem()} onShop={()=>{scene.current?.walk('forward',false);openStreetEditor(scene.current?.takeItem()??streetDraft??undefined);}}
@@ -484,7 +503,7 @@ export default function App() {
 
       {neighborhoodGuideOpen&&pickingStreet&&streetTutorialTarget&&<button className="street-tutorial-point" aria-label="Choose this Streetview starting point" style={{left:streetTutorialTarget.x,top:streetTutorialTarget.y}} onClick={()=>enterStreet(streetTutorialTarget.start)}/>}
 
-      {streetEditorOpen&&me&&<Suspense fallback={null}><StreetEditor building={me} draft={decorationDraft} busy={Boolean(busy)} onChoose={chooseDecoration} onStore={storeDecoration} onChange={setDecorationDraft} onCancel={cancelDecoration} onConfirm={saveDecoration} onClose={closeStreetEditor}/></Suspense>}
+      {streetEditorOpen&&me&&<Suspense fallback={null}><StreetEditor building={me} draft={decorationDraft} pointLocked={decorationPointLocked} streetView={streetView} onSwitchView={switchEditorView} busy={Boolean(busy)} onChoose={chooseDecoration} onStore={storeDecoration} onChange={setDecorationDraft} onCancel={cancelDecoration} onConfirm={saveDecoration} onClose={closeStreetEditor}/></Suspense>}
 
       {placementActive && <section className="placement-preview" aria-label="Tower placement preview">
         <div className="placement-message"><h2>Choose tower location</h2><p>{placementOptions.length?'Click a hologram to select it.':'No open plots found in the current preview area.'}</p></div>

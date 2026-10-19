@@ -36,7 +36,7 @@ import { decorationFootprint, placementError, DECORATION_ROAD_INSET, type Decora
 import './tower-upgrade.css';
 
 export interface SceneHandle { joystick:(side:number,forward:number)=>void;useItem:()=>void;takeItem:()=>DecorationDraft|null;focus: (b: {x:number;z:number;level?:number}) => void; reset: () => void; zoom: (amount: number) => void; walk:(direction:WalkDirection,held:boolean)=>void; streetDropPoint:(x:number,y:number)=>StreetStart|null; streetGuidePoint:()=>({x:number;y:number;start:StreetStart}|null); look:()=>void; rotateItem:()=>void; cancelItem:()=>void; }
-interface Props { buttonOnlyItems?:boolean;preserveStreetDraft?:boolean;streetDraft?:DecorationDraft|null; onStreetSave?:(draft:DecorationDraft)=>Promise<boolean>; onStreetDraftCancel?:()=>void; onStreetState?:(state:StreetInteractionState)=>void; onMouseLock?:(locked:boolean,blocked?:boolean)=>void; ownerId?:string|null; pageVisible?:boolean; streetView?:boolean; pickingStreet?:boolean; streetStart?:StreetStart|null; onStreetPick?:(start:StreetStart|null)=>void; onStreetEnter?:(start:StreetStart)=>void; decorationOwner?:string|null; decorationDraft?:DecorationDraft|null; onDecorationPosition?:(x:number,z:number)=>void; onDecorationCancel?:()=>void; navigationPaused?:boolean; onStreetExit?:()=>void; buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; debugScores:boolean; lodEnabled:boolean; previews:PlotPreview[]; placementMode?:boolean; placementOrigin?:{x:number;z:number}; placementChoice?:string|null; onPlacement?:(key:string)=>void; projects:PublicProject[]; onProject:(id:string)=>void; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
+interface Props { buttonOnlyItems?:boolean;preserveStreetDraft?:boolean;streetDraft?:DecorationDraft|null; onStreetSave?:(draft:DecorationDraft)=>Promise<boolean>; onStreetDraftCancel?:()=>void; onStreetState?:(state:StreetInteractionState)=>void; onMouseLock?:(locked:boolean,blocked?:boolean)=>void; ownerId?:string|null; pageVisible?:boolean; streetView?:boolean; pickingStreet?:boolean; streetStart?:StreetStart|null; onStreetPick?:(start:StreetStart|null)=>void; onStreetEnter?:(start:StreetStart)=>void; decorationOwner?:string|null; decorationDraft?:DecorationDraft|null; decorationPointLocked?:boolean; onDecorationPosition?:(x:number,z:number,lock?:boolean)=>void; onDecorationCancel?:()=>void; navigationPaused?:boolean; onStreetExit?:()=>void; buildings: Building[]; selected: string | null; lighting: CityLighting; center: {x:number;z:number}; debugScores:boolean; lodEnabled:boolean; previews:PlotPreview[]; placementMode?:boolean; placementOrigin?:{x:number;z:number}; placementChoice?:string|null; onPlacement?:(key:string)=>void; projects:PublicProject[]; onProject:(id:string)=>void; onSelect: (id: string) => void; onPan: (x: number, z: number) => void; }
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 type DetailLevel=0|1|2;
 const detailForZoom=(zoom:number,enabled=true):DetailLevel=>!enabled||zoom>=.56?0:1;
@@ -46,11 +46,11 @@ interface SceneEngine {
   focus:THREE.Vector3|null;night:boolean;decorationOverlay:THREE.Group;startPaths:THREE.Group;startMarker:THREE.Group;startRoads:ReturnType<typeof streetNetwork>['roads'];startObstacles:StreetPoint[][];resize:()=>void;invalidate:(duration?:number)=>void;shadowsDirty:boolean;
 }
 
-export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ buttonOnlyItems=false,preserveStreetDraft=false,streetDraft=null,onStreetSave,onStreetDraftCancel,onStreetState,onMouseLock,ownerId=null, pageVisible=true, streetView=false, pickingStreet=false, streetStart=null, onStreetPick,onStreetEnter, decorationOwner=null, decorationDraft=null, onDecorationPosition, onDecorationCancel, navigationPaused=false, onStreetExit, buildings, selected, lighting, center, debugScores, lodEnabled, previews, placementMode=false, placementOrigin, placementChoice=null, onPlacement, projects, onProject, onSelect, onPan }, ref) {
+export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ buttonOnlyItems=false,preserveStreetDraft=false,streetDraft=null,onStreetSave,onStreetDraftCancel,onStreetState,onMouseLock,ownerId=null, pageVisible=true, streetView=false, pickingStreet=false, streetStart=null, onStreetPick,onStreetEnter, decorationOwner=null, decorationDraft=null, decorationPointLocked=false, onDecorationPosition, onDecorationCancel, navigationPaused=false, onStreetExit, buildings, selected, lighting, center, debugScores, lodEnabled, previews, placementMode=false, placementOrigin, placementChoice=null, onPlacement, projects, onProject, onSelect, onPan }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const engine = useRef<SceneEngine|null>(null);
   const night=lighting.night,lightsOn=lighting.lightsOn;
-  const props = useRef({ buttonOnlyItems,ownerId,night,lightsOn,streetDraft,onStreetSave,onStreetDraftCancel,onStreetState,onMouseLock,navigationPaused,pageVisible,buildings, selected, lighting, onSelect, onPan, onProject, placementMode, onPlacement, lodEnabled, onStreetExit, pickingStreet, onStreetPick,onStreetEnter, decorationOwner, decorationDraft, onDecorationPosition, onDecorationCancel }); props.current = { buttonOnlyItems,ownerId,night,lightsOn,streetDraft,onStreetSave,onStreetDraftCancel,onStreetState,onMouseLock,navigationPaused,pageVisible,buildings, selected, lighting, onSelect, onPan, onProject, placementMode, onPlacement, lodEnabled, onStreetExit, pickingStreet, onStreetPick,onStreetEnter, decorationOwner, decorationDraft, onDecorationPosition, onDecorationCancel };
+  const props = useRef({ buttonOnlyItems,ownerId,night,lightsOn,streetDraft,onStreetSave,onStreetDraftCancel,onStreetState,onMouseLock,navigationPaused,pageVisible,buildings, selected, lighting, onSelect, onPan, onProject, placementMode, onPlacement, lodEnabled, onStreetExit, pickingStreet, onStreetPick,onStreetEnter, decorationOwner, decorationDraft, decorationPointLocked, onDecorationPosition, onDecorationCancel }); props.current = { buttonOnlyItems,ownerId,night,lightsOn,streetDraft,onStreetSave,onStreetDraftCancel,onStreetState,onMouseLock,navigationPaused,pageVisible,buildings, selected, lighting, onSelect, onPan, onProject, placementMode, onPlacement, lodEnabled, onStreetExit, pickingStreet, onStreetPick,onStreetEnter, decorationOwner, decorationDraft, decorationPointLocked, onDecorationPosition, onDecorationCancel };
   const previousLevels=useRef(new Map<string,number>());
   const [detail,setDetail]=useState<DetailLevel>(()=>detailForZoom(.83,lodEnabled));
   const detailRef=useRef(detail);detailRef.current=detail;
@@ -185,11 +185,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ but
       if (Math.hypot(e.clientX-down.x,e.clientY-down.y)>6 || e.button !== 0) return;
       const r = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX-r.left)/r.width*2-1, -(e.clientY-r.top)/r.height*2+1);
       raycaster.setFromCamera(pointer,activeCamera());
-      if(props.current.decorationOwner){
-        const own=props.current.buildings.find(b=>b.id===props.current.decorationOwner);
-        const point=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-.115),new THREE.Vector3());
-        if(own&&point&&props.current.decorationDraft){const snapped=snapDecorationPoint(own,props.current.decorationDraft,point);props.current.onDecorationPosition?.(snapped.x,snapped.z);}return;
-      }
+      if(props.current.decorationOwner)return;
       if(props.current.pickingStreet)return;
       if(props.current.placementMode){
         const preview=raycaster.intersectObjects(planned.children,true).find(v=>v.object.userData.placement);
@@ -206,7 +202,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ but
       raycaster.setFromCamera(pointer,activeCamera());
       if(props.current.decorationOwner){
         const own=props.current.buildings.find(b=>b.id===props.current.decorationOwner),point=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-.115),new THREE.Vector3());
-        if(own&&point&&props.current.decorationDraft){const snapped=snapDecorationPoint(own,props.current.decorationDraft,point);props.current.onDecorationPosition?.(snapped.x,snapped.z);}
+        if(own&&point&&props.current.decorationDraft&&!props.current.decorationPointLocked){const snapped=snapDecorationPoint(own,props.current.decorationDraft,point);props.current.onDecorationPosition?.(snapped.x,snapped.z);}
         renderer.domElement.style.cursor='crosshair';return;
       }
       if(props.current.placementMode){
@@ -231,6 +227,14 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ but
       const start=point&&!visible?.object.userData.owner?pickStreetStart(point,e.startRoads.values(),e.startObstacles):null;
       if(start)props.current.onStreetEnter?.(start);
     };
+    const pinDecoration=(event:MouseEvent)=>{
+      if(walk.enabled||event.button!==0||multiTouch||tapMoved)return;
+      const own=props.current.buildings.find(b=>b.id===props.current.decorationOwner),draft=props.current.decorationDraft;
+      if(!own||!draft)return;
+      const r=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-r.left)/r.width*2-1,1-(event.clientY-r.top)/r.height*2);raycaster.setFromCamera(pointer,camera);
+      const point=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-.115),new THREE.Vector3());
+      if(point){const snapped=snapDecorationPoint(own,draft,point);props.current.onDecorationPosition?.(snapped.x,snapped.z,true);}
+    };
     const pointerCancel = (event:PointerEvent) => {activePointers.delete(event.pointerId);pointerActive=activePointers.size>0;multiTouch=true;};
     const viewDirection=new THREE.Vector3(),groundCenter=new THREE.Vector3();
     const viewedGround=()=>{
@@ -247,6 +251,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ but
     const keyboard=new CameraKeyboard(camera,controls,panEnd,()=>invalidate(250));
     const keyUp = (e: KeyboardEvent) => { if(e.key.startsWith('Arrow'))panEnd(); };
     renderer.domElement.addEventListener('pointerdown',pointerDown); renderer.domElement.addEventListener('pointerup',pointerUp);renderer.domElement.addEventListener('click',chooseStreet);
+    renderer.domElement.addEventListener('click',pinDecoration);
     renderer.domElement.addEventListener('pointercancel',pointerCancel);
     renderer.domElement.addEventListener('keyup',keyUp);
     let controlsActive=false;
@@ -362,6 +367,7 @@ export const CityScene = forwardRef<SceneHandle, Props>(function CityScene({ but
       document.removeEventListener('visibilitychange',visibility);
       clearTimeout(idleTimer);if(frame!==undefined)cancelAnimationFrame(frame); observer.disconnect(); keyboard.dispose(); interactions.dispose();streetLights.dispose();walk.dispose(); controls.dispose();
       renderer.domElement.removeEventListener('pointerdown',pointerDown); renderer.domElement.removeEventListener('pointerup',pointerUp);renderer.domElement.removeEventListener('click',chooseStreet);
+      renderer.domElement.removeEventListener('click',pinDecoration);
       renderer.domElement.removeEventListener('pointercancel',pointerCancel);
       renderer.domElement.removeEventListener('keyup',keyUp);
       renderer.domElement.removeEventListener('pointermove',move);renderer.domElement.removeEventListener('webglcontextlost',contextLost);renderer.domElement.removeEventListener('webglcontextrestored',contextRestored);controls.removeEventListener('start',controlsStart);controls.removeEventListener('end',controlsEnd); terrain.dispose();nature.dispose();owned.dispose();disposeGroup(decorationOverlay);disposeGroup(startPaths);disposeGroup(startMarker); assets.dispose();disposeGroup(planned);celebrations.children.forEach(b=>b.userData.label.element.remove());disposeGroup(celebrations);
