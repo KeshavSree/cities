@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { captureStreetPointer } from './streetPointer';
-import { Clock3, Footprints, Grid3X3, Map, PersonStanding, RotateCw, X } from 'lucide-react';
+import { Check, Clock3, Footprints, Grid3X3, Map, PersonStanding, RotateCw, X } from 'lucide-react';
 import type { WalkDirection } from './StreetWalk';
 import type { StreetStart } from './streetNavigation';
 import type { StreetInteractionState } from './streetInteractionState';
@@ -61,7 +61,7 @@ export function StreetControls({onJoystick,mobileUI,onUseItem,onResume,placing=f
       {!paused&&<div className="street-item-tools">
         {onLightingSettings&&<button onClick={onLightingSettings} aria-label="Lighting preview settings"><Clock3 size={18}/><span>Lighting</span></button>}
         {hasHome&&<button onClick={onShop} aria-label="Open Your Streetview editor"><Grid3X3 size={18}/><span>Build</span></button>}
-        {interaction.carrying&&<>{!interaction.attached&&<button disabled={interaction.saving} onClick={onRotate} aria-label="Rotate held item"><RotateCw size={18}/></button>}<button disabled={interaction.saving} onClick={onCancelItem} aria-label="Cancel carrying item"><X size={18}/></button></>}
+        {interaction.carrying&&<><button disabled={interaction.saving||Boolean(interaction.error)} onClick={onUseItem} aria-label="Place held item"><Check size={18}/><span>{interaction.saving?'Saving…':interaction.purchase?'Buy & place':'Place'}</span></button>{!interaction.attached&&<button disabled={interaction.saving} onClick={onRotate} aria-label="Rotate held item"><RotateCw size={18}/></button>}<button disabled={interaction.saving} onClick={onCancelItem} aria-label="Cancel carrying item"><X size={18}/></button></>}
       </div>}
       <StreetWalkPad paused={paused} onWalk={onWalk}/>
     </>}

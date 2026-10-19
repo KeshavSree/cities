@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as THREE from 'three';
-import { Archive, Box, Grid3X3, Map as MapIcon, Move, Package, RotateCw, X } from 'lucide-react';
+import { Archive, Box, Footprints, Grid3X3, Map as MapIcon, Move, Package, RotateCw, X } from 'lucide-react';
 import type { Building } from '../shared/types';
 import { DECORATIONS, decorationsOf, decorationSpace, MAX_DECORATIONS, placementError, type Decoration, type DecorationDraft, type DecorationKind } from '../shared/decorations';
 import { decorationModel } from './DecorationModels';
@@ -38,26 +38,26 @@ function DecorationThumbnail({kind}:{kind:DecorationKind}){
 }
 
 interface Props {
-  building:Building;draft:DecorationDraft|null;busy:boolean;
+  building:Building;draft:DecorationDraft|null;pointLocked:boolean;streetView:boolean;onSwitchView:()=>void;busy:boolean;
   onChoose:(kind:DecorationKind,item?:Decoration)=>void;onStore:(item:Decoration)=>void;
   onChange:(draft:DecorationDraft)=>void;onCancel:()=>void;onConfirm:()=>void;onClose:()=>void;
 }
 
-export function StreetEditor({building,draft,busy,onChoose,onStore,onChange,onCancel,onConfirm,onClose}:Props){
+export function StreetEditor({building,draft,pointLocked,streetView,onSwitchView,busy,onChoose,onStore,onChange,onCancel,onConfirm,onClose}:Props){
   const [tab,setTab]=useState<'build'|'placed'>('build');
   const owned=decorationsOf(building),definition=draft?DECORATIONS[draft.kind]:null;
   const hasPoint=Boolean(draft&&draft.x!==null&&draft.z!==null);
-  const error=draft&&hasPoint?placementError(building,draft.kind,{x:draft.x!,z:draft.z!,rotation:draft.rotation},draft.id):draft?'Move your pointer across the grid.':null;
+  const error=draft&&hasPoint?placementError(building,draft.kind,{x:draft.x!,z:draft.z!,rotation:draft.rotation},draft.id):draft?'Click the grid to choose a spot.':null;
   const affordable=Boolean(draft?.id)||!definition||(building.bricks??0)>=definition.cost;
   return <section className="street-editor" aria-label="Your Streetview editor">
-    <div className="street-editor-titlebar"><button data-editor-action="close" onClick={onClose} disabled={busy} aria-label="Return to city view"><MapIcon size={18}/><span>City view</span></button><strong>Your Streetview</strong><span className="street-editor-balance"><Package size={14}/>{(building.bricks??0).toLocaleString()}</span></div>
+    <div className="street-editor-titlebar"><button onClick={onSwitchView} disabled={busy||(!streetView&&!draft)} aria-label={streetView?'Switch builder to city view':'Place in Street view'}>{streetView?<MapIcon size={18}/>:<Footprints size={18}/>}<span>{streetView?'City view':'Street view'}</span></button><strong>Your Streetview</strong><span className="street-editor-balance"><Package size={14}/>{(building.bricks??0).toLocaleString()}</span><button data-editor-action="close" className="street-editor-close" onClick={onClose} disabled={busy} aria-label="Close Your Streetview editor"><X size={18}/></button></div>
     <div className="street-editor-stage-target" aria-hidden="true"/>
     <div className="street-editor-dock">
-      {draft&&definition&&<div className={`street-editor-placement-status ${error&&hasPoint?'is-invalid':''}`}>
+      {!streetView&&draft&&definition&&<div className={`street-editor-placement-status ${error&&hasPoint?'is-invalid':''}`}>
         <button className="editor-cancel" aria-label="Cancel placement" onClick={onCancel} disabled={busy}><X size={18}/></button>
-        <div><strong>{draft.id?'Move':`Place ${definition.label.toLowerCase()}`}</strong><span>{error||'Locked to the grid'}</span></div>
+        <div><strong>{draft.id?'Move':`Place ${definition.label.toLowerCase()}`}</strong><span>{error||(pointLocked?'Spot pinned. Click the grid to change it.':'Click the grid to pin this spot.')}</span></div>
         {draft.kind!=='base_shop'&&<button data-editor-action="rotate" aria-label="Rotate item" onClick={()=>onChange({...draft,rotation:(draft.rotation+1)%4})} disabled={busy}><RotateCw size={18}/><span>Rotate</span></button>}
-        <button data-editor-action="confirm" className="editor-place" onClick={onConfirm} disabled={busy||Boolean(error)||!affordable}><Package size={16}/><span>{busy?'Saving…':draft.id?'Place':'Buy & place'}</span></button>
+        <button data-editor-action="confirm" aria-label={busy?'Saving placement':draft.id?'Place':'Buy & place'} className="editor-place" onClick={onConfirm} disabled={busy||!pointLocked||Boolean(error)||!affordable}><Package size={16}/><span>{busy?'Saving…':draft.id?'Place':'Buy & place'}</span></button>
       </div>}
       <div className="street-editor-tabs" role="tablist" aria-label="Streetview items"><button role="tab" aria-selected={tab==='build'} onClick={()=>setTab('build')}><Box size={16}/>Build</button><button role="tab" aria-selected={tab==='placed'} onClick={()=>setTab('placed')}><Grid3X3 size={16}/>Placed <span>{owned.length}</span></button></div>
       {tab==='build'?<div className="street-model-shelf" role="list" aria-label="Models to place">{Object.entries(DECORATIONS).map(([id,item])=>{
