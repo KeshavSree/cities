@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { captureStreetPointer } from './streetPointer';
 import { Clock3, Footprints, Grid3X3, Map, PersonStanding, RotateCw, X } from 'lucide-react';
 import type { WalkDirection } from './StreetWalk';
 import type { StreetStart } from './streetNavigation';
@@ -24,9 +25,9 @@ export function StreetControls({onJoystick,mobileUI,onUseItem,onResume,placing=f
       <button disabled={switchingDisabled} aria-pressed={!active&&!picking} onClick={()=>onChange(false)}><Map size={16}/><span>City view</span></button>
       {active?<span className="street-active-label"><Footprints size={16}/>Street view</span>:placing?<button disabled={switchingDisabled} onClick={()=>onChange(true)}><Footprints size={16}/><span>Street view</span></button>:<button className={`street-person ${picking?'is-selected':''} ${drag?'is-held':''}`} disabled={!available||switchingDisabled} aria-label="Choose a Street view starting point" aria-pressed={picking} title="Drag the person onto a street, or click to choose a street" aria-describedby="street-entry-hint"
         onClick={event=>{if(event.detail===0)onChange(!picking);}}
-        onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();gesture.current={id:event.pointerId,x:event.clientX,y:event.clientY,moved:false,wasPicking:picking};event.currentTarget.setPointerCapture(event.pointerId);setDrag({x:event.clientX,y:event.clientY,valid:false});if(!picking)onChange(true);}}
+        onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();gesture.current={id:event.pointerId,x:event.clientX,y:event.clientY,moved:false,wasPicking:picking};captureStreetPointer(event.currentTarget,event.pointerId);setDrag({x:event.clientX,y:event.clientY,valid:false});if(!picking)onChange(true);}}
         onPointerMove={event=>{const g=gesture.current;if(!g||g.id!==event.pointerId)return;if(!g.moved&&Math.hypot(event.clientX-g.x,event.clientY-g.y)<6)return;g.moved=true;const start=onDragPoint(event.clientX,event.clientY);setDrag({x:event.clientX,y:event.clientY,valid:Boolean(start)});}}
-        onPointerUp={event=>{const g=gesture.current;if(!g||g.id!==event.pointerId)return;gesture.current=null;setDrag(null);event.currentTarget.releasePointerCapture(event.pointerId);if(g.moved){const start=onDragPoint(event.clientX,event.clientY);if(start){onDrop(start);return;}onChange(g.wasPicking);return;}onChange(!g.wasPicking);}}
+        onPointerUp={event=>{const g=gesture.current;if(!g||g.id!==event.pointerId)return;gesture.current=null;setDrag(null);if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);if(g.moved){const start=onDragPoint(event.clientX,event.clientY);if(start){onDrop(start);return;}onChange(g.wasPicking);return;}onChange(!g.wasPicking);}}
         onPointerCancel={()=>{gesture.current=null;setDrag(null);onChange(false);}}
         onLostPointerCapture={()=>{if(gesture.current){gesture.current=null;setDrag(null);onChange(false);}}}><StreetPerson/><span>Street view</span></button>}
     </div>
