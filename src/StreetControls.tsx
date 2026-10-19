@@ -10,14 +10,36 @@ import './street-view.css';
 function StreetPerson(){return <PersonStanding className="street-person-figure" size={26} aria-hidden="true"/>;}
 interface Props {onJoystick:(side:number,forward:number)=>void;mobileUI:boolean;onUseItem:()=>void;onResume:()=>void;placing?:boolean;switchingDisabled?:boolean;onLightingSettings?:()=>void;active:boolean;available:boolean;paused:boolean;picking:boolean;hasHome:boolean;mouseLocked:boolean;mouseCaptureBlocked:boolean;interaction:StreetInteractionState;onLook:()=>void;onRotate:()=>void;onCancelItem:()=>void;onShop:()=>void;onChange:(active:boolean)=>void;onWalk:(direction:WalkDirection,held:boolean)=>void;onDragPoint:(x:number,y:number)=>StreetStart|null;onDrop:(start:StreetStart)=>void;}
 export function StreetControls({onJoystick,mobileUI,onUseItem,onResume,placing=false,switchingDisabled=false,onLightingSettings,active,available,paused,picking,hasHome,mouseLocked,mouseCaptureBlocked,interaction,onLook,onRotate,onCancelItem,onShop,onChange,onWalk,onDragPoint,onDrop}:Props){
-  const gesture=useRef<{id:number;x:number;y:number;moved:boolean;wasPicking:boolean}|null>(null);
+  const gesture=useRef<{id:number;x:number;y:number;moved:boolean;wasPicking:boolean;element:HTMLButtonElement}|null>(null);
+  const latest=useRef({onChange,onDragPoint,onDrop,picking,paused,switchingDisabled});latest.current={onChange,onDragPoint,onDrop,picking,paused,switchingDisabled};
   const [drag,setDrag]=useState<{x:number;y:number;valid:boolean}|null>(null);
   useEffect(()=>{
-    const cancel=()=>{if(gesture.current||picking){gesture.current=null;setDrag(null);onChange(false);}};
+    const release=(g:NonNullable<typeof gesture.current>)=>{try{if(g.element.hasPointerCapture(g.id))g.element.releasePointerCapture(g.id);}catch{/* Capture may already have been lost. */}};
+    const cancel=()=>{const g=gesture.current;if(g||latest.current.picking){gesture.current=null;setDrag(null);if(g)release(g);latest.current.onChange(false);}};
+    const move=(event:PointerEvent)=>{
+      const g=gesture.current;if(!g||g.id!==event.pointerId)return;
+      if(!g.moved&&Math.hypot(event.clientX-g.x,event.clientY-g.y)<6)return;
+      g.moved=true;const start=latest.current.onDragPoint(event.clientX,event.clientY);setDrag({x:event.clientX,y:event.clientY,valid:Boolean(start)});
+    };
+    const end=(event:PointerEvent)=>{
+      const g=gesture.current;if(!g||g.id!==event.pointerId)return;
+      gesture.current=null;setDrag(null);release(g);
+      const current=latest.current;
+      if(current.paused||current.switchingDisabled){current.onChange(false);return;}
+      if(g.moved){const start=current.onDragPoint(event.clientX,event.clientY);if(start){current.onDrop(start);return;}current.onChange(g.wasPicking);return;}
+      current.onChange(!g.wasPicking);
+    };
+    const cancelled=(event:PointerEvent)=>{if(gesture.current?.id===event.pointerId)cancel();};
     const key=(event:KeyboardEvent)=>{if(event.key==='Escape')cancel();};
-    window.addEventListener('blur',cancel);window.addEventListener('keydown',key);
-    return()=>{window.removeEventListener('blur',cancel);window.removeEventListener('keydown',key);};
-  },[onChange,picking]);
+    const visibility=()=>{if(document.hidden)cancel();};
+    window.addEventListener('pointermove',move);window.addEventListener('pointerup',end);window.addEventListener('pointercancel',cancelled);
+    window.addEventListener('blur',cancel);window.addEventListener('keydown',key);document.addEventListener('visibilitychange',visibility);
+    return()=>{
+      window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',end);window.removeEventListener('pointercancel',cancelled);
+      window.removeEventListener('blur',cancel);window.removeEventListener('keydown',key);document.removeEventListener('visibilitychange',visibility);
+      const g=gesture.current;gesture.current=null;if(g)release(g);
+    };
+  },[]);
   useEffect(()=>{if(!picking){gesture.current=null;setDrag(null);}},[picking]);
   if(active&&mobileUI)return <MobileStreetControls paused={paused} hasHome={hasHome} switchingDisabled={switchingDisabled} interaction={interaction} onChange={onChange} onShop={onShop} onResume={onResume} onUseItem={onUseItem} onRotate={onRotate} onCancelItem={onCancelItem} onJoystick={onJoystick} onLightingSettings={onLightingSettings}/>;
   return <>
@@ -25,11 +47,8 @@ export function StreetControls({onJoystick,mobileUI,onUseItem,onResume,placing=f
       <button disabled={switchingDisabled} aria-pressed={!active&&!picking} onClick={()=>onChange(false)}><Map size={16}/><span>City view</span></button>
       {active?<span className="street-active-label"><Footprints size={16}/>Street view</span>:placing?<button disabled={switchingDisabled} onClick={()=>onChange(true)}><Footprints size={16}/><span>Street view</span></button>:<button className={`street-person ${picking?'is-selected':''} ${drag?'is-held':''}`} disabled={!available||switchingDisabled} aria-label="Choose a Street view starting point" aria-pressed={picking} title="Drag the person onto a street, or click to choose a street" aria-describedby="street-entry-hint"
         onClick={event=>{if(event.detail===0)onChange(!picking);}}
-        onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();gesture.current={id:event.pointerId,x:event.clientX,y:event.clientY,moved:false,wasPicking:picking};captureStreetPointer(event.currentTarget,event.pointerId);setDrag({x:event.clientX,y:event.clientY,valid:false});if(!picking)onChange(true);}}
-        onPointerMove={event=>{const g=gesture.current;if(!g||g.id!==event.pointerId)return;if(!g.moved&&Math.hypot(event.clientX-g.x,event.clientY-g.y)<6)return;g.moved=true;const start=onDragPoint(event.clientX,event.clientY);setDrag({x:event.clientX,y:event.clientY,valid:Boolean(start)});}}
-        onPointerUp={event=>{const g=gesture.current;if(!g||g.id!==event.pointerId)return;gesture.current=null;setDrag(null);if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);if(g.moved){const start=onDragPoint(event.clientX,event.clientY);if(start){onDrop(start);return;}onChange(g.wasPicking);return;}onChange(!g.wasPicking);}}
-        onPointerCancel={()=>{gesture.current=null;setDrag(null);onChange(false);}}
-        onLostPointerCapture={()=>{if(gesture.current){gesture.current=null;setDrag(null);onChange(false);}}}><StreetPerson/><span>Street view</span></button>}
+        onPointerDown={event=>{if(event.button!==0||gesture.current)return;event.preventDefault();gesture.current={id:event.pointerId,x:event.clientX,y:event.clientY,moved:false,wasPicking:picking,element:event.currentTarget};captureStreetPointer(event.currentTarget,event.pointerId);setDrag({x:event.clientX,y:event.clientY,valid:false});if(!picking)onChange(true);}}
+        onLostPointerCapture={event=>{if(gesture.current?.id===event.pointerId){gesture.current=null;setDrag(null);onChange(false);}}}><StreetPerson/><span>Street view</span></button>}
     </div>
     {!active&&!placing&&!drag&&<p id="street-entry-hint" className="street-entry-hint">{picking?(mobileUI?'Tap a highlighted street to start':'Click a highlighted street to start'):(mobileUI?'Drag the person or tap to choose a street':'Drag the person or click to choose a street')}</p>}
     {drag&&<div className={`street-person-ghost ${drag.valid?'is-valid':''}`} style={{left:drag.x,top:drag.y}} aria-hidden="true"><StreetPerson/><span>{drag.valid?'Drop to enter':'Drop onto a highlighted street'}</span></div>}
