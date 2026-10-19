@@ -9,13 +9,15 @@ export function StreetWalkPad({paused,onWalk}:{paused:boolean;onWalk:(direction:
   const pointers=useRef(new Map<number,WalkDirection>());
   useEffect(()=>{
     const stop=()=>{pointers.current.clear();for(const [direction] of directions)walk.current(direction,false);};
+    const end=(event:PointerEvent)=>release(event.pointerId);
+    window.addEventListener('pointerup',end);window.addEventListener('pointercancel',end);
     window.addEventListener('blur',stop);document.addEventListener('visibilitychange',stop);
-    return()=>{window.removeEventListener('blur',stop);document.removeEventListener('visibilitychange',stop);stop();};
+    return()=>{window.removeEventListener('pointerup',end);window.removeEventListener('pointercancel',end);window.removeEventListener('blur',stop);document.removeEventListener('visibilitychange',stop);stop();};
   },[]);
   useEffect(()=>{if(paused){pointers.current.clear();for(const [direction] of directions)walk.current(direction,false);}},[paused]);
   const release=(id:number)=>{
     const direction=pointers.current.get(id);pointers.current.delete(id);
-    if(direction&&![...pointers.current.values()].includes(direction))onWalk(direction,false);
+    if(direction&&![...pointers.current.values()].includes(direction))walk.current(direction,false);
   };
   return <div className="street-walk-pad" role="group" aria-label="Walking controls">
     {directions.map(([direction,label,Icon])=><button key={direction} className={`walk-${direction}`} aria-label={label} disabled={paused}
