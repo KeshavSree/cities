@@ -13,6 +13,7 @@
     "preview": "wrangler dev --ip 127.0.0.1 --port 8787",
     "deploy": "npm run build && wrangler deploy",
     "typecheck": "tsc -b",
+    "check:auth": "node scripts/check-roads.mjs scripts/check-auth.ts",
     "check:roads": "node scripts/check-roads.mjs",
     "check:street": "node scripts/check-roads.mjs scripts/check-street.ts && node scripts/check-roads.mjs scripts/check-street-interaction.ts && node scripts/check-roads.mjs scripts/check-joystick.ts",
     "check:decorations": "node scripts/check-roads.mjs scripts/check-decorations.ts && node scripts/check-decorations-db.mjs",

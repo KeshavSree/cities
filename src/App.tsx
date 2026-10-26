@@ -1,3 +1,4 @@
+import { inviteLogin } from './inviteLogin';
 import { nearestShopSlot } from '../shared/shopAttachments';
 import { flushSync } from 'react-dom';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -86,17 +87,26 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [modal, setModal] = useState<Modal>(null);
-  const [inviteToken] = useState(()=>new URLSearchParams(location.search).get('invite') || '');
+  const [openedInvite] = useState(()=>new URLSearchParams(location.search).has('invite'));
+  const [login] = useState(()=>inviteLogin(location.search,()=>sessionStorage));
+  const [inviteToken, setInviteToken] = useState(login.token);
+  const clearInvite = useCallback(()=>{
+    login.clear();setInviteToken('');
+    const url=new URL(location.href);
+    if(url.searchParams.has('invite')){url.searchParams.delete('invite');history.replaceState(history.state,'',url);}
+  },[login]);
+  const signIn = (reconnect=false) => { location.href=login.url(reconnect); };
+  useEffect(()=>{if(snapshot?.me)clearInvite();},[snapshot?.me,clearInvite]);
   const [inviterName, setInviterName] = useState('');
-  const [inviteError, setInviteError] = useState('');
+  const [inviteError, setInviteError] = useState(()=>openedInvite&&!login.token?'This invitation is invalid.':'');
   useEffect(()=>{
     if(!inviteToken)return;
     let active=true;
     api<{name:string}>(`/invites/${encodeURIComponent(inviteToken)}`)
       .then(value=>{if(active)setInviterName(value.name);})
-      .catch(e=>{if(active)setInviteError(e.message);});
+      .catch(e=>{if(active){setInviteError(e.message);if(e instanceof ApiError&&e.status===404)clearInvite();}});
     return()=>{active=false;};
-  },[inviteToken]);
+  },[inviteToken,clearInvite]);
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState('');
   const [likePulse,setLikePulse]=useState<string|null>(null);
@@ -162,9 +172,9 @@ export default function App() {
   }, []);
   useEffect(()=>{
     let active=true;
-    initialize().then(value=>{if(active){setSnapshot(value);setSelected(value.me || null);setDrawerOpen(Boolean(value.me)&&window.innerWidth>760);const params=new URLSearchParams(location.search);if(params.has('auth_error'))setModal(params.get('auth_error_code')==='NOT_INVITED'?'not-invited':'auth-error');else if(params.has('invite'))setModal('login');}}).catch(e=>{if(active)setError(e.message);});
+    initialize().then(value=>{if(active){setSnapshot(value);setSelected(value.me || null);setDrawerOpen(Boolean(value.me)&&window.innerWidth>760);const params=new URLSearchParams(location.search);if(params.has('auth_error'))setModal(params.get('auth_error_code')==='NOT_INVITED'?'not-invited':'auth-error');else if(!value.me&&(openedInvite||login.token))setModal('login');}}).catch(e=>{if(active)setError(e.message);});
     return ()=>{active=false;};
-  },[notify]);
+  },[notify,login,openedInvite]);
   useEffect(()=>{
     if(modal!=='invite')return;
     let active=true;
@@ -377,7 +387,7 @@ export default function App() {
     if(meId){neighborhoodGuideStarted.current=meId;rememberNeighborhoodGuide(meId);}
     setNeighborhoodGuidePending(false);setNeighborhoodGuideOpen(false);
   };
-  const focusMe=()=>{if(snapshot?.pendingPlacement)scene.current?.focus(snapshot.pendingPlacement.origin);else if(me)select(me);else location.href='/api/auth/github';};
+  const focusMe=()=>{if(snapshot?.pendingPlacement)scene.current?.focus(snapshot.pendingPlacement.origin);else if(me)select(me);else signIn();};
   const action=async(key:string,fn:()=>Promise<void>)=>{if(busy)return;setBusy(key);try{await fn();}catch(e){notify(e instanceof Error?e.message:'Please try again.',true);}finally{setBusy('');}};
   const daily=()=>action('daily',async()=>{
     const source=dailyButton.current?.querySelector('.daily-icon')?.getBoundingClientRect();
@@ -457,7 +467,7 @@ export default function App() {
   const like=()=>tower&&action('like',async()=>{const r=await api<{building:Building}>('/like',{tower:tower.id});update(r.building);setSnapshot(prev=>prev?{...prev,likedIds:[...prev.likedIds,tower.id]}:prev);setLikePulse(tower.id);});
   const devProgression=(data:{level?:number;source?:string})=>tower&&action('dev',async()=>{const r=await api<{building:Building}>('/dev/progression',{tower:tower.id,...data});update(r.building);if(data.level)scene.current?.focus(r.building);notify(data.level?'Demo model tier updated.':'Sample reward recorded.');});
   const contribute=(project:string,amount:number)=>action('project',async()=>{const r=await api<{building:Building;project:Bootstrap['projects'][number]}>('/projects/contribute',{project,amount,requestId:crypto.randomUUID()});update(r.building);setSnapshot(prev=>prev?{...prev,projects:prev.projects.map(p=>p.id===r.project.id?r.project:p)}:prev);notify('Your bricks are building a shared place.');});
-  const showInvites=()=>{if(!me){location.href='/api/auth/github';return;}if(modal==='invite'){setModal(null);return;}setStreetEditorOpen(false);setDecorationDraft(null);setSettingsOpen(false);setDrawerOpen(false);setSearchOpen(false);setModal('invite');api<{invitation:Invite}>('/invites',{}).then(r=>setInvites([r.invitation])).catch(e=>notify(e.message,true));};
+  const showInvites=()=>{if(!me){signIn();return;}if(modal==='invite'){setModal(null);return;}setStreetEditorOpen(false);setDecorationDraft(null);setSettingsOpen(false);setDrawerOpen(false);setSearchOpen(false);setModal('invite');api<{invitation:Invite}>('/invites',{}).then(r=>setInvites([r.invitation])).catch(e=>notify(e.message,true));};
   const copy=async(token:string)=>{try{await navigator.clipboard.writeText(`${location.origin}/?invite=${token}`);notify('Invitation copied.');}catch{notify('Clipboard is unavailable. Select and copy the invitation link below.',true);}};
   const createInvite=()=>action('invite',async()=>{if(invites[0])await copy(invites[0].token);});
 
@@ -548,12 +558,12 @@ export default function App() {
         <button className={drawerOpen&&selected===snapshot?.me?'is-active':''} aria-label={me?'Open my tower':'Sign in'} onClick={focusMe}>{me?<ProfileAvatar avatar={me.avatar} name={me.name} className="dock-avatar"/>:<Github size={20}/>}<span>Me</span></button>
       </nav>
       {!snapshot && <div className="loading-screen"><span className="brand-mark"><i/><i/><i/></span><h2>{error?'The city is taking a moment.':'Making room for good ideas.'}</h2><p>{error || 'Preparing your neighborhood…'}</p>{error?<button className="primary-button" onClick={()=>location.reload()}>Try again</button>:<LoaderCircle className="spin" size={22}/>}</div>}
-      {snapshot && !snapshot.buildings.length && <div className="empty-city"><h2>A city starts with someone.</h2><p>Sign in with the founding GitHub account or an invitation to place the first tower.</p><button className="primary-button" onClick={()=>{location.href='/api/auth/github';}}><Github size={16}/>Join the city</button></div>}
+      {snapshot && !snapshot.buildings.length && <div className="empty-city"><h2>A city starts with someone.</h2><p>Sign in with the founding GitHub account or an invitation to place the first tower.</p><button className="primary-button" onClick={()=>{signIn();}}><Github size={16}/>Join the city</button></div>}
     </main>
 
     {reconnectOpen&&<Dialog title="Reconnect GitHub" onClose={()=>setReconnectOpen(false)}>
       <p className="modal-description">Your GitHub connection is no longer valid. Reconnect to automatically sync your commits and earn XP and bricks. Your tower and progress are saved.</p>
-      <button className="primary-button full-width" onClick={()=>{location.href='/api/auth/github';}}><Github size={18}/>Reconnect GitHub</button>
+      <button className="primary-button full-width" onClick={()=>{signIn(true);}}><Github size={18}/>Reconnect GitHub</button>
     </Dialog>}
     {xpReward&&<div key={xpReward.id} className="xp-reward-pop" role="status">+{xpReward.amount.toLocaleString()} XP</div>}
     {rewardFlight&&<BrickRewardBurst key={rewardFlight.id} flight={rewardFlight} onComplete={finishRewardFlight}/>}
@@ -572,8 +582,8 @@ export default function App() {
     {modal && modal!=='invite' && modal!=='changelog' && <Dialog className={modal==='login' && inviteToken ? 'invite-welcome' : ''} onClose={()=>setModal(null)} showMark={!inviteToken || modal!=='login'} title={modal==='help'?'A city built by its people.':modal==='not-invited'?'You have not been invited':modal==='auth-error'?'GitHub sign-in could not be completed':'Welcome to C.I.T.I.E.S'}>
       {modal==='help' && <>{me&&<button className="secondary-button full-width" disabled={guideUnavailable} onClick={openNeighborhoodGuide}><Footprints size={18}/>Tour the neighborhood features</button>}<p className="modal-description">Earn XP to grow your tower through {MAX_LEVEL} levels and {TIERS.length} model tiers. Spend bricks to make it yours.</p><div className="help-item"><Github/><div><h3>Verified contributions.</h3><p>GitHub earns {REWARDS.commit} XP per newly credited commit, up to {GITHUB_DAILY_COMMIT_LIMIT} rewarded commits ({GITHUB_DAILY_COMMIT_LIMIT*REWARDS.commit} XP) per UTC day. Each rewarded commit also earns {REWARDS.commitBricks} bricks, capped at {GITHUB_DAILY_COMMIT_LIMIT*REWARDS.commitBricks} bricks per UTC day. Pull requests and reviews do not earn rewards.</p></div></div><div className="help-item"><Layers/><div><h3>Ten tiers. Thirty levels.</h3><p>From a shack to an arcology. Every {LEVELS_PER_TIER} levels unlock a new model, ground treatment, and editable segment. Upper sections inherit plot angles and lower alignments while making room for terraces. Permanently unlock architectural themes with bricks, then switch unlocked themes across segments for free. Each new level takes more XP.</p></div></div><div className="help-item"><Users/><div><h3>Build a community.</h3><p>Invite joins earn {REWARDS.invite} XP; likes earn {REWARDS.like}. Each nearby tower level-up, including a new tower’s first level, rewards the eight closest other residents within three plot spacings with {REWARDS.construction} XP.</p></div></div><div className="help-item"><Landmark/><div><h3>Bricks build shared places.</h3><p>Unlock permanent themes or contribute to nearby projects. Segment restyling is free after unlock. Contribute at least 25 bricks to earn {REWARDS.project} XP when a project finishes.</p></div></div><div className="help-item"><Gift/><div><h3>A little reward for returning.</h3><p>Collect {REWARDS.dailyBricks} bricks and {REWARDS.dailyXp} XP once per UTC day.</p></div></div><div className="help-controls">Drag the person onto a highlighted street, or click the person and choose a highlighted street to enter Street view. Move your mouse to look and use WASD or the walking arrows to walk. Look at your own items to highlight them; click to pick up or place. R rotates; Escape cancels a held item and releases the mouse. On touchscreens, touch and drag anywhere on the left to walk, swipe on the right to look, and use Pick up or Place. Choose City view to return.<br/>In City view, click the city to use WASD to move and Q/E to rotate.<br/>Space moves up; Shift moves down. Hold keys for continuous movement.<br/>Drag to orbit. Right-drag to pan. Scroll to zoom.<br/>Use search to select residents with your keyboard.</div>{snapshot?.demo&&<p className="demo-explanation">Local demo residents and preset XP are illustrative. Dev mode lets you preview all tiers and simulate rewards. Actual rewards and brick spending are stored by the local backend.</p>}</>}
       {modal==='not-invited'&&<p className="modal-description">Find someone to invite you!</p>}
-      {modal==='auth-error'&&<><p className="modal-description">{new URLSearchParams(location.search).get('auth_error')||'Please try again.'}</p><button className="primary-button full-width" onClick={()=>{location.href='/api/auth/github';}}><Github size={18}/>Try again with GitHub</button></>}
-      {modal==='login'&&<><p className="modal-description">{inviteError||(inviterName?`${inviterName} has invited you to C.I.T.I.E.S.`:'Loading your invitation…')}</p><InviteWelcomeSteps/><button className="primary-button full-width" disabled={!snapshot?.githubConfigured||!inviterName||Boolean(inviteError)} onClick={()=>{location.href=`/api/auth/github?invite=${encodeURIComponent(inviteToken)}`;}}><Github size={18}/>Continue with GitHub</button></>}
+      {modal==='auth-error'&&<><p className="modal-description">{new URLSearchParams(location.search).get('auth_error')||'Please try again.'}</p><button className="primary-button full-width" onClick={()=>{signIn();}}><Github size={18}/>Try again with GitHub</button></>}
+      {modal==='login'&&<><p className="modal-description">{inviteError||(inviterName?`${inviterName} has invited you to C.I.T.I.E.S.`:'Loading your invitation…')}</p><InviteWelcomeSteps/><button className="primary-button full-width" disabled={!snapshot?.githubConfigured||!inviterName||Boolean(inviteError)} onClick={()=>{signIn();}}><Github size={18}/>Continue with GitHub</button></>}
 
     </Dialog>}
   </div>;
